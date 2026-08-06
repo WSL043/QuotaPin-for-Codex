@@ -7,11 +7,12 @@ const VERSION_PATTERN = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-([0-9A-Za-
 const CLOCK_SKEW_MS = 5 * 60 * 1000;
 const INSTALL_MONITOR_TIMEOUT_MS = 12 * 60 * 1000;
 const UPDATE_RESULT_STATUSES = new Set(["started", "succeeded", "degraded", "failed", "rolled-back", "rollback-failed"]);
-const REQUIRED_RELEASE_ASSETS = [
-  "QuotaPin-Windows-x64.zip",
-  "QuotaPin-Windows-x64.zip.sha256",
-];
+const OFFICIAL_REPOSITORY = "https://github.com/WSL043/QuotaPin-for-Codex";
 export const MINIMUM_SAFE_VERSION = "0.3.0-alpha.25";
+
+function packageName(version) {
+  return `QuotaPin-${version}.exe`;
+}
 
 function parseVersion(value) {
   const match = VERSION_PATTERN.exec(String(value ?? ""));
@@ -71,8 +72,14 @@ export function normalizeReleases(payload, currentVersion, minimumSafeVersion = 
     if (!parsed || Boolean(parsed.pre.length) !== (item.prerelease === true)) continue;
     if (parsed.pre.length && !acceptsPrerelease) continue;
     if (compareVersions(parsed.text, minimumSafeVersion) < 0) continue;
-    const assetNames = new Set(Array.isArray(item.assets) ? item.assets.map((asset) => String(asset?.name ?? "")) : []);
-    if (!REQUIRED_RELEASE_ASSETS.every((name) => assetNames.has(name))) continue;
+    const assets = Array.isArray(item.assets) ? item.assets : [];
+    const expectedName = packageName(parsed.text);
+    const expectedUrl = `${OFFICIAL_REPOSITORY}/releases/download/${tag}/${expectedName}`;
+    if (assets.length !== 1 || String(assets[0]?.name ?? "") !== expectedName ||
+        String(assets[0]?.browser_download_url ?? "") !== expectedUrl ||
+        !/^sha256:[0-9a-f]{64}$/.test(String(assets[0]?.digest ?? "")) ||
+        !Number.isSafeInteger(Number(assets[0]?.size)) || Number(assets[0]?.size) <= 0 || Number(assets[0]?.size) > 160 * 1024 * 1024 ||
+        String(item.html_url ?? "") !== `${OFFICIAL_REPOSITORY}/releases/tag/${tag}`) continue;
     releases.push(decorateRelease({ version: parsed.text, prerelease: item.prerelease === true }, currentVersion));
   }
   return [...new Map(releases.map((release) => [release.version, release])).values()]

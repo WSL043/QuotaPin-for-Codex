@@ -19,7 +19,7 @@ PrivilegesRequired=lowest
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 OutputDir=..\dist
-OutputBaseFilename=QuotaPin-Setup
+OutputBaseFilename=QuotaPin-{#MyAppVersion}
 SetupIconFile=..\assets\quotapin.ico
 UninstallDisplayIcon={app}\QuotaPin.Tray.exe
 UninstallDisplayName=QuotaPin
@@ -33,7 +33,7 @@ MinVersion=10.0.19041
 VersionInfoCompany=QuotaPin contributors
 VersionInfoCopyright=Copyright (c) 2026 WSL043
 VersionInfoDescription=QuotaPin | https://github.com/WSL043/QuotaPin-for-Codex
-VersionInfoOriginalFileName=QuotaPin-Setup.exe
+VersionInfoOriginalFileName=QuotaPin-{#MyAppVersion}.exe
 VersionInfoProductName=QuotaPin
 
 [Languages]
@@ -52,6 +52,8 @@ Source: "..\dist\OFFICIAL_SOURCE.txt"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\dist\origin.json"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\LICENSE"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\src\launch.ps1"; DestDir: "{app}\src"; Flags: ignoreversion
+Source: "..\src\auto-attach.ps1"; DestDir: "{app}\src"; Flags: ignoreversion
+Source: "..\src\auto-attach-policy.ps1"; DestDir: "{app}\src"; Flags: ignoreversion
 Source: "..\src\codex-process.ps1"; DestDir: "{app}\src"; Flags: ignoreversion
 Source: "..\src\runtime-trust.ps1"; DestDir: "{app}\src"; Flags: ignoreversion
 Source: "..\src\codex-command.ps1"; DestDir: "{app}\src"; Flags: ignoreversion
@@ -63,12 +65,13 @@ Source: "..\config.default.json"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\config.default.json"; DestDir: "{app}"; DestName: "config.json"; Flags: onlyifdoesntexist uninsneveruninstall
 Source: "..\VERSION"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\scripts\stop.ps1"; DestDir: "{app}"; Flags: ignoreversion
+Source: "..\scripts\update.ps1"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\scripts\stop.ps1"; Flags: dontcopy
 Source: "..\scripts\check-prerequisites.ps1"; Flags: dontcopy
 
 [Registry]
-Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: string; ValueName: "QuotaPin"; ValueData: """{app}\QuotaPin.Tray.exe"""; Flags: uninsdeletevalue; Check: AutoAttachEnabled
-Root: HKCU; Subkey: "Software\QuotaPin"; ValueType: string; ValueName: "InstallOwner"; ValueData: "setup"; Flags: uninsdeletevalue uninsdeletekeyifempty
+Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: string; ValueName: "QuotaPin"; ValueData: "{code:GetAutoAttachCommand}"; Flags: uninsdeletevalue; Check: AutoAttachEnabled
+Root: HKCU; Subkey: "Software\QuotaPin"; ValueType: string; ValueName: "InstallOwner"; ValueData: "{code:GetInstallOwner}"; Flags: uninsdeletevalue uninsdeletekeyifempty
 Root: HKCU; Subkey: "Software\QuotaPin"; ValueType: dword; ValueName: "InstallSchema"; ValueData: "1"; Flags: uninsdeletevalue uninsdeletekeyifempty
 Root: HKCU; Subkey: "Software\QuotaPin"; ValueType: string; ValueName: "InstallVersion"; ValueData: "{#MyAppVersion}"; Flags: uninsdeletevalue uninsdeletekeyifempty
 Root: HKCU; Subkey: "Software\QuotaPin"; ValueType: string; ValueName: "OfficialSource"; ValueData: "https://github.com/WSL043/QuotaPin-for-Codex"; Flags: uninsdeletevalue uninsdeletekeyifempty
@@ -80,7 +83,8 @@ Name: "{userprograms}\QuotaPin\Official project (free source)"; Filename: "https
 Name: "{userprograms}\QuotaPin\Uninstall QuotaPin"; Filename: "{uninstallexe}"
 
 [Run]
-Filename: "{app}\QuotaPin.Tray.exe"; Description: "Start QuotaPin"; Flags: nowait; Check: AutoAttachEnabled
+Filename: "{app}\QuotaPin.Tray.exe"; Description: "Start QuotaPin"; Flags: nowait; Check: RunTrayCompanion
+Filename: "{sys}\WindowsPowerShell\v1.0\powershell.exe"; Parameters: "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File ""{app}\src\auto-attach.ps1"" -IgnoreExisting"; Flags: runhidden nowait; Check: RunCommandWatcher
 Filename: "{sys}\WindowsPowerShell\v1.0\powershell.exe"; Parameters: "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File ""{app}\src\first-run.ps1"""; Flags: runhidden waituntilterminated; Check: RunFirstConnection
 
 [UninstallRun]
@@ -139,9 +143,42 @@ begin
     Result := True;
 end;
 
+function CommandInstallMode: Boolean;
+begin
+  Result := HasCommandLineSwitch('/COMMANDINSTALL=1');
+end;
+
+function GetInstallOwner(Param: String): String;
+begin
+  if CommandInstallMode then
+    Result := 'command'
+  else
+    Result := 'setup';
+end;
+
+function GetAutoAttachCommand(Param: String): String;
+begin
+  if CommandInstallMode then
+    Result := '"' + ExpandConstant('{sys}\WindowsPowerShell\v1.0\powershell.exe') +
+      '" -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "' +
+      ExpandConstant('{app}\src\auto-attach.ps1') + '"'
+  else
+    Result := '"' + ExpandConstant('{app}\QuotaPin.Tray.exe') + '"';
+end;
+
+function RunTrayCompanion: Boolean;
+begin
+  Result := AutoAttachEnabled and (not CommandInstallMode);
+end;
+
+function RunCommandWatcher: Boolean;
+begin
+  Result := AutoAttachEnabled and CommandInstallMode;
+end;
+
 function RunFirstConnection: Boolean;
 begin
-  Result := (not ExistingSetupInstall) and (not WizardSilent);
+  Result := (not CommandInstallMode) and (not ExistingSetupInstall) and (not WizardSilent);
 end;
 
 function PrepareToInstall(var NeedsRestart: Boolean): String;
@@ -194,11 +231,16 @@ procedure CurStepChanged(CurStep: TSetupStep);
 var
   ResultCode: Integer;
   StateText: AnsiString;
+  AutoAttachText: String;
 begin
   if CurStep <> ssPostInstall then Exit;
   Exec(ExpandConstant('{sys}\WindowsPowerShell\v1.0\powershell.exe'),
     '-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "' + ExpandConstant('{app}\src\lifecycle.ps1') + '" -Action PrepareSetupMigration',
     ExpandConstant('{app}'), SW_HIDE, ewWaitUntilTerminated, ResultCode);
-  StateText := '{"schema":1,"owner":"setup","version":"{#MyAppVersion}"}';
+  if AutoAttachEnabled then
+    AutoAttachText := 'true'
+  else
+    AutoAttachText := 'false';
+  StateText := '{"schema":1,"owner":"' + GetInstallOwner('') + '","version":"{#MyAppVersion}","preferences":{"autoAttach":' + AutoAttachText + '}}';
   SaveStringToFile(ExpandConstant('{app}\install-state.json'), StateText, False);
 end;

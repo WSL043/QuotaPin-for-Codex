@@ -212,29 +212,22 @@ The command installation starts a per-user attachment helper at sign-in, so the 
 | `-CreateLauncherShortcut` | Also create that launcher while automatic attachment stays enabled. |
 | `-NoDesktopShortcut` | Keep a required launcher in the Start menu only. |
 
-From a checkout, use the explicit PowerShell command below. It also works when the current user policy is `Restricted`:
+These switches are source-checkout controls for development. They are intentionally absent from the one-line package bootstrap. From a checkout, run:
 
 ```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\install.ps1 -DisableAutoAttach -CreateLauncherShortcut
-```
-
-Without cloning first:
-
-```powershell
-$install = [scriptblock]::Create((irm https://raw.githubusercontent.com/WSL043/QuotaPin-for-Codex/main/install.ps1))
-& $install -DisableAutoAttach -CreateLauncherShortcut
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\install.ps1 -DisableAutoAttach -CreateLauncherShortcut
 ```
 
 ## Updates and recovery versions
 
 The version control in the editor can read the official GitHub release list. Automatic release checks run at most once per 24 hours; opening the control can request a fresh check. Checking is read-only and never starts an installation.
 
-Only compatible published releases with the required Agent, notices, manifest, and SHA-256 files are eligible. The user must select a version and confirm before installation begins. The updater verifies the tagged source and release metadata, preserves the current configuration and launch preferences, and then uses the normal command installer. It never closes or launches Codex: it may reattach only to the exact loopback runtime receipt from the current session; otherwise the new version waits for the next normal Codex launch. A version absent from the picker is not treated as compatible.
+Only compatible, immutable releases containing exactly one correctly named Windows executable are eligible. The user must select a version and confirm before installation begins. The updater checks GitHub's asset digest and the executable's embedded repository, version, and filename identity, preserves the current configuration and launch preference, and then uses the same package as Quick Start. It never closes or launches Codex: it may reattach only to the exact loopback runtime receipt from the current session; otherwise the new version waits for the next normal Codex launch. A version absent from the picker is not treated as compatible.
 
 The remote bootstrap without `-Version` resolves GitHub's immutable latest stable release. Supplying an exact published stable version permits a repair or compatible rollback. Reinstalling the same version follows the same transactional replacement path and does not reset configuration.
 
 ```powershell
-& ([scriptblock]::Create((irm https://raw.githubusercontent.com/WSL043/QuotaPin-for-Codex/main/install.ps1))) -Version '1.0.0'
+& ([scriptblock]::Create((irm https://raw.githubusercontent.com/WSL043/QuotaPin-for-Codex/main/install.ps1))) -Version '1.0.1'
 ```
 
 Older entries are user-selected recovery versions, not a transactional rollback guarantee. If an older Agent encounters a configuration from a newer schema, it opens that configuration read-only instead of overwriting it. Published update behavior is counted as supported only after the corresponding path appears in [observed compatibility](compatibility.md).

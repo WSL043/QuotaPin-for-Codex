@@ -2,7 +2,7 @@
 
 | QuotaPin | Codex Desktop | Windows | Status |
 |---|---|---|---|
-| 1.0.0 local release candidate | 26.727.6591.0 x64 | Windows 11 10.0.26200 | The built and installed Agent hashes matched, and the live renderer accepted owner-scoped delivery without restarting Codex. A 201px account row held avatar, full account name, percentage, and compact countdown across 1,060 samples at 20 ms: no unexpected module, overlap, or integrity repair appeared while 13 newer runtime sequences arrived. Tagged artifacts are independently rebuilt and verified by the release workflow. |
+| 1.0.1 release candidate | 26.730.8199.0 x64 | Windows 11 10.0.26200 | The single `QuotaPin-1.0.1.exe` built with Inno Setup 6.7.1. Clean command and guided modes completed in about six seconds with the expected watcher-only and tray-only ownership. Same-version repair and a 1.0.0-to-1.0.1 replacement preserved edited configuration. Each uninstall removed files, owned processes, startup state, and the Apps entry; Codex process identities stayed unchanged throughout. A forced partial download resumed from its saved byte range and matched the source payload exactly. |
 
 The one-line command accepts x64 Windows 10 version 2004 (build 19041) and later. Current end-to-end evidence is from Windows 11, so Windows 10 remains best-effort until a real-device report is recorded. Windows ARM64 is not supported.
 
@@ -22,7 +22,7 @@ The one-line command accepts x64 Windows 10 version 2004 (build 19041) and later
 - English, Simplified Chinese, and Japanese use the same configuration state.
 - macOS CI executes the platform-neutral quota, configuration, renderer-state, showcase, and effect contracts. This is portability evidence for the core, not a macOS application support claim.
 - The official Codex installation remains unchanged when QuotaPin is installed or removed.
-- The installation command, self-contained Agent, renderer, and PowerShell lifecycle share version and provenance gates. The current public path is command-only.
+- The one-line command and guided installer use the same versioned executable, self-contained Agent, renderer, and provenance gates; only their startup companion differs.
 - A Windows PowerShell 5.1 `Restricted` caller completed the in-memory bootstrap, fresh installation, and Start-menu uninstall path; installation and update use controlled child processes without changing the user's policy.
 - A local exact-version replacement preserved the configuration, restored `quota-ready` on the same loopback port, and left the WindowsApps Codex PID unchanged. This is not yet evidence for the public GitHub release path.
 - Command uninstall stopped the persistent Agent before renderer cleanup, removed its startup and Start-menu entries, and left no QuotaPin controller in the live renderer.

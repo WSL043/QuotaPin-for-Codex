@@ -18,7 +18,7 @@ env:
 
 jobs:
   build:
-    name: Build command release candidate
+    name: Build single-package release candidate
     runs-on: windows-latest
     timeout-minutes: 25
     permissions:
@@ -71,6 +71,34 @@ jobs:
       - name: Install locked build dependencies
         run: npm ci --ignore-scripts
 
+      - name: Install the pinned Inno Setup compiler
+        shell: powershell
+        run: |
+          $version = '6.7.1'
+          $expectedSha256 = '4d11e8050b6185e0d49bd9e8cc661a7a59f44959a621d31d11033124c4e8a7b0'
+          $download = Join-Path $env:RUNNER_TEMP "innosetup-$version.exe"
+          $installRoot = Join-Path $env:RUNNER_TEMP "Inno Setup $version"
+          & curl.exe --fail --location --show-error --silent `
+            --output $download `
+            "https://github.com/jrsoftware/issrc/releases/download/is-6_7_1/innosetup-$version.exe"
+          if ($LASTEXITCODE -ne 0) { throw 'Could not download the pinned Inno Setup compiler.' }
+          $actualSha256 = (Get-FileHash -Algorithm SHA256 -LiteralPath $download).Hash.ToLowerInvariant()
+          if ($actualSha256 -cne $expectedSha256) { throw "Inno Setup digest mismatch: $actualSha256" }
+          $signature = Get-AuthenticodeSignature -LiteralPath $download
+          if ($signature.Status -ne 'Valid' -or [string]$signature.SignerCertificate.Subject -notmatch 'Pyrsys B\.V\.') {
+            throw "Inno Setup signature is not trusted: $($signature.Status) $($signature.SignerCertificate.Subject)"
+          }
+          $process = Start-Process -FilePath $download -ArgumentList @('/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART','/CURRENTUSER',("/DIR=`"{0}`"" -f $installRoot)) -PassThru
+          try {
+            $process.WaitForExit()
+            if ($process.ExitCode -ne 0) { throw "Inno Setup install failed with code $($process.ExitCode)." }
+          }
+          finally { $process.Dispose() }
+          $iscc = Join-Path $installRoot 'ISCC.exe'
+          if (-not (Test-Path -LiteralPath $iscc -PathType Leaf)) { throw "ISCC.exe was not installed: $iscc" }
+          "QUOTAPIN_ISCC_PATH=$iscc" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "QUOTAPIN_INNO_VERSION=$version" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
       - name: Run source and product gates
         shell: powershell
         run: |
@@ -96,9 +124,9 @@ jobs:
           }
           if ($failed) { throw 'PowerShell syntax check failed.' }
 
-      - name: Build self-contained command agent
+      - name: Build self-contained Windows package
         shell: powershell
-        run: .\scripts\build-agent.ps1
+        run: .\scripts\build-windows.ps1
 
       - name: Prepare exact public asset set
         shell: powershell
@@ -126,10 +154,10 @@ jobs:
           $dirty = @(& git status --porcelain=v1 --untracked-files=all)
           if ($dirty.Count) { throw "Release build mutated source: $($dirty -join ', ')" }
 
-      - name: Upload immutable command candidate
+      - name: Upload immutable single-package candidate
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.0
         with:
-          name: QuotaPin-Command-${{ github.sha }}
+          name: QuotaPin-Package-${{ github.sha }}
           if-no-files-found: error
           retention-days: 7
           path: dist/public/
@@ -157,10 +185,10 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
 
-      - name: Download verified command candidate
+      - name: Download verified single-package candidate
         uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
         with:
-          name: QuotaPin-Command-${{ github.sha }}
+          name: QuotaPin-Package-${{ github.sha }}
           path: release
 
       - name: Reverify candidate and source provenance
@@ -171,24 +199,21 @@ jobs:
           --repository "$OFFICIAL_REPOSITORY"
           --commit "$GITHUB_SHA"
           --tag "$GITHUB_REF_NAME"
+          --workflow-run-id "$GITHUB_RUN_ID"
 
-      - name: Attest the Windows bundle checksum
-        uses: actions/attest@508db95dd578ae2727ebd6217d5ba78e4fbda05d # v4.0.0
-        with:
-          subject-checksums: release/QuotaPin-Windows-x64.zip.sha256
-
-      - name: Read the reviewed SBOM from the bundle
+      - name: Resolve the versioned public asset name
+        shell: pwsh
         run: |
-          mkdir -p release/sbom
-          unzip -q release/QuotaPin-Windows-x64.zip QuotaPin.spdx.json -d release/sbom
+          $version = (Get-Content -Raw VERSION).Trim()
+          "PUBLIC_ASSET=QuotaPin-$version.exe" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 
-      - name: Attest the Windows bundle SBOM
+      - name: Attest the versioned QuotaPin executable and its SBOM
         uses: actions/attest@508db95dd578ae2727ebd6217d5ba78e4fbda05d # v4.0.0
         with:
-          subject-path: release/QuotaPin-Windows-x64.zip
-          sbom-path: release/sbom/QuotaPin.spdx.json
+          subject-path: release/${{ env.PUBLIC_ASSET }}
+          sbom-path: release/QuotaPin.spdx.json
 
-      - name: Publish only the reviewed command assets
+      - name: Publish only the reviewed executable
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}

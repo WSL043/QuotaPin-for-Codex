@@ -4,9 +4,11 @@ $ErrorActionPreference = 'Stop'
 $RepositoryRoot = Split-Path -Parent $PSScriptRoot
 $OutputRoot = Join-Path $RepositoryRoot 'dist'
 $Version = (Get-Content -Raw -LiteralPath (Join-Path $RepositoryRoot 'VERSION')).Trim()
+$PackageName = "QuotaPin-$Version.exe"
 
 if (-not $IsccPath) {
     $Candidates = @(
+        $env:QUOTAPIN_ISCC_PATH,
         (Join-Path ${env:ProgramFiles(x86)} 'Inno Setup 6\ISCC.exe'),
         (Join-Path $env:ProgramFiles 'Inno Setup 6\ISCC.exe'),
         (Join-Path $env:LOCALAPPDATA 'Programs\Inno Setup 6\ISCC.exe')
@@ -26,7 +28,7 @@ if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 & $IsccPath "/DMyAppVersion=$Version" (Join-Path $RepositoryRoot 'installer\QuotaPin.iss')
 if ($LASTEXITCODE -ne 0) { throw "Inno Setup failed with exit code $LASTEXITCODE" }
 
-$SetupPath = Join-Path $OutputRoot 'QuotaPin-Setup.exe'
+$SetupPath = Join-Path $OutputRoot $PackageName
 $ProductVersion = ([string](Get-Item -LiteralPath $SetupPath).VersionInfo.ProductVersion).Trim()
 if ($ProductVersion -ne $Version) { throw "Setup version mismatch. Expected $Version; found $ProductVersion" }
 
@@ -42,7 +44,7 @@ function Get-Sha256([string]$Path) {
     }
 }
 
-foreach ($Name in @('QuotaPin-Setup.exe', 'QuotaPin.Agent.exe', 'THIRD_PARTY_NOTICES.txt')) {
+foreach ($Name in @($PackageName, 'QuotaPin.Agent.exe', 'THIRD_PARTY_NOTICES.txt')) {
     $Path = Join-Path $OutputRoot $Name
     $Hash = Get-Sha256 $Path
     [IO.File]::WriteAllText(($Path + '.sha256'), "$Hash  $Name`r`n", [Text.Encoding]::ASCII)

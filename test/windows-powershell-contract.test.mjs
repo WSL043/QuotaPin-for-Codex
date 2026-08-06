@@ -145,28 +145,19 @@ $Strict = Get-QuotaPinResumableRuntime -InstallRoot 'C:\fixture' -AgentPath 'C:\
   });
 });
 
-test("command updater contract keeps trust, full rollback, cleanup, and one resume owner", () => {
+test("command updater contract keeps exact single-package trust, cleanup, and no-restart ownership", () => {
   const updater = fs.readFileSync(path.join(root, "scripts", "update.ps1"), "utf8");
-  const trust = fs.readFileSync(path.join(root, "src", "runtime-trust.ps1"), "utf8");
-  for (const asset of ["QuotaPin-Windows-x64.zip"]) {
-    assert.match(updater, new RegExp(asset.replaceAll(".", "\\.")), asset);
-  }
-  for (const member of ["QuotaPin-release.json", "QuotaPin-release.json.sha256", "SHA256SUMS", "QuotaPin.Agent.exe.sha256", "THIRD_PARTY_NOTICES.txt.sha256"]) assert.match(trust, new RegExp(member.replaceAll(".", "\\.")), member);
-  assert.match(updater, /Test-QuotaPinReleaseTrustBundle/);
-  assert.match(updater, /Expand-QuotaPinReleaseBundle/);
-  assert.match(updater, /archive\/\$\(\$ReleaseTrust\.commit\)\.zip/);
-  assert.match(updater, /New-QuotaPinRollbackSnapshot[\s\S]*\$InstallRoot/);
-  assert.match(updater, /Get-QuotaPinInstallRegistrySnapshot/);
-  assert.match(updater, /Restore-QuotaPinRollbackSnapshot[\s\S]*Restore-QuotaPinInstallRegistrySnapshot/);
-  assert.match(updater, /Write-QuotaPinUpdateResult 'rolled-back'/);
-  assert.match(updater, /Write-QuotaPinUpdateResult 'rollback-failed'/);
-  assert.match(updater, /& \$InstallerPath -DeferRuntimeResume/);
-  assert.match(updater, /Get-QuotaPinResumableRuntime/);
+  assert.match(updater, /\$PackageName = "QuotaPin-\$Version\.exe"/);
+  assert.match(updater, /\$Assets\.Count -ne 1/);
+  assert.match(updater, /\$Release\.immutable -ne \$true/);
+  assert.match(updater, /\$AssetDigest -notmatch '\^sha256:/);
+  assert.match(updater, /OriginalFilename -cne \$PackageName/);
+  assert.match(updater, /Start-Process -FilePath \$PackagePath[\s\S]*'\/COMMANDINSTALL=1'/);
+  assert.match(updater, /\$Process\.WaitForExit\(\)/);
+  assert.doesNotMatch(updater, /Start-Process -FilePath \$PackagePath[^\r\n]*-Wait/);
+  assert.match(updater, /'\/NORESTART'/);
+  assert.match(updater, /Local\\QuotaPin\.Update\./);
+  assert.match(updater, /Write-QuotaPinUpdateResult 'degraded'/);
   assert.match(updater, /cleanup-warning temp-root/);
-  assert.doesNotMatch(updater, /function Resume-QuotaPinTrustedRuntime/);
-
-  assert.match(trust, /build\.context -cne 'github-release-workflow'/);
-  assert.match(trust, /workflowRunId/);
-  assert.match(trust, /function Resume-QuotaPinTrustedRuntime/);
-  assert.match(trust, /Get-Process -Id \$ReplacementAgent\.Id[\s\S]*\.Path[\s\S]*ReplacementStartedAt[\s\S]*Stop-Process -Id \$UnreadyAgent\.Id/);
+  assert.doesNotMatch(updater, /Start-Process[^\r\n]*(?:ChatGPT|Codex\.exe|launch\.ps1)/i);
 });

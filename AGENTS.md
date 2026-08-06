@@ -23,7 +23,7 @@ irm https://raw.githubusercontent.com/WSL043/QuotaPin-for-Codex/main/install.ps1
 The moving bootstrap selects only GitHub's immutable latest stable release. Exact-version repair and historical rollback retain the same `-Version` boundary:
 
 ```powershell
-& ([scriptblock]::Create((irm https://raw.githubusercontent.com/WSL043/QuotaPin-for-Codex/main/install.ps1))) -Version '1.0.0'
+& ([scriptblock]::Create((irm https://raw.githubusercontent.com/WSL043/QuotaPin-for-Codex/main/install.ps1))) -Version '1.0.1'
 ```
 
 Both installations are per-user and preserve `%LOCALAPPDATA%\QuotaPin\config.json`. Public GitHub Releases are command-only: beta releases are explicit prereleases and never Latest; stable releases alone feed the moving channel. Keep the official Codex icon as the normal launch path. Do not offer unpublished packaging experiments as installation choices.
@@ -74,7 +74,7 @@ Also parse every `.ps1` file with the Windows PowerShell parser. For selector, g
 A command/source installation can be removed with **Start > QuotaPin > Uninstall QuotaPin**, or by running:
 
 ```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$env:LOCALAPPDATA\QuotaPin\uninstall.ps1"
+& "$env:LOCALAPPDATA\QuotaPin\unins000.exe"
 ```
 
 Confirm the tray/watcher, injector, startup entry, owned shortcuts, and `%LOCALAPPDATA%\QuotaPin` are gone. Codex Desktop must remain installed and unchanged.

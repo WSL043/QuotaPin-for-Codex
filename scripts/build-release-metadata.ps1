@@ -69,16 +69,6 @@ function Get-AuthenticodeRecord([string]$Path) {
     }
 }
 
-function Get-TrustedCertificatePins {
-    $UpdaterPath = Join-Path $RepositoryRoot 'src\tray\Updater.cs'
-    $Source = Get-Content -Raw -LiteralPath $UpdaterPath
-    $Block = [regex]::Match($Source, '(?s)TRUSTED_CERTIFICATE_SHA256_BEGIN(?<pins>.*?)TRUSTED_CERTIFICATE_SHA256_END')
-    if (-not $Block.Success) { throw 'Updater trust-pin markers were not found.' }
-    @([regex]::Matches($Block.Groups['pins'].Value, '"(?<hash>[0-9a-fA-F]{64})"') | ForEach-Object {
-        $_.Groups['hash'].Value.ToLowerInvariant()
-    } | Select-Object -Unique)
-}
-
 function Get-ReleaseArtifact([string]$Name) {
     $Path = if ($Name -eq 'LICENSE') { Join-Path $RepositoryRoot $Name } else { Join-Path $OutputRoot $Name }
     if (-not (Test-Path -LiteralPath $Path)) { throw "Release artifact not found: $Path" }
@@ -159,7 +149,8 @@ is available without charge from the project above.
 
 Import-BuildSecurityModule
 
-$Required = @('QuotaPin-Setup.exe', 'QuotaPin.Agent.exe', 'QuotaPin.Tray.exe', 'THIRD_PARTY_NOTICES.txt', 'OFFICIAL_SOURCE.txt', 'origin.json')
+$PackageName = "QuotaPin-$Version.exe"
+$Required = @($PackageName, 'QuotaPin.Agent.exe', 'QuotaPin.Tray.exe', 'THIRD_PARTY_NOTICES.txt', 'OFFICIAL_SOURCE.txt', 'origin.json')
 foreach ($Name in $Required) {
     if (-not (Test-Path -LiteralPath (Join-Path $OutputRoot $Name))) { throw "Release artifact not found: $Name" }
 }
@@ -218,22 +209,7 @@ $Spdx = [ordered]@{
 }
 Write-Utf8Json $SpdxPath $Spdx
 
-$Artifacts = @(
-    (Get-ReleaseArtifact 'QuotaPin-Setup.exe'),
-    (Get-ReleaseArtifact 'QuotaPin.Agent.exe'),
-    (Get-ReleaseArtifact 'QuotaPin.Tray.exe'),
-    (Get-ReleaseArtifact 'THIRD_PARTY_NOTICES.txt'),
-    (Get-ReleaseArtifact 'OFFICIAL_SOURCE.txt'),
-    (Get-ReleaseArtifact 'origin.json')
-)
-$Setup = @($Artifacts | Where-Object { $_.name -eq 'QuotaPin-Setup.exe' })[0]
-$TrustedPins = @(Get-TrustedCertificatePins)
-$SetupCertificate = [string]$Setup.authenticode.certificateSha256
-$SetupSignatureMatchesUpdater = (
-    $Setup.authenticode.status -eq 'Valid' -and
-    $SetupCertificate -and
-    $TrustedPins -contains $SetupCertificate.ToLowerInvariant()
-)
+$Artifacts = @((Get-ReleaseArtifact $PackageName))
 
 $ManifestPath = Join-Path $OutputRoot 'QuotaPin-release.json'
 $Manifest = [ordered]@{
@@ -256,10 +232,10 @@ $Manifest = [ordered]@{
         dependencies = $BuildDependencies
     }
     trust = [ordered]@{
-        authenticodeRequiredForAutomaticUpdate = $true
-        trustedCertificatePinsConfigured = $TrustedPins.Count -gt 0
-        setupCertificateSha256 = if ($SetupSignatureMatchesUpdater) { $SetupCertificate.ToLowerInvariant() } else { $null }
-        autoUpdateEligible = [bool]$SetupSignatureMatchesUpdater
+        immutableGitHubReleaseRequired = $true
+        exactAssetDigestRequired = $true
+        githubArtifactAttestationRequired = $true
+        userConfirmationRequired = $true
     }
     artifacts = $Artifacts
     sbom = [ordered]@{
@@ -275,16 +251,7 @@ $ManifestHash = Get-Sha256 $ManifestPath
 
 Copy-Item -LiteralPath (Join-Path $RepositoryRoot 'LICENSE') -Destination (Join-Path $OutputRoot 'LICENSE') -Force
 
-$ChecksumNames = @(
-    'QuotaPin-Setup.exe',
-    'QuotaPin.Agent.exe',
-    'THIRD_PARTY_NOTICES.txt',
-    'OFFICIAL_SOURCE.txt',
-    'origin.json',
-    'QuotaPin-release.json',
-    'QuotaPin.spdx.json',
-    'LICENSE'
-)
+$ChecksumNames = @($PackageName, 'QuotaPin-release.json', 'QuotaPin.spdx.json')
 $ChecksumLines = foreach ($Name in $ChecksumNames) {
     $Path = Join-Path $OutputRoot $Name
     '{0}  {1}' -f (Get-Sha256 $Path), $Name
@@ -296,5 +263,5 @@ $ChecksumLines = foreach ($Name in $ChecksumNames) {
     commit = $Commit
     manifest = $ManifestPath
     sbom = $SpdxPath
-    autoUpdateEligible = [bool]$SetupSignatureMatchesUpdater
+    publicAsset = $PackageName
 } | ConvertTo-Json -Compress

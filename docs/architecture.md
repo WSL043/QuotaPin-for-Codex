@@ -141,7 +141,7 @@ An acknowledgement advances `committed` and replays any newer pending actions. A
 
 ## Windows lifecycle
 
-The command installation places a version-matched, self-contained `QuotaPin.Agent.exe` and a small set of Windows PowerShell 5.1 lifecycle scripts under `%LOCALAPPDATA%\QuotaPin`. A per-user startup shortcut runs the background attachment helper; no service, administrator token, system-wide registry entry, or modified Codex package is required.
+The versioned Windows executable owns both supported installation experiences. PowerShell Quick Start runs it in quiet command mode, which installs a self-contained `QuotaPin.Agent.exe` plus Windows PowerShell 5.1 lifecycle scripts under `%LOCALAPPDATA%\QuotaPin` and starts only the per-user attachment watcher. Double-clicking the same file installs the tray companion instead. Both modes register the same native Apps uninstall entry; neither needs a service, administrator token, system-wide registry entry, or modified Codex package.
 
 The helper accepts only a fresh official root `ChatGPT.exe` launch. The launcher validates the app-managed Codex executable, binds CDP to loopback on a fresh ephemeral port, and starts the Agent. An already instrumented, stale, child, or ambiguous process is ignored. The command installation has no tray UI.
 
@@ -156,9 +156,9 @@ The helper accepts only a fresh official root `ChatGPT.exe` launch. The launcher
 - `scripts/build-agent.ps1` bundles the runtime into the self-contained Windows Agent and embeds version/source provenance.
 - `src/launch.ps1` validates and activates the official Codex process with loopback-only CDP.
 - `src/auto-attach.ps1` watches for eligible official launches and authorizes one generation-bound relaunch. Success requires a renderer-attached receipt; any mismatch latches a circuit breaker instead of retrying a destructive transition.
-- `scripts/install.ps1`, `scripts/update.ps1`, and `scripts/uninstall.ps1` own the per-user command lifecycle.
+- `install.ps1` selects and verifies one immutable versioned Windows package; `installer/QuotaPin.iss` owns installed files, mode-specific startup, migration, and native uninstall. `scripts/install.ps1` and `scripts/uninstall.ps1` remain the source-checkout lifecycle for development.
 
-The moving remote bootstrap chooses GitHub's immutable latest stable release unless an exact published version is requested. Install and update replace QuotaPin-owned program files transactionally while preserving configuration and launch preferences. Update never launches Codex; the new Agent may resume only against the exact previously verified loopback runtime, otherwise attachment is deferred to the next normal launch. Uninstall is the explicit full-removal boundary and deletes the configuration with the rest of the QuotaPin install root.
+The moving remote bootstrap chooses GitHub's immutable latest stable release unless an exact published version is requested. It requires one asset named for that version, checks GitHub's SHA-256 digest and the executable's embedded identity, then invokes the same installer used by the guided path. Install and update preserve configuration and launch preference. Update never launches Codex; the new Agent may resume only against the exact previously verified loopback runtime, otherwise attachment is deferred to the next normal launch. Native uninstall is the explicit full-removal boundary and deletes configuration with the rest of the QuotaPin install root.
 
 ## Adapter rules
 

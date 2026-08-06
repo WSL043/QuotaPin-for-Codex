@@ -1,14 +1,7 @@
-param(
-    [string]$Version = '',
-    [switch]$DisableAutoAttach,
-    [switch]$EnableAutoAttach,
-    [switch]$CreateLauncherShortcut,
-    [switch]$NoDesktopShortcut
-)
+param([string]$Version = '')
 
 $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'
-if ($DisableAutoAttach -and $EnableAutoAttach) { throw 'Choose either -DisableAutoAttach or -EnableAutoAttach, not both.' }
 $OfficialRepository = 'https://github.com/WSL043/QuotaPin-for-Codex'
 $VersionPattern = '^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$'
 $RequestedVersion = $Version.Trim()
@@ -28,41 +21,65 @@ function Invoke-QuotaPinInstaller([string]$InstallerPath) {
         throw "Windows PowerShell is unavailable: $PowerShellExe"
     }
     $Arguments = @('-NoLogo', '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', $InstallerPath)
-    if ($DisableAutoAttach) { $Arguments += '-DisableAutoAttach' }
-    if ($EnableAutoAttach) { $Arguments += '-EnableAutoAttach' }
-    if ($CreateLauncherShortcut) { $Arguments += '-CreateLauncherShortcut' }
-    if ($NoDesktopShortcut) { $Arguments += '-NoDesktopShortcut' }
     & $PowerShellExe @Arguments
     if ($LASTEXITCODE -ne 0) {
         throw "QuotaPin installer exited with code $LASTEXITCODE."
     }
 }
 
-function Receive-QuotaPinBootstrapArchive([string]$Uri, [string]$Destination) {
+function Invoke-QuotaPinPackage([string]$PackagePath) {
+    $Arguments = @('/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', '/COMMANDINSTALL=1')
+    # PowerShell's Start-Process -Wait follows the installer's descendant tree.
+    # QuotaPin intentionally leaves its watcher running, so -Wait would make a
+    # successful command install appear hung forever. Wait for the installer
+    # process itself through System.Diagnostics.Process instead.
+    $Process = Start-Process -FilePath $PackagePath -ArgumentList $Arguments -PassThru
+    try {
+        $Process.WaitForExit()
+        if ($Process.ExitCode -ne 0) { throw "QuotaPin installer exited with code $($Process.ExitCode)." }
+    }
+    finally { $Process.Dispose() }
+}
+
+function Receive-QuotaPinBootstrapFile(
+    [string]$Uri,
+    [string]$Destination,
+    [long]$MaximumBytes,
+    [int]$TimeoutSeconds,
+    [string]$DisplayName,
+    [long]$ExpectedBytes = 0
+) {
     $CurlPath = Join-Path $env:SystemRoot 'System32\curl.exe'
     if (-not (Test-Path -LiteralPath $CurlPath -PathType Leaf)) {
         throw 'Windows curl.exe is unavailable.'
     }
     $ExitCode = -1
     foreach ($Attempt in 1..6) {
-        & $CurlPath --ipv4 --http1.1 --fail --location --silent --show-error --connect-timeout 20 --speed-limit 1024 --speed-time 30 --max-time 60 --continue-at - --output $Destination $Uri
+        $SizeText = if ($ExpectedBytes -gt 0) { ' ({0:N1} MiB)' -f ($ExpectedBytes / 1MB) } else { '' }
+        Write-Host "Downloading $DisplayName$SizeText - attempt $Attempt of 6"
+        & $CurlPath --ipv4 --http1.1 --fail --location --show-error --progress-bar --connect-timeout 20 --speed-limit 1024 --speed-time 90 --max-time $TimeoutSeconds --continue-at - --output $Destination $Uri
         $ExitCode = $LASTEXITCODE
         if ($ExitCode -eq 0) { break }
         if (Test-Path -LiteralPath $Destination -PathType Leaf) {
-            if ((Get-Item -LiteralPath $Destination).Length -gt 64MB) {
-                throw 'QuotaPin source archive exceeds the 64 MB safety limit.'
+            if ((Get-Item -LiteralPath $Destination).Length -gt $MaximumBytes) {
+                throw 'QuotaPin download exceeds its safety limit.'
             }
         }
-        if ($Attempt -lt 6) { Start-Sleep -Seconds ([Math]::Min(8, [Math]::Pow(2, $Attempt))) }
+        if ($Attempt -lt 6) {
+            $Delay = [Math]::Min(8, [Math]::Pow(2, $Attempt))
+            Write-Warning "Download was interrupted; keeping the partial file and retrying in $Delay seconds."
+            Start-Sleep -Seconds $Delay
+        }
     }
     if ($ExitCode -ne 0) {
-        throw "QuotaPin source download failed after resumable retries with curl exit code $ExitCode."
+        throw "QuotaPin download failed after resumable retries with curl exit code $ExitCode."
     }
     if (-not (Test-Path -LiteralPath $Destination -PathType Leaf) -or
         (Get-Item -LiteralPath $Destination).Length -le 0 -or
-        (Get-Item -LiteralPath $Destination).Length -gt 64MB) {
-        throw 'QuotaPin source archive has an invalid size.'
+        (Get-Item -LiteralPath $Destination).Length -gt $MaximumBytes) {
+        throw 'QuotaPin download has an invalid size.'
     }
+    Write-Host "Downloaded $DisplayName. Verifying SHA-256..."
 }
 
 $LocalInstaller = $null
@@ -86,6 +103,7 @@ $TempBase = [IO.Path]::GetFullPath([IO.Path]::GetTempPath()).TrimEnd('\')
 $TempRoot = Join-Path $TempBase ('QuotaPin-bootstrap-' + [Guid]::NewGuid().ToString('N'))
 $ArchivePath = Join-Path $TempRoot 'QuotaPin.zip'
 $ExtractRoot = Join-Path $TempRoot 'source'
+$PackagePath = $null
 
 try {
     New-Item -ItemType Directory -Path $TempRoot -Force | Out-Null
@@ -111,24 +129,53 @@ try {
     if (-not $RequestedVersion -and $SelectedIsPrerelease) {
         throw 'GitHub returned a prerelease for the stable QuotaPin install channel.'
     }
-    $ArchiveUrl = "$OfficialRepository/archive/refs/tags/$SelectedTag.zip"
-    Receive-QuotaPinBootstrapArchive $ArchiveUrl $ArchivePath
-    Expand-Archive -LiteralPath $ArchivePath -DestinationPath $ExtractRoot -Force
-
-    $SourceRoots = @(Get-ChildItem -LiteralPath $ExtractRoot -Directory)
-    if ($SourceRoots.Count -ne 1) {
-        throw "Expected one QuotaPin source root; found $($SourceRoots.Count)."
+    $PackageName = "QuotaPin-$SelectedVersion.exe"
+    $Assets = @($Release.assets)
+    $PackageAssets = @($Assets | Where-Object { [string]$_.name -ceq $PackageName })
+    if ($PackageAssets.Count -eq 1) {
+        if ($Assets.Count -ne 1) { throw "Release $SelectedTag must contain only $PackageName." }
+        $PackageAsset = $PackageAssets[0]
+        $ExpectedPackageUrl = "$OfficialRepository/releases/download/$SelectedTag/$PackageName"
+        $PackageUrl = [string]$PackageAsset.browser_download_url
+        $PackageDigest = [string]$PackageAsset.digest
+        $PackageBytes = [long]$PackageAsset.size
+        if ($PackageUrl -cne $ExpectedPackageUrl -or $PackageDigest -notmatch '^sha256:[0-9a-f]{64}$' -or
+            $PackageBytes -le 0 -or $PackageBytes -gt 160MB) {
+            throw 'The QuotaPin installer asset does not have an exact official URL and SHA-256 digest.'
+        }
+        $PackagePath = Join-Path $TempRoot $PackageName
+        Receive-QuotaPinBootstrapFile $PackageUrl $PackagePath 160MB 900 $PackageName $PackageBytes
+        $ActualDigest = 'sha256:' + (Get-FileHash -Algorithm SHA256 -LiteralPath $PackagePath).Hash.ToLowerInvariant()
+        if ($ActualDigest -cne $PackageDigest) { throw 'The downloaded QuotaPin installer failed SHA-256 verification.' }
+        $PackageVersionInfo = (Get-Item -LiteralPath $PackagePath).VersionInfo
+        $PackageVersion = ([string]$PackageVersionInfo.ProductVersion).Trim()
+        $PackageDescription = [string]$PackageVersionInfo.FileDescription
+        if ($PackageVersion -cne $SelectedVersion -or $PackageDescription.IndexOf($OfficialRepository, [StringComparison]::Ordinal) -lt 0 -or
+            [string]$PackageVersionInfo.OriginalFilename -cne $PackageName) {
+            throw 'The downloaded QuotaPin installer identity does not match the selected release.'
+        }
+        Invoke-QuotaPinPackage $PackagePath
     }
-    $DownloadedVersionPath = Join-Path $SourceRoots[0].FullName 'VERSION'
-    $DownloadedInstaller = Join-Path $SourceRoots[0].FullName 'scripts\install.ps1'
-    if (-not (Test-Path -LiteralPath $DownloadedVersionPath) -or -not (Test-Path -LiteralPath $DownloadedInstaller)) {
-        throw 'The downloaded QuotaPin release is incomplete.'
+    elseif ($PackageAssets.Count -eq 0 -and $SelectedVersion -ceq '1.0.0') {
+        # Compatibility path for the original 1.0.0 command release. New
+        # releases publish exactly one versioned QuotaPin executable.
+        $ArchiveUrl = "$OfficialRepository/archive/refs/tags/$SelectedTag.zip"
+        Receive-QuotaPinBootstrapFile $ArchiveUrl $ArchivePath 64MB 120 "QuotaPin $SelectedVersion source"
+        Expand-Archive -LiteralPath $ArchivePath -DestinationPath $ExtractRoot -Force
+        $SourceRoots = @(Get-ChildItem -LiteralPath $ExtractRoot -Directory)
+        if ($SourceRoots.Count -ne 1) { throw "Expected one QuotaPin source root; found $($SourceRoots.Count)." }
+        $DownloadedVersionPath = Join-Path $SourceRoots[0].FullName 'VERSION'
+        $DownloadedInstaller = Join-Path $SourceRoots[0].FullName 'scripts\install.ps1'
+        if (-not (Test-Path -LiteralPath $DownloadedVersionPath) -or -not (Test-Path -LiteralPath $DownloadedInstaller)) {
+            throw 'The downloaded QuotaPin release is incomplete.'
+        }
+        $DownloadedVersion = (Get-Content -Raw -LiteralPath $DownloadedVersionPath).Trim()
+        if ($DownloadedVersion -cne $SelectedVersion) { throw "Downloaded QuotaPin version $DownloadedVersion does not match selected version $SelectedVersion." }
+        Invoke-QuotaPinInstaller $DownloadedInstaller
     }
-    $DownloadedVersion = (Get-Content -Raw -LiteralPath $DownloadedVersionPath).Trim()
-    if ($DownloadedVersion -cne $SelectedVersion) {
-        throw "Downloaded QuotaPin version $DownloadedVersion does not match selected version $SelectedVersion."
+    else {
+        throw "The selected QuotaPin release does not contain the exact $PackageName asset."
     }
-    Invoke-QuotaPinInstaller $DownloadedInstaller
 }
 finally {
     $ResolvedTempRoot = [IO.Path]::GetFullPath($TempRoot).TrimEnd('\')

@@ -4,10 +4,8 @@ using System.Diagnostics;
 using System.Globalization;
 using System.IO;
 using System.Net;
-using System.Runtime.InteropServices;
 using System.Security;
 using System.Security.Cryptography;
-using System.Security.Cryptography.X509Certificates;
 using System.Text;
 using System.Text.RegularExpressions;
 using System.Web.Script.Serialization;
@@ -17,10 +15,8 @@ namespace QuotaPin.Tray
     internal sealed class ReleaseInfo
     {
         internal string Version;
-        internal string SetupUrl;
-        internal string ChecksumUrl;
-        internal string ManifestUrl;
-        internal string ManifestChecksumUrl;
+        internal string PackageUrl;
+        internal string PackageSha256;
         internal string PageUrl;
     }
 
@@ -28,7 +24,6 @@ namespace QuotaPin.Tray
     {
         internal ReleaseInfo Release;
         internal string SetupPath;
-        internal string PublisherCertificateSha256;
     }
 
     internal static class UpdateService
@@ -38,17 +33,7 @@ namespace QuotaPin.Tray
         private const string ReleaseDownloadPrefix = RepositoryUrl + "/releases/download/";
         private const int NetworkTimeoutMilliseconds = 20000;
         private const long ApiDocumentLimit = 2L * 1024L * 1024L;
-        private const long ChecksumDocumentLimit = 4096L;
-        private const long ManifestDocumentLimit = 256L * 1024L;
-        private const long SetupFileLimit = 128L * 1024L * 1024L;
-
-        // TRUSTED_CERTIFICATE_SHA256_BEGIN
-        // Add the lowercase SHA-256 fingerprint of each approved official Authenticode
-        // leaf certificate here. An empty list intentionally disables unattended updates.
-        private static readonly string[] TrustedPublisherCertificateSha256 = new string[0];
-        // TRUSTED_CERTIFICATE_SHA256_END
-
-        private static readonly Guid WinTrustActionGenericVerifyV2 = new Guid("00AAC56B-CD44-11d0-8CC2-00C04FC295EE");
+        private const long PackageFileLimit = 160L * 1024L * 1024L;
 
         internal static ReleaseInfo FindAvailable(string currentVersion)
         {
@@ -71,7 +56,7 @@ namespace QuotaPin.Tray
             foreach (var item in releases)
             {
                 var release = item as Dictionary<string, object>;
-                if (release == null || BooleanValue(release, "draft")) continue;
+                if (release == null || BooleanValue(release, "draft") || !BooleanValue(release, "immutable")) continue;
                 if (BooleanValue(release, "prerelease") && !allowPrerelease) continue;
                 var rawTag = StringValue(release, "tag_name");
                 if (!rawTag.StartsWith("v", StringComparison.Ordinal) || rawTag.Length < 2) continue;
@@ -79,59 +64,30 @@ namespace QuotaPin.Tray
                 SemanticVersion version;
                 try { version = SemanticVersion.Parse(tag); }
                 catch { continue; }
+                if (BooleanValue(release, "prerelease") != !string.IsNullOrEmpty(version.PreRelease)) continue;
                 if (version.CompareTo(current) <= 0 || (selectedVersion != null && version.CompareTo(selectedVersion) <= 0)) continue;
 
                 var expectedPage = RepositoryUrl + "/releases/tag/" + rawTag;
                 var pageUrl = StringValue(release, "html_url");
                 if (!string.Equals(pageUrl, expectedPage, StringComparison.Ordinal)) continue;
-                var expectedAssetPrefix = ReleaseDownloadPrefix + rawTag + "/";
-                string setupUrl = null;
-                string checksumUrl = null;
-                string manifestUrl = null;
-                string manifestChecksumUrl = null;
-                var setupCount = 0;
-                var checksumCount = 0;
-                var manifestCount = 0;
-                var manifestChecksumCount = 0;
                 var assets = release.ContainsKey("assets") ? release["assets"] as object[] : null;
-                if (assets == null) continue;
-                foreach (var assetItem in assets)
-                {
-                    var asset = assetItem as Dictionary<string, object>;
-                    if (asset == null) continue;
-                    var name = StringValue(asset, "name");
-                    var url = StringValue(asset, "browser_download_url");
-                    if (string.Equals(name, "QuotaPin-Setup.exe", StringComparison.Ordinal))
-                    {
-                        setupCount++;
-                        if (string.Equals(url, expectedAssetPrefix + name, StringComparison.Ordinal)) setupUrl = url;
-                    }
-                    else if (string.Equals(name, "QuotaPin-Setup.exe.sha256", StringComparison.Ordinal))
-                    {
-                        checksumCount++;
-                        if (string.Equals(url, expectedAssetPrefix + name, StringComparison.Ordinal)) checksumUrl = url;
-                    }
-                    else if (string.Equals(name, "QuotaPin-release.json", StringComparison.Ordinal))
-                    {
-                        manifestCount++;
-                        if (string.Equals(url, expectedAssetPrefix + name, StringComparison.Ordinal)) manifestUrl = url;
-                    }
-                    else if (string.Equals(name, "QuotaPin-release.json.sha256", StringComparison.Ordinal))
-                    {
-                        manifestChecksumCount++;
-                        if (string.Equals(url, expectedAssetPrefix + name, StringComparison.Ordinal)) manifestChecksumUrl = url;
-                    }
-                }
-                if (setupCount != 1 || checksumCount != 1 || manifestCount != 1 || manifestChecksumCount != 1 ||
-                    setupUrl == null || checksumUrl == null || manifestUrl == null || manifestChecksumUrl == null) continue;
+                if (assets == null || assets.Length != 1) continue;
+                var asset = assets[0] as Dictionary<string, object>;
+                var packageName = PackageName(tag);
+                if (asset == null || StringValue(asset, "name") != packageName) continue;
+                var expectedUrl = ReleaseDownloadPrefix + rawTag + "/" + packageName;
+                var packageUrl = StringValue(asset, "browser_download_url");
+                var digest = StringValue(asset, "digest");
+                var size = IntegerValue(asset, "size");
+                var digestMatch = Regex.Match(digest, "\\Asha256:([0-9a-f]{64})\\z", RegexOptions.CultureInvariant);
+                if (!string.Equals(packageUrl, expectedUrl, StringComparison.Ordinal) || !digestMatch.Success ||
+                    size <= 0 || size > PackageFileLimit) continue;
                 selectedVersion = version;
                 selected = new ReleaseInfo
                 {
                     Version = tag,
-                    SetupUrl = setupUrl,
-                    ChecksumUrl = checksumUrl,
-                    ManifestUrl = manifestUrl,
-                    ManifestChecksumUrl = manifestChecksumUrl,
+                    PackageUrl = packageUrl,
+                    PackageSha256 = digestMatch.Groups[1].Value,
                     PageUrl = pageUrl,
                 };
             }
@@ -149,35 +105,15 @@ namespace QuotaPin.Tray
                 throw new InvalidDataException("Unsafe update directory.");
             if (Directory.Exists(versionRoot)) Directory.Delete(versionRoot, true);
             Directory.CreateDirectory(versionRoot);
-            var setupPath = Path.Combine(versionRoot, "QuotaPin-Setup.exe");
-            var checksumPath = setupPath + ".sha256";
-            var manifestPath = Path.Combine(versionRoot, "QuotaPin-release.json");
-            var manifestChecksumPath = manifestPath + ".sha256";
+            var packagePath = Path.Combine(versionRoot, PackageName(release.Version));
             try
             {
-                DownloadFileBounded(release.ChecksumUrl, checksumPath, currentVersion, ChecksumDocumentLimit);
-                DownloadFileBounded(release.ManifestChecksumUrl, manifestChecksumPath, currentVersion, ChecksumDocumentLimit);
-                DownloadFileBounded(release.ManifestUrl, manifestPath, currentVersion, ManifestDocumentLimit);
-                DownloadFileBounded(release.SetupUrl, setupPath, currentVersion, SetupFileLimit);
-
-                var expectedSetup = ReadStrictChecksum(checksumPath, "QuotaPin-Setup.exe");
-                var actualSetup = ComputeSha256(setupPath);
-                if (!string.Equals(expectedSetup, actualSetup, StringComparison.Ordinal))
-                    throw new InvalidDataException("The downloaded installer failed checksum verification.");
-                var expectedManifest = ReadStrictChecksum(manifestChecksumPath, "QuotaPin-release.json");
-                var actualManifest = ComputeSha256(manifestPath);
-                if (!string.Equals(expectedManifest, actualManifest, StringComparison.Ordinal))
-                    throw new InvalidDataException("The downloaded release manifest failed checksum verification.");
-
-                VerifySetupIdentity(setupPath, release.Version);
-                var signerHash = VerifyOfficialAuthenticode(setupPath);
-                VerifyReleaseManifest(manifestPath, release, actualSetup, new FileInfo(setupPath).Length, signerHash);
-                return new DownloadedUpdate
-                {
-                    Release = release,
-                    SetupPath = setupPath,
-                    PublisherCertificateSha256 = signerHash,
-                };
+                DownloadFileBounded(release.PackageUrl, packagePath, currentVersion, PackageFileLimit);
+                var actual = ComputeSha256(packagePath);
+                if (!string.Equals(actual, release.PackageSha256, StringComparison.Ordinal))
+                    throw new InvalidDataException("The downloaded installer failed GitHub digest verification.");
+                VerifyPackageIdentity(packagePath, release.Version);
+                return new DownloadedUpdate { Release = release, SetupPath = packagePath };
             }
             catch
             {
@@ -194,10 +130,7 @@ namespace QuotaPin.Tray
                 if (!Directory.Exists(root)) return;
                 foreach (var directory in Directory.GetDirectories(root))
                 {
-                    try
-                    {
-                        if (Directory.GetLastWriteTimeUtc(directory) < DateTime.UtcNow.AddDays(-7)) Directory.Delete(directory, true);
-                    }
+                    try { if (Directory.GetLastWriteTimeUtc(directory) < DateTime.UtcNow.AddDays(-7)) Directory.Delete(directory, true); }
                     catch { }
                 }
             }
@@ -210,13 +143,11 @@ namespace QuotaPin.Tray
             var current = SemanticVersion.Parse(currentVersion);
             if (version.CompareTo(current) <= 0) throw new InvalidDataException("The release version is not newer than the installed version.");
             var rawTag = "v" + release.Version;
-            var expectedPrefix = ReleaseDownloadPrefix + rawTag + "/";
-            if (!string.Equals(release.SetupUrl, expectedPrefix + "QuotaPin-Setup.exe", StringComparison.Ordinal) ||
-                !string.Equals(release.ChecksumUrl, expectedPrefix + "QuotaPin-Setup.exe.sha256", StringComparison.Ordinal) ||
-                !string.Equals(release.ManifestUrl, expectedPrefix + "QuotaPin-release.json", StringComparison.Ordinal) ||
-                !string.Equals(release.ManifestChecksumUrl, expectedPrefix + "QuotaPin-release.json.sha256", StringComparison.Ordinal) ||
+            var expectedUrl = ReleaseDownloadPrefix + rawTag + "/" + PackageName(release.Version);
+            if (!string.Equals(release.PackageUrl, expectedUrl, StringComparison.Ordinal) ||
+                !Regex.IsMatch(release.PackageSha256 ?? "", "\\A[0-9a-f]{64}\\z", RegexOptions.CultureInvariant) ||
                 !string.Equals(release.PageUrl, RepositoryUrl + "/releases/tag/" + rawTag, StringComparison.Ordinal))
-                throw new SecurityException("The update release does not use the official versioned asset paths.");
+                throw new SecurityException("The update release does not use the official immutable asset identity.");
         }
 
         private static string DownloadTextBounded(string url, string currentVersion, long maximumBytes)
@@ -242,10 +173,7 @@ namespace QuotaPin.Tray
                     CopyBounded(input, output, maximumBytes);
                 File.Move(partial, destination);
             }
-            finally
-            {
-                TryDeleteFile(partial);
-            }
+            finally { TryDeleteFile(partial); }
         }
 
         private static HttpWebResponse OpenResponse(string url, string currentVersion)
@@ -257,7 +185,7 @@ namespace QuotaPin.Tray
             request.Method = "GET";
             request.UserAgent = "QuotaPin/" + currentVersion;
             request.Accept = "application/vnd.github+json";
-            request.Headers["X-GitHub-Api-Version"] = "2022-11-28";
+            request.Headers["X-GitHub-Api-Version"] = "2026-03-10";
             request.Timeout = NetworkTimeoutMilliseconds;
             request.ReadWriteTimeout = NetworkTimeoutMilliseconds;
             request.AllowAutoRedirect = true;
@@ -300,15 +228,6 @@ namespace QuotaPin.Tray
             }
         }
 
-        private static string ReadStrictChecksum(string path, string expectedName)
-        {
-            var text = File.ReadAllText(path, Encoding.ASCII).Trim();
-            var pattern = "\\A([0-9a-fA-F]{64})[ \\t]+\\*?" + Regex.Escape(expectedName) + "\\z";
-            var match = Regex.Match(text, pattern, RegexOptions.CultureInvariant);
-            if (!match.Success) throw new InvalidDataException("The release checksum document is invalid.");
-            return match.Groups[1].Value.ToLowerInvariant();
-        }
-
         private static string ComputeSha256(string path)
         {
             using (var stream = File.OpenRead(path))
@@ -316,80 +235,21 @@ namespace QuotaPin.Tray
                 return ToHex(algorithm.ComputeHash(stream));
         }
 
-        private static string VerifyOfficialAuthenticode(string path)
+        private static void VerifyPackageIdentity(string path, string expectedVersion)
         {
-            if (TrustedPublisherCertificateSha256.Length == 0)
-                throw new SecurityException("Official update signing is not configured; automatic installation is disabled.");
-            if (!VerifyEmbeddedSignature(path))
-                throw new SecurityException("The downloaded installer does not have a trusted Authenticode signature.");
-            X509Certificate certificate;
-            try { certificate = X509Certificate.CreateFromSignedFile(path); }
-            catch (Exception error) { throw new SecurityException("The installer signer certificate could not be read.", error); }
-            using (var signer = new X509Certificate2(certificate))
-            using (var algorithm = SHA256.Create())
-            {
-                var fingerprint = ToHex(algorithm.ComputeHash(signer.RawData));
-                foreach (var trusted in TrustedPublisherCertificateSha256)
-                {
-                    if (string.Equals(fingerprint, NormalizeFingerprint(trusted), StringComparison.Ordinal)) return fingerprint;
-                }
-                throw new SecurityException("The installer was not signed by an approved QuotaPin publisher certificate.");
-            }
+            var info = FileVersionInfo.GetVersionInfo(path);
+            var productVersion = (info.ProductVersion ?? "").Trim();
+            var description = info.FileDescription ?? "";
+            if (!string.Equals(productVersion, expectedVersion, StringComparison.Ordinal) ||
+                description.IndexOf(RepositoryUrl, StringComparison.Ordinal) < 0 ||
+                !string.Equals(info.OriginalFilename ?? "", PackageName(expectedVersion), StringComparison.Ordinal))
+                throw new SecurityException("The downloaded installer identity does not match the release.");
         }
 
-        private static void VerifySetupIdentity(string path, string expectedVersion)
+        private static string PackageName(string version)
         {
-            var productVersion = (FileVersionInfo.GetVersionInfo(path).ProductVersion ?? "").Trim();
-            if (!string.Equals(productVersion, expectedVersion, StringComparison.Ordinal))
-                throw new SecurityException("The downloaded installer version does not match the release.");
-        }
-
-        private static bool VerifyEmbeddedSignature(string path)
-        {
-            using (var fileInfo = new WinTrustFileInfo(path))
-            using (var trustData = new WinTrustData(fileInfo))
-            {
-                var result = WinVerifyTrust(IntPtr.Zero, WinTrustActionGenericVerifyV2, trustData);
-                trustData.CloseState();
-                WinVerifyTrust(IntPtr.Zero, WinTrustActionGenericVerifyV2, trustData);
-                return result == 0;
-            }
-        }
-
-        private static void VerifyReleaseManifest(string path, ReleaseInfo release, string setupSha256, long setupBytes, string signerHash)
-        {
-            var serializer = new JavaScriptSerializer { MaxJsonLength = (int)ManifestDocumentLimit };
-            var document = serializer.DeserializeObject(File.ReadAllText(path, Encoding.UTF8)) as Dictionary<string, object>;
-            if (document == null || StringValue(document, "schemaVersion") != "quotapin-release/v1" ||
-                StringValue(document, "product") != "QuotaPin" || StringValue(document, "version") != release.Version)
-                throw new InvalidDataException("The release manifest identity is invalid.");
-            var source = DictionaryValue(document, "source");
-            if (source == null || StringValue(source, "repository") != RepositoryUrl)
-                throw new InvalidDataException("The release manifest source is invalid.");
-            var trust = DictionaryValue(document, "trust");
-            if (trust == null || !BooleanValue(trust, "autoUpdateEligible") ||
-                NormalizeFingerprint(StringValue(trust, "setupCertificateSha256")) != signerHash)
-                throw new SecurityException("The release manifest does not authorize automatic installation.");
-            var artifacts = document.ContainsKey("artifacts") ? document["artifacts"] as object[] : null;
-            if (artifacts == null) throw new InvalidDataException("The release manifest has no artifacts.");
-            Dictionary<string, object> setup = null;
-            foreach (var item in artifacts)
-            {
-                var artifact = item as Dictionary<string, object>;
-                if (artifact != null && StringValue(artifact, "name") == "QuotaPin-Setup.exe")
-                {
-                    if (setup != null) throw new InvalidDataException("The release manifest contains duplicate installer entries.");
-                    setup = artifact;
-                }
-            }
-            if (setup == null || StringValue(setup, "sha256") != setupSha256 || IntegerValue(setup, "bytes") != setupBytes)
-                throw new InvalidDataException("The release manifest installer entry does not match the download.");
-        }
-
-        private static Dictionary<string, object> DictionaryValue(Dictionary<string, object> source, string key)
-        {
-            object value;
-            return source.TryGetValue(key, out value) ? value as Dictionary<string, object> : null;
+            SemanticVersion.Parse(version);
+            return "QuotaPin-" + version + ".exe";
         }
 
         private static string StringValue(Dictionary<string, object> source, string key)
@@ -408,7 +268,9 @@ namespace QuotaPin.Tray
         {
             object value;
             long parsed;
-            return source.TryGetValue(key, out value) && value != null && Int64.TryParse(Convert.ToString(value, CultureInfo.InvariantCulture), NumberStyles.Integer, CultureInfo.InvariantCulture, out parsed) ? parsed : -1;
+            return source.TryGetValue(key, out value) && value != null &&
+                Int64.TryParse(Convert.ToString(value, CultureInfo.InvariantCulture), NumberStyles.Integer, CultureInfo.InvariantCulture, out parsed)
+                ? parsed : -1;
         }
 
         private static string SafeFileName(string value)
@@ -416,11 +278,6 @@ namespace QuotaPin.Tray
             var safe = Regex.Replace(value ?? "", "[^0-9A-Za-z._-]+", "-").Trim('-');
             if (safe.Length == 0) throw new InvalidDataException("Unsafe update version.");
             return safe;
-        }
-
-        private static string NormalizeFingerprint(string value)
-        {
-            return Regex.Replace(value ?? "", "[^0-9a-fA-F]", "").ToLowerInvariant();
         }
 
         private static string ToHex(byte[] value)
@@ -485,66 +342,5 @@ namespace QuotaPin.Tray
                 return 0;
             }
         }
-
-        private enum WinTrustDataUiChoice : uint { None = 2 }
-        private enum WinTrustDataRevocationChecks : uint { None = 0 }
-        private enum WinTrustDataChoice : uint { File = 1 }
-        private enum WinTrustDataStateAction : uint { Ignore = 0, Verify = 1, Close = 2 }
-
-        [Flags]
-        private enum WinTrustDataProvFlags : uint
-        {
-            RevocationCheckChainExcludeRoot = 0x00000080,
-        }
-
-        [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
-        private sealed class WinTrustFileInfo : IDisposable
-        {
-            private uint cbStruct = (uint)Marshal.SizeOf(typeof(WinTrustFileInfo));
-            [MarshalAs(UnmanagedType.LPWStr)] private string pcwszFilePath;
-            private IntPtr hFile = IntPtr.Zero;
-            private IntPtr pgKnownSubject = IntPtr.Zero;
-
-            internal WinTrustFileInfo(string path) { pcwszFilePath = path; }
-            public void Dispose() { }
-        }
-
-        [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
-        private sealed class WinTrustData : IDisposable
-        {
-            private uint cbStruct = (uint)Marshal.SizeOf(typeof(WinTrustData));
-            private IntPtr pPolicyCallbackData = IntPtr.Zero;
-            private IntPtr pSIPClientData = IntPtr.Zero;
-            private WinTrustDataUiChoice dwUIChoice = WinTrustDataUiChoice.None;
-            private WinTrustDataRevocationChecks fdwRevocationChecks = WinTrustDataRevocationChecks.None;
-            private WinTrustDataChoice dwUnionChoice = WinTrustDataChoice.File;
-            private IntPtr pFile;
-            private WinTrustDataStateAction dwStateAction = WinTrustDataStateAction.Verify;
-            private IntPtr hWVTStateData = IntPtr.Zero;
-            private IntPtr pwszURLReference = IntPtr.Zero;
-            private WinTrustDataProvFlags dwProvFlags = WinTrustDataProvFlags.RevocationCheckChainExcludeRoot;
-            private uint dwUIContext = 0;
-
-            internal WinTrustData(WinTrustFileInfo fileInfo)
-            {
-                pFile = Marshal.AllocCoTaskMem(Marshal.SizeOf(typeof(WinTrustFileInfo)));
-                Marshal.StructureToPtr(fileInfo, pFile, false);
-            }
-
-            internal void CloseState() { dwStateAction = WinTrustDataStateAction.Close; }
-
-            public void Dispose()
-            {
-                if (pFile != IntPtr.Zero)
-                {
-                    Marshal.DestroyStructure(pFile, typeof(WinTrustFileInfo));
-                    Marshal.FreeCoTaskMem(pFile);
-                    pFile = IntPtr.Zero;
-                }
-            }
-        }
-
-        [DllImport("wintrust.dll", ExactSpelling = true, SetLastError = false, CharSet = CharSet.Unicode)]
-        private static extern uint WinVerifyTrust(IntPtr hwnd, [MarshalAs(UnmanagedType.LPStruct)] Guid actionId, WinTrustData trustData);
     }
 }

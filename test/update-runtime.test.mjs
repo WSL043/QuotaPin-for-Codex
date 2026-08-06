@@ -3,18 +3,23 @@ import assert from "node:assert/strict";
 import { EventEmitter } from "node:events";
 import { compareVersions, MINIMUM_SAFE_VERSION, normalizeReleases, updateDirection, UpdateRuntime } from "../src/agent/update-runtime.mjs";
 
-const requiredAssets = [
-  "QuotaPin-Windows-x64.zip",
-  "QuotaPin-Windows-x64.zip.sha256",
-];
+const DIGEST = "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
 
 const release = (version, options = {}) => {
+  const tag = `v${version}`;
+  const packageName = `QuotaPin-${version}.exe`;
   const value = {
-    tag_name: `v${version}`,
+    tag_name: tag,
+    html_url: `https://github.com/WSL043/QuotaPin-for-Codex/releases/tag/${tag}`,
     draft: options.draft ?? false,
     prerelease: options.prerelease ?? version.includes("-"),
     immutable: Object.hasOwn(options, "immutable") ? options.immutable : true,
-    assets: requiredAssets.map((name) => ({ name })),
+    assets: [{
+      name: packageName,
+      browser_download_url: `https://github.com/WSL043/QuotaPin-for-Codex/releases/download/${tag}/${packageName}`,
+      digest: DIGEST,
+      size: 24_000_000,
+    }],
   };
   return value;
 };
@@ -42,11 +47,15 @@ test("release normalization requires the command-install assets and respects sta
   assert.deepEqual(normalizeReleases(payload, "0.3.0").map((item) => item.version), ["0.3.0"]);
 });
 
-test("release normalization rejects every individually missing install asset", () => {
-  for (const missing of requiredAssets) {
-    const candidate = release("0.3.0-alpha.26");
-    candidate.assets = candidate.assets.filter((asset) => asset.name !== missing);
-    assert.deepEqual(normalizeReleases([candidate], "0.3.0-alpha.25"), [], missing);
+test("release normalization rejects missing, renamed, or extra public assets", () => {
+  const missing = release("0.3.0-alpha.26");
+  missing.assets = [];
+  const renamed = release("0.3.0-alpha.26");
+  renamed.assets[0].name = "QuotaPin.exe";
+  const extra = release("0.3.0-alpha.26");
+  extra.assets.push({ name: "internal.zip" });
+  for (const [label, candidate] of [["missing", missing], ["renamed", renamed], ["extra", extra]]) {
+    assert.deepEqual(normalizeReleases([candidate], "0.3.0-alpha.25"), [], label);
   }
 });
 

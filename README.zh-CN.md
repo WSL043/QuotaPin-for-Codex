@@ -25,6 +25,8 @@ irm https://raw.githubusercontent.com/WSL043/QuotaPin-for-Codex/main/install.ps1
 
 这条命令默认安装最新稳定版。然后照常打开 Codex；若 Codex 已经在运行，这条命令不会打断它，QuotaPin 会在下次正常启动时接入。需要指定旧版、预发布版或执行回退时，请使用[配置文档](docs/configuration.md#updates-and-recovery-versions)里的完整命令。
 
+更习惯双击安装？[下载 `QuotaPin-1.0.1.exe`](https://github.com/WSL043/QuotaPin-for-Codex/releases/latest/download/QuotaPin-1.0.1.exe) 即可。
+
 <p align="center">
   <img src="assets/screenshots/product-zh-CN.png" width="960" alt="账户菜单未打开时，QuotaPin 已在 Codex 账户栏显示百分之一剩余额度">
 </p>
@@ -101,7 +103,7 @@ GitHub Actions 可以构建独立运行的 macOS 开发版，但不能证明它�
 打开 **开始菜单 > QuotaPin > Uninstall QuotaPin**，或者运行：
 
 ```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$env:LOCALAPPDATA\QuotaPin\uninstall.ps1"
+& "$env:LOCALAPPDATA\QuotaPin\unins000.exe"
 ```
 
 QuotaPin 只移除自己的文件和快捷方式，Codex 不受影响。

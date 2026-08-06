@@ -3,15 +3,17 @@ import fs from "node:fs";
 import path from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
-import { PUBLIC_RELEASE_ASSETS, RELEASE_BUNDLE_MEMBERS } from "../scripts/public-release.mjs";
+import { packageNameForVersion, publicReleaseAssets } from "../scripts/public-release.mjs";
 
 const workflowsRoot = new URL("../.github/workflows/", import.meta.url);
+const VERSION = fs.readFileSync(new URL("../VERSION", import.meta.url), "utf8").trim();
+const PUBLIC_PACKAGE = packageNameForVersion(VERSION);
 
 function workflow(name) {
   return fs.readFileSync(new URL(name, workflowsRoot), "utf8");
 }
 
-test("pull-request CI exercises the command release without reviving deferred Setup packaging", () => {
+test("pull-request CI exercises source behavior without publishing an installer", () => {
   const workflow = fs.readFileSync(new URL("../.github/workflows/check.yml", import.meta.url), "utf8");
   assert.match(workflow, /push:\s*\n\s+branches:\s*\n\s+- main/);
   assert.doesNotMatch(workflow, /- beta/);
@@ -32,18 +34,22 @@ test("pull-request CI exercises the command release without reviving deferred Se
   assert.match(workflow, /finally \{[\s\S]*?git tag --delete \$candidateTag/);
 });
 
-test("tag workflow builds and publishes only the exact command release directory", () => {
+test("tag workflow builds and publishes only the exact versioned executable", () => {
   const release = workflow("release.yml");
-  assert.doesNotMatch(release, /workflow_dispatch|QuotaPin-Setup|build-windows|build-installer|innosetup/i);
+  assert.doesNotMatch(release, /workflow_dispatch|QuotaPin-Setup/i);
+  assert.match(release, /scripts\\build-windows\.ps1/);
+  assert.match(release, /4d11e8050b6185e0d49bd9e8cc661a7a59f44959a621d31d11033124c4e8a7b0/);
+  assert.match(release, /Pyrsys B\\\.V\\\./);
+  assert.match(release, /QUOTAPIN_ISCC_PATH=/);
   assert.match(release, /public-release\.mjs prepare[\s\S]*?--output dist\/public/);
   assert.match(release, /public-release\.mjs verify/);
   assert.match(release, /path: dist\/public\//);
   assert.match(release, /node scripts\/public-release\.mjs list/);
   assert.match(release, /release delete-asset/);
   assert.match(release, /Remote draft asset set differs from policy/);
-  assert.match(release, /subject-checksums: release\/QuotaPin-Windows-x64\.zip\.sha256/);
-  assert.match(release, /subject-path: release\/QuotaPin-Windows-x64\.zip/);
-  assert.match(release, /sbom-path: release\/sbom\/QuotaPin\.spdx\.json/);
+  assert.match(release, /PUBLIC_ASSET=QuotaPin-\$version\.exe/);
+  assert.match(release, /subject-path: release\/\$\{\{ env\.PUBLIC_ASSET \}\}/);
+  assert.match(release, /sbom-path: release\/QuotaPin\.spdx\.json/);
   assert.match(release, /artifact-metadata: write/);
   assert.match(release, /github\.event\.repository\.private == false/);
   assert.match(release, /--notes-file \$notesPath/);
@@ -75,7 +81,7 @@ test("public entrypoints default to stable while the remote bootstrap fails clos
   for (const relative of ["AGENTS.md", "docs/configuration.md"]) {
     const source = fs.readFileSync(new URL(`../${relative}`, import.meta.url), "utf8");
     assert.ok(source.includes(expected), `${relative} lost the stable bootstrap URL`);
-    assert.match(source, /-Version '1\.0\.0'/);
+    assert.ok(source.includes(`-Version '${VERSION}'`));
   }
   const bootstrap = fs.readFileSync(new URL("../install.ps1", import.meta.url), "utf8");
   assert.doesNotMatch(bootstrap, /\[string\]\$(?:ArchiveUrl|AgentUrl)/);
@@ -114,18 +120,18 @@ test("development artifacts, beta prereleases, and stable releases have separate
   assert.doesNotMatch(release, /QuotaPin-macOS-dev/);
 });
 
-test("the public asset contract includes updater evidence and excludes unpublished packaging", () => {
-  assert.deepEqual(PUBLIC_RELEASE_ASSETS, ["QuotaPin-Windows-x64.zip", "QuotaPin-Windows-x64.zip.sha256"]);
-  for (const required of ["QuotaPin.Agent.exe", "QuotaPin-release.json", "QuotaPin-release.json.sha256", "SHA256SUMS", "QuotaPin.spdx.json"]) assert.ok(RELEASE_BUNDLE_MEMBERS.includes(required), required);
-  assert.equal(new Set(PUBLIC_RELEASE_ASSETS).size, PUBLIC_RELEASE_ASSETS.length);
-  assert.ok(PUBLIC_RELEASE_ASSETS.every((name) => !/(?:setup|tray)/i.test(name)));
+test("the public asset contract exposes one versioned executable and keeps build evidence internal", () => {
+  const assets = publicReleaseAssets(VERSION);
+  assert.deepEqual(assets, [PUBLIC_PACKAGE]);
+  assert.equal(new Set(assets).size, 1);
+  assert.match(PUBLIC_PACKAGE, new RegExp(`^QuotaPin-${VERSION.replaceAll(".", "\\.")}\\.exe$`));
+  assert.ok(assets.every((name) => !/\.(?:zip|json|sha256)$/i.test(name)));
 });
 
-test("the public stable release has reviewed command-only notes and a stable install path", () => {
-  const notes = fs.readFileSync(new URL("../.github/release-notes/v1.0.0.md", import.meta.url), "utf8");
-  assert.match(notes, /first stable command release/i);
-  assert.match(notes, /command-install bundle/i);
-  assert.match(notes, /Windows 11 x64/);
+test("the public stable release has reviewed single-executable notes and a stable install path", () => {
+  const notes = fs.readFileSync(new URL(`../.github/release-notes/v${VERSION}.md`, import.meta.url), "utf8");
+  assert.match(notes, /QuotaPin/i);
+  assert.match(notes, new RegExp(`QuotaPin-${VERSION.replaceAll(".", "\\.")}\\.exe`));
   assert.match(notes, /Windows 10 version 2004/i);
   assert.match(notes, /WSL043\/QuotaPin-for-Codex\/main\/install\.ps1/);
   assert.doesNotMatch(notes, /\s-Version\s/);
@@ -200,12 +206,10 @@ test("official builds keep canonical free-source and support anchors discoverabl
 
   assert.match(metadata, /schemaVersion = 'quotapin-origin-file\/v1'/);
   assert.match(metadata, /QuotaPin is free and open source under the MIT license/);
-  assert.match(metadata, /Get-ReleaseArtifact 'OFFICIAL_SOURCE\.txt'/);
-  assert.match(metadata, /Get-ReleaseArtifact 'origin\.json'/);
+  assert.match(metadata, /\$Required = @\(\$PackageName,[^\r\n]*'OFFICIAL_SOURCE\.txt', 'origin\.json'\)/);
   assert.match(installerBuild, /build-release-metadata\.ps1'\) -Phase Stamp/);
   assert.match(commandInstall, /Join-Path \$InstallRoot 'origin\.json'/);
   assert.match(commandInstall, /Join-Path \$InstallRoot 'OFFICIAL_SOURCE\.txt'/);
   assert.ok(commandInstall.includes(`Official support: ${support}`));
-  assert.ok(RELEASE_BUNDLE_MEMBERS.includes("OFFICIAL_SOURCE.txt"));
-  assert.ok(RELEASE_BUNDLE_MEMBERS.includes("origin.json"));
+  assert.match(metadata, /\$PackageName/);
 });

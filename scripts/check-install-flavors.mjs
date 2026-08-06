@@ -65,9 +65,15 @@ has(bootstrap, "QuotaPin-bootstrap-", "remote bootstrap must use an isolated tem
 has(bootstrap, "Remove-Item -LiteralPath $ResolvedTempRoot -Recurse -Force", "remote bootstrap must remove its temporary source");
 matches(
   bootstrap,
-  /function Receive-QuotaPinBootstrapArchive[\s\S]*?foreach \(\$Attempt in 1\.\.6\)[\s\S]*?--speed-time 30[\s\S]*?--max-time 60[\s\S]*?--continue-at -/,
+  /function Receive-QuotaPinBootstrapFile[\s\S]*?foreach \(\$Attempt in 1\.\.6\)[\s\S]*?--speed-time 90[\s\S]*?--max-time \$TimeoutSeconds[\s\S]*?--continue-at -/,
   "remote bootstrap downloads must be bounded, resumable, and retry stalled transfers",
 );
+has(bootstrap, 'Write-Host "Downloading $DisplayName$SizeText', "remote install must show the selected download and curl progress");
+lacks(bootstrap, "--silent", "remote install must not hide a long package download");
+has(bootstrap, '$PackageName = "QuotaPin-$SelectedVersion.exe"', "remote install must bind the public executable name to the selected version");
+has(bootstrap, "if ($Assets.Count -ne 1)", "remote install must reject a cluttered or ambiguous release asset set");
+has(bootstrap, "$Process.WaitForExit()", "remote install must wait only for the installer process");
+lacks(bootstrap, "Start-Process -FilePath $PackagePath -ArgumentList $Arguments -Wait", "remote install must not wait forever on the persistent watcher descendant");
 lacks(sourceInstaller, "Get-CimInstance", "normal command installation must not depend on CIM process discovery");
 lacks(sourceUninstaller, "Get-CimInstance", "normal command uninstall must not depend on CIM process discovery");
 lacks(openSettings, "Get-CimInstance", "settings discovery must use owned runtime state rather than CIM");
@@ -124,7 +130,8 @@ has(sourceInstaller, "$EnableAutoAttach", "command install must provide an expli
 has(sourceInstaller, "Codex was not restarted by this installation", "command install must state that it preserves the active Codex task");
 has(sourceInstaller, "After a full quit, a new Codex launch may briefly reopen once", "command install must describe the later fresh-launch handoff without calling it an install restart");
 lacks(sourceInstaller, "A fresh uninstrumented launch", "command install output must not expose Electron implementation jargon");
-has(bootstrap, "$EnableAutoAttach", "remote bootstrap must forward the explicit automatic-attachment override");
+lacks(bootstrap, "$EnableAutoAttach", "remote bootstrap must expose only stable version selection");
+lacks(bootstrap, "$CreateLauncherShortcut", "remote bootstrap must not mix source-only launcher controls into package installation");
 has(sourceInstaller, "auto-attach watcher did not become ready", "command install must not report success before its watcher is alive");
 has(sourceInstaller, "Stop-Process -Id $ProcessId", "a failed watcher handshake must stop the exact child it launched");
 has(autoAttach, "StartTime.ToUniversalTime()", "watcher state must bind to the PowerShell process creation time");
@@ -163,27 +170,27 @@ lacks(sourceInstaller, "node.exe", "source install must not require or install N
 lacks(sourceInstaller, "Start-Process -FilePath $Tray", "source install must not start a tray companion");
 lacks(sourceInstaller, "CurrentVersion\\Run", "source install must not register the setup tray Run entry");
 lacks(sourceInstaller, "open-settings", "source install must not copy setup-only tray controls");
-has(commandUpdater, 'archive/$($ReleaseTrust.commit).zip', "command updates must fetch the exact source commit bound by the release manifest");
 has(commandUpdater, "--continue-at -", "command update downloads must resume after a slow-link interruption");
-has(commandUpdater, "QuotaPin-Windows-x64.zip", "command updates must use the compact Windows release bundle");
-has(commandUpdater, "Expand-QuotaPinReleaseBundle", "command updates must strictly extract the verified Windows release bundle");
-has(commandUpdater, "& $InstallerPath -DeferRuntimeResume", "command updates must invoke the verified installer in the lock-owning runspace and exclusively own hot resume");
-lacks(commandUpdater, "-ExecutionPolicy Bypass -File $InstallerPath", "command updates must not spawn a child that cannot inherit the update mutex");
-has(commandUpdater, "Downloaded QuotaPin version", "command updates must verify the requested release version before installation");
-has(commandUpdater, "$MinimumSafeVersion = '0.3.0-alpha.25'", "command updates must reject releases older than the maintained compatibility floor");
+has(commandUpdater, '$PackageName = "QuotaPin-$Version.exe"', "command updates must bind the public executable name to the requested version");
+has(commandUpdater, "$Assets.Count -ne 1", "command updates must reject a release with extra public assets");
+has(commandUpdater, "$AssetDigest -notmatch '^sha256:[0-9a-f]{64}$'", "command updates must require GitHub's exact asset digest");
+has(commandUpdater, "OriginalFilename", "command updates must verify the versioned Windows package identity");
+has(commandUpdater, "'/COMMANDINSTALL=1'", "command updates must preserve the command-install flavor when invoking the shared executable");
+has(commandUpdater, "'/NORESTART'", "command updates must never restart Codex or Windows");
+has(commandUpdater, "$Process.WaitForExit()", "command updates must wait only for the installer process");
+lacks(commandUpdater, "-Wait -PassThru", "command updates must not wait forever on the persistent watcher descendant");
 has(commandUpdater, "Local\\QuotaPin.Update.", "command updates must hold a per-user single-flight mutex");
 has(commandUpdater, "update-result.json", "command updates must publish an atomic terminal result");
 has(commandUpdater, "update.log", "command updates must leave a bounded diagnostic log");
-has(commandUpdater, "Get-QuotaPinResumableRuntime", "command updates must survive an Agent exit between runtime capture and replacement");
-has(commandUpdater, "Resume-QuotaPinTrustedRuntime", "command updates must use the shared verified hot-resume path");
 matches(runtimeTrust, /\$SameRuntime[\s\S]*?codexCreationTimeUtc[\s\S]*?generation/, "hot resume must revalidate the exact runtime after installation");
 has(runtimeTrust, "--attach-generation", "hot resume must preserve the verified attach generation");
 has(runtimeTrust, "Start-Process -FilePath $ResolvedAgentPath", "hot resume must restore an attached Agent without restarting Codex");
 has(runtimeTrust, "codexCreationTimeUtc", "runtime trust must bind a saved PID to the exact Codex creation time");
 has(runtimeTrust, 'app://-/index.html', "runtime trust must verify the Codex main renderer target");
 has(runtimeTrust, "$Lifecycle.generation", "runtime trust must bind lifecycle and runtime to one generation");
-has(updateRuntime, "QuotaPin-Windows-x64.zip", "the update picker must require the compact Windows release bundle");
-has(updateRuntime, "QuotaPin-Windows-x64.zip.sha256", "the update picker must require the public bundle checksum");
+has(updateRuntime, "`QuotaPin-${version}.exe`", "the update picker must require the exact versioned executable");
+has(updateRuntime, "assets.length !== 1", "the update picker must reject releases with extra assets");
+has(updateRuntime, "^sha256:[0-9a-f]{64}$", "the update picker must require GitHub's exact digest");
 has(sourceInstaller, "foreach ($Attempt in 1..6)", "release downloads must have a bounded retry count");
 has(sourceInstaller, "--continue-at -", "release downloads must resume partial assets");
 has(runtimeTrust, "DateTimeOffset]::Parse", "runtime identity timestamps must preserve their persisted UTC offset");
@@ -217,16 +224,16 @@ has(setup, "UninstallDisplayName=QuotaPin", "Setup must use a clean Apps-list di
 has(setup, 'DestName: "config.json"; Flags: onlyifdoesntexist uninsneveruninstall', "Setup updates must preserve configuration");
 has(setup, 'Type: files; Name: "{app}\\config.json"', "Setup uninstall must remove configuration");
 has(setup, 'RunOnceId: "StopQuotaPin"', "Setup uninstall cleanup must run once");
-has(release, ".\\scripts\\build-agent.ps1", "public release workflow must build the command Agent directly");
-lacks(release, ".\\scripts\\build-windows.ps1", "public release workflow must not build unpublished packaging");
+has(release, ".\\scripts\\build-windows.ps1", "public release workflow must build the shared versioned executable");
 lacks(release, "QuotaPin-Setup.exe", "public release workflow must not name or upload Setup");
-has(release, "scripts/public-release.mjs prepare", "public release workflow must stage the exact command asset policy");
+has(release, "scripts/public-release.mjs prepare", "public release workflow must stage the exact single-executable policy");
+has(release, "4d11e8050b6185e0d49bd9e8cc661a7a59f44959a621d31d11033124c4e8a7b0", "release workflow must pin the Inno Setup compiler digest");
+has(release, "Pyrsys B\\.V\\.", "release workflow must validate the Inno Setup publisher");
 has(installerBuilder, "ISCC.exe", "the unified build must compile the Inno Setup recipe");
-has(publicRelease, '"QuotaPin-Windows-x64.zip"', "public asset policy must publish one Windows bundle");
-has(publicRelease, '"QuotaPin-Windows-x64.zip.sha256"', "public asset policy must publish one bundle checksum");
-has(publicRelease, '"THIRD_PARTY_NOTICES.txt.sha256"', "the Windows bundle must retain verified third-party notices");
-has(publicRelease, '"QuotaPin-release.json.sha256"', "the Windows bundle must retain the release manifest checksum");
-has(publicRelease, '"SHA256SUMS"', "the Windows bundle must retain the internal checksum inventory");
+has(installerBuilder, "$env:QUOTAPIN_ISCC_PATH", "the unified build must accept the verified CI compiler path");
+has(publicRelease, 'return `QuotaPin-${normalized}.exe`', "public asset policy must publish one versioned executable");
+has(publicRelease, '"QuotaPin-release.json", "QuotaPin.spdx.json"', "candidate verification must retain internal manifest and SBOM evidence");
+lacks(publicRelease, '"QuotaPin-Windows-x64.zip"', "public asset policy must not revive the legacy ZIP");
 has(release, "GitHub Releases accept reviewed stable or beta versions only", "tag releases must reject unreviewed prerelease channels");
 has(release, "$isBeta = $version -cmatch '^\\d+\\.\\d+\\.\\d+-beta\\.\\d+$'", "tag releases must recognize only the reviewed beta.N channel");
 has(release, "$latestFlag = if ($isStable) { 'true' } else { 'false' }", "beta releases must never replace the stable Latest channel");
@@ -236,8 +243,9 @@ for (const readme of readmes) {
   lacks(readme, "QuotaPin-Setup.exe →", "README download link must not carry a decorative arrow");
   lacks(readme, "Windows_11-alpha", "README must not claim Windows 11 exclusivity");
   lacks(readme, "Node.js 22+", "README must not require users to install Node.js");
-  has(readme, '-ExecutionPolicy Bypass -File "$env:LOCALAPPDATA\\QuotaPin\\uninstall.ps1"', "README uninstall must work under restrictive execution policy");
-  lacks(readme, '& "$env:LOCALAPPDATA\\QuotaPin\\uninstall.ps1"', "README must not recommend a policy-blocked direct script invocation");
+  has(readme, '& "$env:LOCALAPPDATA\\QuotaPin\\unins000.exe"', "README uninstall must use the native executable uninstaller");
+  lacks(readme, '$env:LOCALAPPDATA\\QuotaPin\\uninstall.ps1', "README must not reference the legacy script uninstaller");
+  has(readme, `QuotaPin-${version}.exe`, "README must expose the current versioned executable");
 }
 has(agentBuilder, "--experimental-sea-config", "agent build must use the official single-executable path");
 has(agentBuilder, "NODE_SEA_BLOB", "agent build must inject a self-contained payload");

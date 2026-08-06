@@ -24,7 +24,8 @@ test("localized quick starts install the latest stable release without forcing a
     const source = read(relativePath);
     const quickStart = source.match(/```powershell\s*([\s\S]*?)```/)?.[1] ?? "";
     assert.match(source, /raw\.githubusercontent\.com\/WSL043\/QuotaPin-for-Codex\/main\/install\.ps1/);
-    assert.match(quickStart, /install\.ps1/);
+    assert.match(quickStart, /^irm\s+https:\/\/raw\.githubusercontent\.com\/WSL043\/QuotaPin-for-Codex\/main\/install\.ps1\s*\|\s*iex\s*$/im);
+    assert.doesNotMatch(quickStart, /scriptblock/i);
     assert.doesNotMatch(quickStart, /\s-Version\s/);
   }
 });

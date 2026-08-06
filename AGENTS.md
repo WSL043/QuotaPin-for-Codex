@@ -17,7 +17,7 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\install.ps1
 For the current public release, run the stable bootstrap:
 
 ```powershell
-& ([scriptblock]::Create((irm https://raw.githubusercontent.com/WSL043/QuotaPin-for-Codex/main/install.ps1)))
+irm https://raw.githubusercontent.com/WSL043/QuotaPin-for-Codex/main/install.ps1 | iex
 ```
 
 The moving bootstrap selects only GitHub's immutable latest stable release. Exact-version repair and historical rollback retain the same `-Version` boundary:

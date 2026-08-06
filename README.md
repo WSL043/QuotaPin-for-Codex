@@ -20,10 +20,10 @@
 Open Windows PowerShell and paste:
 
 ```powershell
-& ([scriptblock]::Create((irm https://raw.githubusercontent.com/WSL043/QuotaPin-for-Codex/main/install.ps1)))
+irm https://raw.githubusercontent.com/WSL043/QuotaPin-for-Codex/main/install.ps1 | iex
 ```
 
-This command installs the latest stable version. Launch Codex from its usual icon. If Codex is already running, the command leaves it alone and QuotaPin joins the next normal launch. Add `-Version '<version>'` only when you deliberately want a specific release or prerelease.
+This command installs the latest stable version. Launch Codex from its usual icon. If Codex is already running, the command leaves it alone and QuotaPin joins the next normal launch. Deliberate version selection and rollback use the explicit command in [configuration](docs/configuration.md#updates-and-recovery-versions).
 
 <p align="center">
   <img src="assets/screenshots/product-en.png" width="960" alt="QuotaPin showing one percent remaining in the closed Codex account row">

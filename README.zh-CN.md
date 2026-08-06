@@ -20,10 +20,10 @@
 打开 Windows PowerShell，粘贴：
 
 ```powershell
-& ([scriptblock]::Create((irm https://raw.githubusercontent.com/WSL043/QuotaPin-for-Codex/main/install.ps1)))
+irm https://raw.githubusercontent.com/WSL043/QuotaPin-for-Codex/main/install.ps1 | iex
 ```
 
-这条命令默认安装最新稳定版。然后照常打开 Codex；若 Codex 已经在运行，这条命令不会打断它，QuotaPin 会在下次正常启动时接入。只有明确要安装旧版或预发布版时，才额外使用 `-Version '<版本号>'`。
+这条命令默认安装最新稳定版。然后照常打开 Codex；若 Codex 已经在运行，这条命令不会打断它，QuotaPin 会在下次正常启动时接入。需要指定旧版、预发布版或执行回退时，请使用[配置文档](docs/configuration.md#updates-and-recovery-versions)里的完整命令。
 
 <p align="center">
   <img src="assets/screenshots/product-zh-CN.png" width="960" alt="账户菜单未打开时，QuotaPin 已在 Codex 账户栏显示百分之一剩余额度">

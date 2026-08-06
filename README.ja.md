@@ -20,10 +20,10 @@
 Windows PowerShell を開き、次の1行を貼り付けます：
 
 ```powershell
-& ([scriptblock]::Create((irm https://raw.githubusercontent.com/WSL043/QuotaPin-for-Codex/main/install.ps1)))
+irm https://raw.githubusercontent.com/WSL043/QuotaPin-for-Codex/main/install.ps1 | iex
 ```
 
-このコマンドは最新の安定版をインストールします。あとは、いつものアイコンから Codex を起動します。すでに動いている Codex は終了せず、QuotaPin は次回の通常起動を待ちます。過去版やプレリリースを明示的に使う場合だけ、`-Version '<version>'` を追加します。
+このコマンドは最新の安定版をインストールします。あとは、いつものアイコンから Codex を起動します。すでに動いている Codex は終了せず、QuotaPin は次回の通常起動を待ちます。過去版、プレリリース、ロールバックを指定する場合は、[設定ガイド](docs/configuration.md#updates-and-recovery-versions)の完全なコマンドを使用します。
 
 <p align="center">
   <img src="assets/screenshots/product-ja.png" width="960" alt="アカウントメニューを開かず、Codex のアカウント欄に残り1パーセントを表示する QuotaPin">

@@ -137,8 +137,14 @@ const installScript = String.raw`(() => {
     if (deliveryRuntime.trace.length > 24) deliveryRuntime.trace.splice(0, deliveryRuntime.trace.length - 24);
   };
   const acceptDeliveredState = (nextState) => {
-    const rawSequence = nextState?.delivery?.sequence;
+    const delivery = nextState?.delivery;
+    const rawSequence = delivery?.sequence;
     const sequence = Number(rawSequence);
+    if (delivery && delivery.rendererInstanceId !== instanceId) {
+      deliveryRuntime.rejected += 1;
+      deliverySummary(nextState, Number.isSafeInteger(sequence) ? sequence : null, false, "foreign-renderer-instance");
+      return false;
+    }
     if (!Number.isSafeInteger(sequence) || sequence <= 0) {
       if (deliveryRuntime.highestSequence > 0) {
         deliveryRuntime.rejected += 1;
@@ -148,11 +154,6 @@ const installScript = String.raw`(() => {
       deliveryRuntime.accepted += 1;
       deliverySummary(nextState, null, true, "fixture-state");
       return true;
-    }
-    if (nextState?.delivery?.rendererInstanceId !== instanceId) {
-      deliveryRuntime.rejected += 1;
-      deliverySummary(nextState, sequence, false, "foreign-renderer-instance");
-      return false;
     }
     if (sequence <= deliveryRuntime.highestSequence) {
       deliveryRuntime.rejected += 1;
@@ -170,7 +171,7 @@ const installScript = String.raw`(() => {
   let disposed = false;
   const ownedTimeouts = new Set();
   let profileUsageCancel = null;
-  const isActiveRenderer = () => !disposed && window.__quotaPinController?.instanceId === instanceId;
+  const isActiveRenderer = () => !disposed && window.__quotaPinController === controller;
   const ownedTimeout = (callback, delay) => {
     const timeout = setTimeout(() => {
       ownedTimeouts.delete(timeout);
@@ -309,6 +310,7 @@ const installScript = String.raw`(() => {
   }
 
   function handleAccountResize() {
+    if (!isActiveRenderer()) return;
     const row = observedAccountRow;
     if (!(row instanceof Element) || !row.isConnected) return;
     const width = row.getBoundingClientRect().width;
@@ -439,6 +441,7 @@ const installScript = String.raw`(() => {
   }
 
   function sendAction(action, options = {}) {
+    if (!isActiveRenderer()) return null;
     if (action?.type === "updateProfile" && action.id === responsiveFreeLayout?.profileId
       && (Object.hasOwn(action.patch ?? {}, "moduleAnchors") || Object.hasOwn(action.patch ?? {}, "layoutMode"))) {
       responsiveFreeLayout = null;
@@ -447,6 +450,7 @@ const installScript = String.raw`(() => {
     settingsState = queued.state;
     if (options.reopen || typeof options.onAck === "function") settingsCallbacks.set(queued.actionId, options);
     const timeout = setTimeout(() => {
+      if (!isActiveRenderer()) return;
       settingsTimeouts.delete(queued.actionId);
       acceptSettingsAck({
         actionId: queued.actionId,
@@ -467,6 +471,7 @@ const installScript = String.raw`(() => {
   }
 
   function sendUpdateAction(action) {
+    if (!isActiveRenderer()) return false;
     if (typeof globalThis.quotapinUpdateAction !== "function") return false;
     globalThis.quotapinUpdateAction(JSON.stringify(action));
     return true;
@@ -688,11 +693,13 @@ const installScript = String.raw`(() => {
     for (const candidate of Object.values(appModule)) addCandidate(candidate);
     let lastError = null;
     for (const client of candidates.slice(0, 4)) {
+      if (!isActiveRenderer()) throw new Error("QuotaPin renderer was retired");
       try {
         const payload = await client.safeGet("/wham/profiles/me");
         if (!isActiveRenderer()) throw new Error("QuotaPin renderer was retired");
         if (payload?.stats && typeof payload.stats === "object") return payload;
       } catch (error) {
+        if (!isActiveRenderer()) throw error;
         lastError = error;
       }
     }
@@ -755,7 +762,7 @@ const installScript = String.raw`(() => {
 
   function armLiveTimeTimer(view = state.view) {
     clearLiveTimeTimer();
-    if (document.hidden) return;
+    if (!isActiveRenderer() || document.hidden) return;
     const unit = liveRefreshUnit(view);
     if (!unit) return;
     const delay = nextBoundaryDelay(view?.runtimeWindows, Date.now(), unit, 12);
@@ -2796,6 +2803,7 @@ const installScript = String.raw`(() => {
   }
 
   function eventBadge(event) {
+    if (!isActiveRenderer()) return null;
     const target = event.target;
     if (!(target instanceof Element)) return null;
     const badge = document.getElementById(badgeId);
@@ -2843,6 +2851,7 @@ const installScript = String.raw`(() => {
   }
 
   function onBadgePointerMove(event) {
+    if (!isActiveRenderer()) return;
     if (!activeGesture || event.pointerId !== activeGesture.pointerId) return;
     activeGesture = reduceGestureState(activeGesture, { type: "move", x: event.clientX, y: event.clientY }, { holdMs: 480, slop: 10 });
     if (!activeGesture.cancelled) return;
@@ -2851,6 +2860,7 @@ const installScript = String.raw`(() => {
   }
 
   function onBadgePointerUp(event) {
+    if (!isActiveRenderer()) return;
     if (!activeGesture || event.pointerId !== activeGesture.pointerId) return;
     event.preventDefault();
     event.stopImmediatePropagation();
@@ -2904,6 +2914,7 @@ const installScript = String.raw`(() => {
   }
 
   function onBadgePointerCancel(event) {
+    if (!isActiveRenderer()) return;
     if (!activeGesture || event.pointerId !== activeGesture.pointerId) return;
     activeGesture = reduceGestureState(activeGesture, { type: "cancel" }, { holdMs: 480, slop: 10 });
     clearTimeout(holdTimer);
@@ -3859,6 +3870,7 @@ const installScript = String.raw`(() => {
     schedule();
   }, effectWatchdogMs);
   const onVisibilityChange = () => {
+    if (!isActiveRenderer()) return;
     clearLiveTimeTimer();
     if (!document.hidden) schedule();
   };
@@ -3906,6 +3918,7 @@ const installScript = String.raw`(() => {
     }
   }
   const onKeyDown = (event) => {
+    if (!isActiveRenderer()) return;
     if (event.key === "Escape" && panel) {
       if (!dismissPanelLayer()) closePanel();
       event.preventDefault();
@@ -3934,9 +3947,11 @@ const installScript = String.raw`(() => {
     }
   };
   const onDocumentClick = (event) => {
+    if (!isActiveRenderer()) return;
     if (panel && !panel.contains(event.target) && !document.getElementById(badgeId)?.contains(event.target)) closePanel();
   };
   const onWindowResize = () => {
+    if (!isActiveRenderer()) return;
     syncPanelGeometry();
     schedule();
   };
@@ -3981,6 +3996,20 @@ const installScript = String.raw`(() => {
     },
     inspectProfileUsage() {
       return { ...profileUsage, parts: profileUsageCopy() };
+    },
+    inspectLifecycleRuntime() {
+      return {
+        active: isActiveRenderer(),
+        disposed,
+        ownedTimeouts: ownedTimeouts.size,
+        settingsTimeouts: settingsTimeouts.size,
+        framePending: Boolean(frame || immediateRenderQueued),
+        liveTimeTimer: Boolean(liveTimeTimer),
+        profileUsageTimer: Boolean(profileUsageTimer),
+        profileUsageRequest: Boolean(profileUsageRequest),
+        profileUsageCancel: Boolean(profileUsageCancel),
+        holdTimer: Boolean(holdTimer),
+      };
     },
     inspectLayoutRuntime() {
       return {
@@ -4138,6 +4167,8 @@ const installScript = String.raw`(() => {
       settingsTimeouts.clear();
       settingsCallbacks.clear();
       safely(() => clearTimeout(holdTimer));
+      holdTimer = 0;
+      activeGesture = null;
       safely(() => clearEasterEgg(document.getElementById(badgeId)));
       safely(() => restoreIdentity(findAccountRow() ?? document.body));
       safely(() => document.getElementById("quotapin-animation-style")?.remove());

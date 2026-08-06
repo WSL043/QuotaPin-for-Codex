@@ -35,6 +35,8 @@ VersionInfoCopyright=Copyright (c) 2026 WSL043
 VersionInfoDescription=QuotaPin | https://github.com/WSL043/QuotaPin-for-Codex
 VersionInfoOriginalFileName=QuotaPin-{#MyAppVersion}.exe
 VersionInfoProductName=QuotaPin
+VersionInfoProductVersion={#MyAppVersion}
+VersionInfoVersion={#MyAppVersion}.0
 
 [Languages]
 Name: "en"; MessagesFile: "compiler:Default.isl"

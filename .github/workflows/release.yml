@@ -73,31 +73,7 @@ jobs:
 
       - name: Install the pinned Inno Setup compiler
         shell: powershell
-        run: |
-          $version = '6.7.1'
-          $expectedSha256 = '4d11e8050b6185e0d49bd9e8cc661a7a59f44959a621d31d11033124c4e8a7b0'
-          $download = Join-Path $env:RUNNER_TEMP "innosetup-$version.exe"
-          $installRoot = Join-Path $env:RUNNER_TEMP "Inno Setup $version"
-          & curl.exe --fail --location --show-error --silent `
-            --output $download `
-            "https://github.com/jrsoftware/issrc/releases/download/is-6_7_1/innosetup-$version.exe"
-          if ($LASTEXITCODE -ne 0) { throw 'Could not download the pinned Inno Setup compiler.' }
-          $actualSha256 = (Get-FileHash -Algorithm SHA256 -LiteralPath $download).Hash.ToLowerInvariant()
-          if ($actualSha256 -cne $expectedSha256) { throw "Inno Setup digest mismatch: $actualSha256" }
-          $signature = Get-AuthenticodeSignature -LiteralPath $download
-          if ($signature.Status -ne 'Valid' -or [string]$signature.SignerCertificate.Subject -notmatch 'Pyrsys B\.V\.') {
-            throw "Inno Setup signature is not trusted: $($signature.Status) $($signature.SignerCertificate.Subject)"
-          }
-          $process = Start-Process -FilePath $download -ArgumentList @('/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART','/CURRENTUSER',("/DIR=`"{0}`"" -f $installRoot)) -PassThru
-          try {
-            $process.WaitForExit()
-            if ($process.ExitCode -ne 0) { throw "Inno Setup install failed with code $($process.ExitCode)." }
-          }
-          finally { $process.Dispose() }
-          $iscc = Join-Path $installRoot 'ISCC.exe'
-          if (-not (Test-Path -LiteralPath $iscc -PathType Leaf)) { throw "ISCC.exe was not installed: $iscc" }
-          "QUOTAPIN_ISCC_PATH=$iscc" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-          "QUOTAPIN_INNO_VERSION=$version" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+        run: .\scripts\install-inno-ci.ps1
 
       - name: Run source and product gates
         shell: powershell

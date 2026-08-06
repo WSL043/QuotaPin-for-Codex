@@ -186,10 +186,38 @@ async function waitFor(predicate, timeout = 30_000) {
 }
 
 function bounded(promise, timeout = 1_500) {
-  return Promise.race([
-    promise,
-    new Promise((resolve) => setTimeout(resolve, timeout)),
-  ]);
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => resolve(undefined), timeout);
+    Promise.resolve(promise).then(
+      (value) => {
+        clearTimeout(timer);
+        resolve(value);
+      },
+      (error) => {
+        clearTimeout(timer);
+        reject(error);
+      },
+    );
+  });
+}
+
+async function terminateProcessTree(child) {
+  if (!child || child.exitCode !== null) return;
+  if (process.platform === "win32" && child.pid) {
+    await bounded(new Promise((resolve) => {
+      const killer = spawn("taskkill", ["/PID", String(child.pid), "/T", "/F"], {
+        stdio: "ignore",
+        windowsHide: true,
+      });
+      killer.once("error", resolve);
+      killer.once("exit", resolve);
+    }), 5_000);
+  } else {
+    try { child.kill("SIGKILL"); } catch {}
+  }
+  if (child.exitCode === null) {
+    await bounded(new Promise((resolve) => child.once("exit", resolve)), 2_000);
+  }
 }
 
 async function navigate(locale = "en") {
@@ -255,13 +283,11 @@ after(async () => {
     );
   }
   if (browser && browser.exitCode === null) {
-    browser.kill();
-    await bounded(
-      new Promise((resolve) => browser.once("exit", resolve)),
-    );
+    await terminateProcessTree(browser);
   }
+  browser?.unref?.();
   if (userDataDir && path.resolve(userDataDir).startsWith(path.resolve(os.tmpdir()))) {
-    try { fs.rmSync(userDataDir, { recursive: true, force: true }); } catch {}
+    try { await bounded(fs.promises.rm(userDataDir, { recursive: true, force: true, maxRetries: 2, retryDelay: 50 }), 5_000); } catch {}
   }
 });
 
@@ -1046,68 +1072,118 @@ test("high-frequency stale client states cannot flash disabled modules", { skip:
   assert.ok(result.delivery.trace.every((entry) => entry.accepted || entry.cause === "stale-sequence"));
 });
 
-test("a new Agent instance replaces the renderer even when the semantic version is unchanged", { skip: !canRun }, async () => {
+test("a new Agent owner rejects a retired Agent's higher-sequence global delivery", { skip: !canRun }, async () => {
   await navigate("en");
-  await client.evaluate("window.__staleQuotaPinControllerForTest = window.__quotaPinController; true");
-  const replacementSource = renderer.replaceAll("__QUOTAPIN_RENDERER_INSTANCE_ID__", "fixture-agent-replacement");
-  await client.call("Runtime.evaluate", { expression: replacementSource, awaitPromise: true });
-  await client.evaluate("window.__fixtureSetParts({}); true");
-  await waitFor(() => client.evaluate("window.__quotaPinController?.instanceId === 'fixture-agent-replacement' && document.querySelectorAll('#quotapin-inline-badge').length === 1"));
-  const replaced = await client.evaluate(`(() => {
-    window.__quotaPinController.__sameInstanceMarker = 'preserve-me';
-    return {
-      instanceId: window.__quotaPinController.instanceId,
-      badges: document.querySelectorAll('#quotapin-inline-badge').length,
-    };
-  })()`);
-  assert.deepEqual(replaced, { instanceId: "fixture-agent-replacement", badges: 1 });
-
-  const staleResult = await client.evaluate(`(async () => {
-    const baselineValue = document.querySelector('[data-part="value"]').textContent;
-    const foreignAgentAccepted = window.__quotaPinController.update({
-      status: 'ready',
-      view: {
-        text: '63%', parts: { value: '63%', todayTokens: 'Today 0' },
-        displayMode: 'modules', showValue: true, showDot: true, showBar: true,
-        showTodayTokens: true, showLifetimeTokens: true, showLabel: true,
-        showCountdown: true, showRelative: true, showSeconds: true, showDate: true, showReset: true,
-      },
-      preferences: window.__quotaPinController.preferences,
+  const retiredAgent = await client.evaluate(`(() => {
+    const controller = window.__quotaPinController;
+    const preferences = JSON.parse(JSON.stringify(controller.preferences));
+    const view = ${JSON.stringify(fixtureView)};
+    const accepted = controller.update({
+      status: 'ready', view, preferences, update: {},
       delivery: {
-        rendererInstanceId: '__QUOTAPIN_RENDERER_INSTANCE_ID__',
-        sequence: 9007199254740000,
-        reason: 'retired-agent-runtime',
+        rendererInstanceId: controller.instanceId,
+        sequence: 50_000,
+        reason: 'agent-a-current',
         createdAt: Date.now(),
       },
     });
-    const retiredControllerAccepted = window.__staleQuotaPinControllerForTest.update({
-      status: 'ready',
-      view: { text: '63%', parts: { value: '63%' }, displayMode: 'modules', showValue: true },
-      preferences: window.__quotaPinController.preferences,
+    window.__retiredQuotaPinControllerForTest = controller;
+    window.__replacementFocusEvents = 0;
+    document.getElementById('account').addEventListener('focus', () => { window.__replacementFocusEvents += 1; });
+    return { instanceId: controller.instanceId, accepted };
+  })()`);
+  assert.equal(retiredAgent.accepted, true);
+  await openPanel();
+  const replacementSource = renderer.replaceAll("__QUOTAPIN_RENDERER_INSTANCE_ID__", "fixture-agent-replacement");
+  await client.call("Runtime.evaluate", { expression: replacementSource, awaitPromise: true });
+  const staleResult = await client.evaluate(`(async () => {
+    const controller = window.__quotaPinController;
+    const preferences = JSON.parse(JSON.stringify(window.__retiredQuotaPinControllerForTest.preferences));
+    const currentView = ${JSON.stringify(fixtureView)};
+    const staleView = {
+      ...currentView,
+      text: '63%',
+      parts: { ...currentView.parts, value: '63%', todayTokens: 'Today 0' },
+      showValue: true, showDot: true, showBar: true, showTodayTokens: true,
+      showLifetimeTokens: true, showLabel: true, showCountdown: true,
+      showRelative: true, showSeconds: true, showDate: true, showReset: true,
+    };
+    const currentAccepted = controller.update({
+      status: 'ready', view: currentView, preferences, update: {},
+      delivery: {
+        rendererInstanceId: controller.instanceId,
+        sequence: 1,
+        reason: 'agent-b-current',
+        createdAt: Date.now(),
+      },
     });
+    await Promise.resolve();
+    const baselineValue = document.querySelector('[data-part="value"]').textContent;
+    const retiredDelivery = {
+      status: 'ready', view: staleView, preferences, update: {},
+      delivery: {
+        rendererInstanceId: ${JSON.stringify(retiredAgent.instanceId)},
+        sequence: 50_001,
+        reason: 'agent-a-retired',
+        createdAt: Date.now(),
+      },
+    };
+    // This is the production CdpSession.update ownership gate: Agent A reads
+    // the global controller after B has replaced it, but may only call its own.
+    const productionPathAccepted = controller.instanceId === retiredDelivery.delivery.rendererInstanceId
+      ? controller.update(retiredDelivery) === true
+      : false;
+    // The renderer repeats the owner check so a delayed or bypassed delivery
+    // still cannot use Agent A's higher sequence to seize B's state.
+    const rendererPathAccepted = window.__quotaPinController.update(retiredDelivery);
+    const retiredControllerAccepted = window.__retiredQuotaPinControllerForTest.update(retiredDelivery);
     const badge = document.getElementById('quotapin-inline-badge');
-    badge.querySelector('[data-part="value"]').textContent = '63%';
-    badge.querySelector('[data-part="todayTokens"]').style.display = 'inline-flex';
-    badge.querySelector('[data-part="bar"]').style.display = 'block';
     await Promise.resolve();
     await Promise.resolve();
     await new Promise(requestAnimationFrame);
+    controller.__sameInstanceMarker = 'preserve-me';
     return {
-      foreignAgentAccepted,
+      currentAccepted,
+      productionPathAccepted,
+      rendererPathAccepted,
       retiredControllerAccepted,
       baselineValue,
       value: badge.querySelector('[data-part="value"]').textContent,
       todayDisplay: getComputedStyle(badge.querySelector('[data-part="todayTokens"]')).display,
       barDisplay: getComputedStyle(badge.querySelector('[data-part="bar"]')).display,
       repairs: window.__quotaPinController.inspectLayoutRuntime().integrityRepairs,
+      delivery: window.__quotaPinController.inspectDeliveryRuntime(),
+      retiredLifecycle: window.__retiredQuotaPinControllerForTest.inspectLifecycleRuntime(),
+      focusEvents: window.__replacementFocusEvents,
+      instanceId: controller.instanceId,
+      badges: document.querySelectorAll('#quotapin-inline-badge').length,
     };
   })()`);
-  assert.equal(staleResult.foreignAgentAccepted, false);
+  assert.equal(staleResult.currentAccepted, true);
+  assert.equal(staleResult.productionPathAccepted, false);
+  assert.equal(staleResult.rendererPathAccepted, false);
   assert.equal(staleResult.retiredControllerAccepted, false);
   assert.equal(staleResult.value, staleResult.baselineValue);
   assert.equal(staleResult.todayDisplay, "none");
   assert.equal(staleResult.barDisplay, "none");
-  assert.ok(staleResult.repairs >= 1, JSON.stringify(staleResult));
+  assert.equal(staleResult.repairs, 0, JSON.stringify(staleResult));
+  assert.equal(staleResult.delivery.highestSequence, 1);
+  assert.ok(staleResult.delivery.trace.some((entry) => entry.cause === "foreign-renderer-instance"), JSON.stringify(staleResult));
+  assert.deepEqual(staleResult.retiredLifecycle, {
+    active: false,
+    disposed: true,
+    ownedTimeouts: 0,
+    settingsTimeouts: 0,
+    framePending: false,
+    liveTimeTimer: false,
+    profileUsageTimer: false,
+    profileUsageRequest: false,
+    profileUsageCancel: false,
+    holdTimer: false,
+  });
+  assert.equal(staleResult.focusEvents, 0, "retired cleanup re-focused the Codex account row");
+  assert.equal(staleResult.instanceId, "fixture-agent-replacement");
+  assert.equal(staleResult.badges, 1);
 
   await client.call("Runtime.evaluate", { expression: replacementSource, awaitPromise: true });
   const repeated = await client.evaluate(`({
@@ -1115,6 +1191,34 @@ test("a new Agent instance replaces the renderer even when the semantic version 
     badges: document.querySelectorAll('#quotapin-inline-badge').length,
   })`);
   assert.deepEqual(repeated, { marker: "preserve-me", badges: 1 });
+});
+
+test("the active renderer repairs external quota-module DOM drift", { skip: !canRun }, async () => {
+  await navigate("en");
+  const result = await client.evaluate(`(async () => {
+    const controller = window.__quotaPinController;
+    const badge = document.getElementById('quotapin-inline-badge');
+    const baselineValue = badge.querySelector('[data-part="value"]').textContent;
+    const before = controller.inspectLayoutRuntime().integrityRepairs;
+    badge.querySelector('[data-part="value"]').textContent = 'external-write';
+    badge.querySelector('[data-part="todayTokens"]').style.display = 'inline-flex';
+    badge.querySelector('[data-part="bar"]').style.display = 'block';
+    await Promise.resolve();
+    await Promise.resolve();
+    await new Promise(requestAnimationFrame);
+    return {
+      baselineValue,
+      value: badge.querySelector('[data-part="value"]').textContent,
+      todayDisplay: getComputedStyle(badge.querySelector('[data-part="todayTokens"]')).display,
+      barDisplay: getComputedStyle(badge.querySelector('[data-part="bar"]')).display,
+      before,
+      after: controller.inspectLayoutRuntime().integrityRepairs,
+    };
+  })()`);
+  assert.equal(result.value, result.baselineValue);
+  assert.equal(result.todayDisplay, "none");
+  assert.equal(result.barDisplay, "none");
+  assert.ok(result.after > result.before, JSON.stringify(result));
 });
 
 test("smart layout repairs legacy fractional anchors and stays docked through resize and quota refresh", { skip: !canRun }, async () => {

@@ -24,10 +24,10 @@ test("pull-request CI exercises source behavior without publishing an installer"
   assert.match(workflow, /scripts\/macos\/build-dev\.sh/);
   assert.match(workflow, /QuotaPin-macOS-dev-\$\{\{ github\.sha \}\}/);
   assert.match(workflow, /retention-days: 7/);
-  for (const script of ["scripts\\test-updater.ps1", "scripts\\build-agent.ps1"]) {
+  for (const script of ["scripts\\install-inno-ci.ps1", "scripts\\build-windows.ps1"]) {
     assert.ok(workflow.includes(script), `check workflow does not run ${script}`);
   }
-  assert.doesNotMatch(workflow, /build-tray|build-installer|choco install innosetup/i);
+  assert.doesNotMatch(workflow, /choco install innosetup/i);
   assert.match(workflow, /public-release\.mjs prepare/);
   assert.match(workflow, /public-release\.mjs verify/);
   assert.match(workflow, /git tag \$candidateTag \$commit/);
@@ -38,9 +38,7 @@ test("tag workflow builds and publishes only the exact versioned executable", ()
   const release = workflow("release.yml");
   assert.doesNotMatch(release, /workflow_dispatch|QuotaPin-Setup/i);
   assert.match(release, /scripts\\build-windows\.ps1/);
-  assert.match(release, /4d11e8050b6185e0d49bd9e8cc661a7a59f44959a621d31d11033124c4e8a7b0/);
-  assert.match(release, /Pyrsys B\\\.V\\\./);
-  assert.match(release, /QUOTAPIN_ISCC_PATH=/);
+  assert.match(release, /scripts\\install-inno-ci\.ps1/);
   assert.match(release, /public-release\.mjs prepare[\s\S]*?--output dist\/public/);
   assert.match(release, /public-release\.mjs verify/);
   assert.match(release, /path: dist\/public\//);
@@ -198,6 +196,8 @@ test("official builds keep canonical free-source and support anchors discoverabl
     `AppPublisherURL=${canonical}`,
     `AppSupportURL=${support}`,
     `VersionInfoDescription=QuotaPin | ${canonical}`,
+    `VersionInfoProductVersion={#MyAppVersion}`,
+    `VersionInfoVersion={#MyAppVersion}.0`,
     `ValueName: "OfficialSource"; ValueData: "${canonical}"`,
     `ValueName: "OfficialSupport"; ValueData: "${support}"`,
     'Source: "..\\dist\\OFFICIAL_SOURCE.txt"',

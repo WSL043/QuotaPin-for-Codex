@@ -140,6 +140,7 @@ test("renderer delivery is monotonic and same-version replacement is instance-aw
   assert.match(renderer, /const instanceId = "__QUOTAPIN_RENDERER_INSTANCE_ID__"/);
   assert.match(renderer, /previous\?\.version === version && previous\?\.instanceId === instanceId/);
   assert.match(renderer, /const acceptDeliveredState =/);
+  assert.match(renderer, /delivery && delivery\.rendererInstanceId !== instanceId/);
   assert.match(renderer, /sequence <= deliveryRuntime\.highestSequence/);
   assert.match(renderer, /if \(!acceptDeliveredState\(nextState\)\) return false/);
   assert.match(renderer, /inspectDeliveryRuntime\(\)/);

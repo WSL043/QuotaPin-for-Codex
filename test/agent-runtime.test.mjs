@@ -4,7 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { AppServerRuntime, reduceAppServerMessage } from "../src/agent/app-server-runtime.mjs";
-import { CdpTargetRuntime, selectMainTargets } from "../src/agent/cdp-runtime.mjs";
+import { CdpSession, CdpTargetRuntime, selectMainTargets } from "../src/agent/cdp-runtime.mjs";
 import { ConfigRuntime } from "../src/agent/config-runtime.mjs";
 import { createLifecycleStateWriter } from "../src/agent/lifecycle-state.mjs";
 
@@ -37,7 +37,7 @@ test("CDP target runtime installs one payload, updates it, and closes stale sess
         install: async (source) => events.push(["install", id, source]),
         update: async (state) => events.push(["update", id, state.status, state.delivery]),
         close: () => events.push(["close", id]),
-        cleanup: async () => {},
+        cleanup: async (rendererInstanceId) => events.push(["cleanup", id, rendererInstanceId]),
       };
       sessions.set(id, session);
       return session;
@@ -65,10 +65,63 @@ test("CDP target runtime installs one payload, updates it, and closes stale sess
     ["newer", 3, "local-usage"],
   ]);
 
+  await runtime.cleanupAll();
+  assert.ok(events.some((event) => Array.isArray(event)
+    && event[0] === "cleanup"
+    && event[2] === "agent-runtime-fixture"));
+
   targets = [];
   await runtime.sync();
   assert.ok(events.some((event) => Array.isArray(event) && event[0] === "close"));
   assert.equal(runtime.firstSession(), null);
+});
+
+test("CDP target runtime refuses ownerless renderer delivery", () => {
+  assert.throws(() => new CdpTargetRuntime({
+    port: 9222,
+    installSource: "single-payload",
+    getClientState: () => ({ status: "ready" }),
+  }), /Renderer instance ID is required/);
+});
+
+test("CDP session update and cleanup are owner-scoped", async () => {
+  let socket;
+  class RuntimeSocket extends EventTarget {
+    constructor() {
+      super();
+      socket = this;
+      this.messages = [];
+      queueMicrotask(() => this.dispatchEvent(new Event("open")));
+    }
+
+    send(payload) {
+      const message = JSON.parse(payload);
+      this.messages.push(message);
+      queueMicrotask(() => this.dispatchEvent(new MessageEvent("message", {
+        data: JSON.stringify({ id: message.id, result: { result: { value: true } } }),
+      })));
+    }
+
+    close() {
+      this.dispatchEvent(new Event("close"));
+    }
+  }
+
+  const session = new CdpSession("ws://fixture", "main", null, { WebSocketImpl: RuntimeSocket });
+  assert.equal(await session.update({ status: "ready" }), false);
+  assert.equal(await session.cleanup(), false);
+  assert.equal(socket.messages.length, 0, "an ownerless operation reached CDP");
+
+  const accepted = await session.update({
+    status: "ready",
+    delivery: { rendererInstanceId: "agent-a", sequence: 1 },
+  });
+  assert.equal(accepted, true);
+  assert.match(socket.messages.at(-1).params.expression, /controller\.instanceId !== "agent-a"/);
+
+  assert.equal(await session.cleanup("agent-a"), true);
+  assert.match(socket.messages.at(-1).params.expression, /controller\.instanceId !== "agent-a"/);
+  session.close();
 });
 
 function createConfigRuntime(options = {}) {

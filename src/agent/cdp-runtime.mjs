@@ -80,8 +80,9 @@ export class CdpSession {
   async update(state) {
     const serialized = JSON.stringify(state).replaceAll("<", "\\u003c");
     const rendererInstanceId = typeof state?.delivery?.rendererInstanceId === "string"
-      ? state.delivery.rendererInstanceId
+      ? state.delivery.rendererInstanceId.trim()
       : "";
+    if (!rendererInstanceId) return false;
     const result = await this.send("Runtime.evaluate", {
       returnByValue: true,
       expression: `(() => {
@@ -122,16 +123,19 @@ export class CdpSession {
     return result.result.value;
   }
 
-  async cleanup(rendererInstanceId = "") {
-    const expected = typeof rendererInstanceId === "string" ? rendererInstanceId : "";
-    await this.send("Runtime.evaluate", {
+  async cleanup(rendererInstanceId) {
+    const expected = typeof rendererInstanceId === "string" ? rendererInstanceId.trim() : "";
+    if (!expected) return false;
+    const result = await this.send("Runtime.evaluate", {
+      returnByValue: true,
       expression: `(() => {
         const controller = window.__quotaPinController;
-        if (!controller || (${JSON.stringify(expected)} && controller.instanceId !== ${JSON.stringify(expected)})) return false;
+        if (!controller || controller.instanceId !== ${JSON.stringify(expected)}) return false;
         controller.cleanup?.();
         return true;
       })()`,
     });
+    return result.result?.value === true;
   }
 
   close() {
@@ -172,6 +176,7 @@ export class CdpTargetRuntime {
     this.rendererInstanceId = typeof options.rendererInstanceId === "string"
       ? options.rendererInstanceId.trim()
       : "";
+    if (!this.rendererInstanceId) throw new Error("Renderer instance ID is required");
   }
 
   async sync() {
@@ -209,7 +214,7 @@ export class CdpTargetRuntime {
     return {
       ...(state && typeof state === "object" ? state : {}),
       delivery: {
-        rendererInstanceId: this.rendererInstanceId || null,
+        rendererInstanceId: this.rendererInstanceId,
         sequence: this.deliverySequence,
         reason: String(reason || "runtime").slice(0, 32),
         createdAt: Date.now(),

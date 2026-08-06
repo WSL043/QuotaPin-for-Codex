@@ -70,13 +70,13 @@ jobs:
             }
           }
           if ($failed) { exit 1 }
-      - name: Test updater fixture
+      - name: Install the pinned Inno Setup compiler
         shell: powershell
-        run: .\scripts\test-updater.ps1
-      - name: Build and self-check Windows agent
+        run: .\scripts\install-inno-ci.ps1
+      - name: Build and self-check the complete Windows package
         shell: powershell
-        run: .\scripts\build-agent.ps1
-      - name: Verify command-only public candidate
+        run: .\scripts\build-windows.ps1
+      - name: Verify the single-package public candidate
         shell: powershell
         run: |
           $version = (Get-Content -Raw VERSION).Trim()

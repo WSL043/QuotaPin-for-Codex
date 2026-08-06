@@ -25,7 +25,7 @@ irm https://raw.githubusercontent.com/WSL043/QuotaPin-for-Codex/main/install.ps1
 
 このコマンドは最新の安定版をインストールします。あとは、いつものアイコンから Codex を起動します。すでに動いている Codex は終了せず、QuotaPin は次回の通常起動を待ちます。過去版、プレリリース、ロールバックを指定する場合は、[設定ガイド](docs/configuration.md#updates-and-recovery-versions)の完全なコマンドを使用します。
 
-通常のインストーラーなら、[`QuotaPin-1.0.2.exe` をダウンロード](https://github.com/WSL043/QuotaPin-for-Codex/releases/latest/download/QuotaPin-1.0.2.exe)してダブルクリックします。
+通常のインストーラーなら、[最新の安定版](https://github.com/WSL043/QuotaPin-for-Codex/releases/latest)を開き、そこにある唯一の `.exe` をダウンロードしてダブルクリックします。
 
 <p align="center">
   <img src="assets/screenshots/product-ja.png" width="960" alt="アカウントメニューを開かず、Codex のアカウント欄に残り1パーセントを表示する QuotaPin">

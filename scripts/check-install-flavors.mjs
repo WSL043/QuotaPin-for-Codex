@@ -247,7 +247,8 @@ for (const readme of readmes) {
   lacks(readme, "Node.js 22+", "README must not require users to install Node.js");
   has(readme, '& "$env:LOCALAPPDATA\\QuotaPin\\unins000.exe"', "README uninstall must use the native executable uninstaller");
   lacks(readme, '$env:LOCALAPPDATA\\QuotaPin\\uninstall.ps1', "README must not reference the legacy script uninstaller");
-  has(readme, `QuotaPin-${version}.exe`, "README must expose the current versioned executable");
+  has(readme, "https://github.com/WSL043/QuotaPin-for-Codex/releases/latest", "README must expose the moving stable installer page");
+  lacks(readme, "/releases/latest/download/QuotaPin-", "README must not publish a version-specific URL before its Release exists");
 }
 has(agentBuilder, "--experimental-sea-config", "agent build must use the official single-executable path");
 has(agentBuilder, "NODE_SEA_BLOB", "agent build must inject a self-contained payload");

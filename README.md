@@ -25,7 +25,7 @@ irm https://raw.githubusercontent.com/WSL043/QuotaPin-for-Codex/main/install.ps1
 
 This command installs the latest stable version. Launch Codex from its usual icon. If Codex is already running, the command leaves it alone and QuotaPin joins the next normal launch. Deliberate version selection and rollback use the explicit command in [configuration](docs/configuration.md#updates-and-recovery-versions).
 
-Prefer a normal installer? [Download `QuotaPin-1.0.2.exe`](https://github.com/WSL043/QuotaPin-for-Codex/releases/latest/download/QuotaPin-1.0.2.exe) and double-click it.
+Prefer a normal installer? [Open the latest stable release](https://github.com/WSL043/QuotaPin-for-Codex/releases/latest), download its single `.exe`, and double-click it.
 
 <p align="center">
   <img src="assets/screenshots/product-en.png" width="960" alt="QuotaPin showing one percent remaining in the closed Codex account row">

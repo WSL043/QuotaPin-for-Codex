@@ -75,6 +75,8 @@ test("public entrypoints default to stable while the remote bootstrap fails clos
     const source = fs.readFileSync(new URL(`../${relative}`, import.meta.url), "utf8");
     const quickStart = source.match(/```powershell\s*([\s\S]*?)```/)?.[1] ?? "";
     assert.ok(source.includes(expected), `${relative} lost the stable bootstrap URL`);
+    assert.ok(source.includes("https://github.com/WSL043/QuotaPin-for-Codex/releases/latest"), `${relative} lost the stable installer page`);
+    assert.doesNotMatch(source, /releases\/latest\/download\/QuotaPin-[^\s)]+\.exe/);
     assert.match(quickStart, /install\.ps1/);
     assert.doesNotMatch(quickStart, /\s-Version\s/);
   }

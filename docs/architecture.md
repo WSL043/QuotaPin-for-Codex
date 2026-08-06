@@ -1,0 +1,172 @@
+# Architecture
+
+QuotaPin is divided by change boundary. The quota model, saved configuration, renderer behavior, Codex DOM adapter, and Windows lifecycle can fail independently without borrowing each other's assumptions.
+
+## Core contracts
+
+### `QuotaSnapshot`
+
+```js
+{
+  source: "codex-app-server",
+  status: "ready",
+  receivedAt: 1785715200000,
+  buckets: [{
+    id: "codex",
+    label: "Codex",
+    shortLabel: "Codex",
+    windows: [/* normalized windows */]
+  }],
+  windows: [{
+    id: "codex:duration:9000",
+    sourceId: "codex",
+    sourceLabel: "Codex",
+    label: "cycle",
+    windowDurationMins: 9000,
+    remainingPercent: 42,
+    resetsAt: 1786089600
+  }]
+}
+```
+
+The model contains only observed sources and windows. `rateLimitsByLimitId` becomes keyed `buckets`; the flattened `windows` list keeps formatting and layout source-agnostic. The legacy single `rateLimits` shape remains a fallback. `primary` and `secondary` are transport details, not product assumptions, and sparse updates merge into their matching bucket without deleting the others.
+
+### `DisplayPreferences`
+
+Configuration selects the active saved view, returned-window selection, module or template display, hover content, layout, avatar mask, colors, thresholds, attention behavior, and UI locale.
+
+Layout stores one permutation of:
+
+```js
+["avatar", "name", "value", "label", "dot", "countdown", "relative", "seconds", "date", "reset", "todayTokens", "lifetimeTokens"]
+```
+
+Visibility is separate from order and normalized horizontal anchors, so hiding a module does not erase its place. `avatarShape: "native"` removes QuotaPin's mask and lets Codex own the shape again; the visual editor also exposes rounded and square masks.
+
+### `QuotaView`
+
+```js
+{
+  text: "42%",
+  parts: {
+    value: "42%",
+    label: "cycle",
+    countdown: "4d 8h",
+    relative: "4 days 8 hours",
+    seconds: "104:00:00",
+    date: "Aug 9",
+    reset: "Sun 02:15 AM",
+    todayTokens: "—",
+    lifetimeTokens: "—"
+  },
+  runtimeWindows: [{
+    label: "cycle",
+    remaining: "42",
+    value: "42%",
+    resetsAt: 1786089600,
+    date: "Aug 9",
+    reset: "Sun 02:15 AM"
+  }],
+  severity: "normal",
+  profileId: "glance",
+  availableWindowCount: 1,
+  displayMode: "modules",
+  showValue: true,
+  showDot: false,
+  showBar: false,
+  remainingPercent: 42,
+  showLabel: false,
+  showCountdown: false,
+  showRelative: false,
+  showSeconds: false,
+  showDate: false,
+  showReset: false,
+  showTodayTokens: false,
+  showLifetimeTokens: false,
+  valueColor: "#6ee7b7",
+  dotColor: "#6ee7b7",
+  identityColor: "inherit",
+  effect: "none",
+  effectTarget: "dot",
+  effectAt: "critical",
+  layout: {
+    moduleOrder: ["avatar", "name", "value", "label", "dot", "countdown", "relative", "seconds", "date", "reset", "todayTokens", "lifetimeTokens"],
+    layoutMode: "auto",
+    snapThreshold: 16,
+    snapTargets: ["edges", "center", "modules"],
+    moduleAnchors: {
+      avatar: .04, name: .04, dot: .96, value: .96, todayTokens: .96, lifetimeTokens: .96, label: .96,
+      countdown: .96, relative: .96, seconds: .96, date: .96, reset: .96
+    },
+    identity: "show",
+    avatarShape: "native",
+    fontSize: 14
+  }
+}
+```
+
+The Agent sends reset timestamps rather than streaming formatted seconds. A visibility-aware one-shot timer targets the next true second or minute boundary and derives every label from the absolute reset timestamp. Delayed browser work can skip a paint, but it cannot accumulate clock drift or increase App Server traffic.
+
+App Server quota reads are single-flight. A refresh requested while one is active is coalesced, and each read records the notification revision that existed when it was sent. If a newer `account/rateLimits/updated` notification arrives first, the late full response is discarded and one clean read follows. Reads also have a bounded timeout. This causal boundary prevents an older snapshot from briefly replacing newer quota data when stdio responses complete out of request order.
+
+Every complete Agent-to-renderer state carries the owning renderer instance id and one process-local monotonic delivery sequence. CDP checks the owner before calling the global controller, and the controller checks it again before comparing sequences. A retired Agent therefore cannot feed its high sequence into a replacement renderer; late or unsequenced states from the current Agent are rejected after live delivery has begun. Target discovery sends state only when a renderer is newly attached or an external configuration reload is observed; it does not resend the full document on each two-second endpoint poll. The local token scanner likewise publishes only when its user-visible total or health changes. A bounded renderer delivery trace contains owner, sequence, source reason, and visible module ids without page or account content.
+
+Renderer installation has a separate per-Agent instance id in addition to the public semantic version. Repeating installation from the same process is idempotent, while a replacement Agent with the same version cleans up and replaces the previous controller. Disposal is a lifecycle boundary rather than a global-reference swap: the retired controller rejects updates, rendering, timers, focus callbacks, profile refreshes, and late asynchronous callbacks, and cleanup continues even if one restoration step fails. A badge-scoped integrity observer remains defense-in-depth for external DOM drift; it is not used as a substitute for owner-scoped delivery. This keeps repair and development hot-resume honest without restarting Codex.
+
+The account row has one DOM commit path. Quota, settings, profile statistics, resize, and clock events update renderer state and enter the same scheduler; the clock never edits module text independently. Layout is solved for the complete visible module set, committed as one transaction, and skipped only when both its inputs and the previously committed geometry still match. This prevents a cached layout from blessing positions changed by a retired callback or a host redraw.
+
+The quota bar is an auxiliary full-row surface. It consumes `remainingPercent`, `showBar`, and the resolved value color, but stays outside the twelve-module horizontal collision solver so enabling it cannot push or resize account identity and quota text. Its Quick control shares the status group with the dot.
+
+The token counters deliberately use two sources with different freshness. `todayTokens` is computed by the Agent from numeric `token_count` events in local Codex JSONL sessions, so its scope is the current device rather than a cross-device account total. Startup backfill reads backwards only to the local day boundary with a fixed byte budget; subsequent passes inspect changed file tails. An unchanged scan updates internal file cursors without broadcasting another renderer document. Cumulative snapshots provide fork/replay deduplication and stale-regression checks, while message bodies are never parsed. Incomplete backfill is exposed as a lower bound. `lifetimeTokens` remains the settled account-wide total from the authenticated Codex renderer client. The renderer feature-detects that client, keeps the response in memory, and never sends authentication material or the profile payload to the Agent. A five-minute successful refresh interval, single-flight requests, an eight-second UI timeout, and one-minute failure backoff bound the profile integration; either source can fail closed independently. Inline modules use compact localized notation, while the shared hover surface uses exact grouped counts and is available even when those modules are hidden.
+
+`availableWindowCount` is runtime state. `window` selects one or more periods inside the ordinary Codex quota. Separately metered model-specific buckets are filtered at the normalization boundary, so a bucket disappearing from one full refresh and returning in the next cannot replace or move the primary row. The built-in tooltip formats every ordinary period with remaining percentage, relative reset, date, and time. No period duration is assumed by the configuration contract.
+
+## Gesture boundary
+
+The renderer owns gesture isolation across the complete Codex account row. Pointer-down is captured before the host sees it. A short release is replayed to the native account trigger; a hold opens QuotaPin; movement cancels the hold. Pressing the row again closes the open panel. The invisible row-level target remains available even when all QuotaPin modules are hidden.
+
+## Layout boundary
+
+Quick exposes one smart horizontal drag model and always calculates vertical centering from the host row. In `auto`, a completed placement becomes stable left, intentional center, right, or neighbour gravity rather than an arbitrary percentage exposed by a later resize. Text width is re-measured from current glyph bounds rather than a previously painted solver width, and background refreshes never animate row geometry. Code may set `layoutMode` to `free` for literal normalized coordinates, change `snapThreshold`, or choose any subset of `snapTargets`; these expert controls stay out of the direct-manipulation surface. No module type is assigned a mandatory side.
+
+During a gesture, the dragged module follows the exact pointer and a weighted projection moves only the smallest necessary neighbourhood. The grabbed module has no interpolation; displaced neighbours receive a short position-only spring, while width and every background refresh remain deterministic. On commit, smart layout resolves that gesture to its semantic dock and preserves the new order; free layout retains every exact settled center. The account name starts at its measured glyph width and shrinks before fixed-value modules. Hidden zero-sized rectangles are ignored when anchors are measured.
+
+## Settings transaction
+
+The settings renderer maintains two explicit documents: the last host-confirmed `committed` state and an optimistic `draft`. Every normal action receives an action id. The host sanitizes the complete result, writes it atomically, and returns the canonical configuration.
+
+An acknowledgement advances `committed` and replays any newer pending actions. A rejection removes only the failed action and rebuilds the draft from committed state plus the remaining queue. Code input is staged locally until **Apply JSON**. Syntax diagnostics remain local; after a successful save, the host-confirmed canonical document replaces the submitted text and any normalized paths are reported. A render callback runs only after the canonical state has painted, which keeps newly enabled modules immediately draggable.
+
+**Restore view defaults** replaces the active profile with its shipped behavior, including order, gravity, magnetic controls, and quota text size.
+
+## Windows lifecycle
+
+The command installation places a version-matched, self-contained `QuotaPin.Agent.exe` and a small set of Windows PowerShell 5.1 lifecycle scripts under `%LOCALAPPDATA%\QuotaPin`. A per-user startup shortcut runs the background attachment helper; no service, administrator token, system-wide registry entry, or modified Codex package is required.
+
+The helper accepts only a fresh official root `ChatGPT.exe` launch. The launcher validates the app-managed Codex executable, binds CDP to loopback on a fresh ephemeral port, and starts the Agent. An already instrumented, stale, child, or ambiguous process is ignored. The command installation has no tray UI.
+
+## Modules
+
+- `src/core/model.mjs` normalizes returned rate-limit windows and merges sparse updates.
+- `src/core/config.mjs` migrates, sanitizes, and atomically saves configuration.
+- `src/core/format.mjs` formats percentage, universal compact time, locale-aware worded time, precise seconds, date, reset time, and hover text.
+- `src/agent/` owns App Server stdio, CDP transport, local numeric token-event aggregation, configuration acknowledgements, lifecycle state, and the user-initiated release picker.
+- `src/renderer/` owns pure settings, layout, gesture, effect, localization, time-boundary, and interaction state machines.
+- `src/injector.mjs` composes those modules and contains the version-sensitive Codex DOM adapter.
+- `scripts/build-agent.ps1` bundles the runtime into the self-contained Windows Agent and embeds version/source provenance.
+- `src/launch.ps1` validates and activates the official Codex process with loopback-only CDP.
+- `src/auto-attach.ps1` watches for eligible official launches and authorizes one generation-bound relaunch. Success requires a renderer-attached receipt; any mismatch latches a circuit breaker instead of retrying a destructive transition.
+- `scripts/install.ps1`, `scripts/update.ps1`, and `scripts/uninstall.ps1` own the per-user command lifecycle.
+
+The moving remote bootstrap chooses GitHub's immutable latest stable release unless an exact published version is requested. Install and update replace QuotaPin-owned program files transactionally while preserving configuration and launch preferences. Update never launches Codex; the new Agent may resume only against the exact previously verified loopback runtime, otherwise attachment is deferred to the next normal launch. Uninstall is the explicit full-removal boundary and deletes the configuration with the rest of the QuotaPin install root.
+
+## Adapter rules
+
+1. Match host elements by geometry and semantics, never by user text.
+2. Require one unique match.
+3. Store no page content.
+4. Restore every native style changed by a view.
+5. Suppress QuotaPin if a native persistent quota indicator is detected inside the account row; a value shown only in the opened account menu is not a collision.
+6. Treat host-version changes as compatibility work, not permission to weaken matching.
+
+Keeping these boundaries explicit lets a source change fail closed without corrupting quota math, and lets a layout change be tested without launching Codex.

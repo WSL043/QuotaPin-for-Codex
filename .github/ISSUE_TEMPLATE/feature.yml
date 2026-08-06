@@ -1,0 +1,44 @@
+name: Feature idea
+description: Propose a public improvement to QuotaPin
+title: "[idea] "
+labels: [enhancement]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Search open ideas first. Found the same one? Give it a 👍 instead; reactions are the vote.
+
+        This report will be public. Remove account details, task content, private paths, tokens, and screenshots that have not been sanitized.
+  - type: textarea
+    id: problem
+    attributes:
+      label: What feels harder than it should?
+      description: Describe the user-facing problem before proposing a control or implementation.
+    validations:
+      required: true
+  - type: textarea
+    id: idea
+    attributes:
+      label: What would you change?
+      description: Explain the smallest behavior that would solve the problem.
+    validations:
+      required: true
+  - type: textarea
+    id: signal
+    attributes:
+      label: What should remain glanceable?
+      description: QuotaPin has one compact status surface. Say what immediate decision deserves those pixels.
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: Tested environment, if any
+      description: QuotaPin version, Codex Desktop version, Windows version, and architecture. Leave blank for a concept only.
+  - type: checkboxes
+    id: public
+    attributes:
+      label: Public report
+      options:
+        - label: I understand this issue and its attachments will be public.
+          required: true

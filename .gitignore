@@ -1,0 +1,14 @@
+.DS_Store
+Thumbs.db
+*.log
+*.tmp
+.idea/
+.vscode/
+dist/
+artifacts/
+node_modules/
+.audit/
+.playwright-cli/
+output/
+.env
+.env.*

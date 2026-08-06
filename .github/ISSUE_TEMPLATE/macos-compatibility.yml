@@ -1,0 +1,65 @@
+name: macOS compatibility report
+description: Share sanitized real-Mac evidence for the developer preview.
+title: "[macOS] "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        The current Mac build is a developer preview, not a support claim. Please remove account names, task content, tokens, private paths, and unedited screenshots before submitting.
+  - type: input
+    id: macos
+    attributes:
+      label: macOS version
+      placeholder: "15.6"
+    validations:
+      required: true
+  - type: dropdown
+    id: architecture
+    attributes:
+      label: Mac architecture
+      options:
+        - Apple silicon
+        - Intel
+    validations:
+      required: true
+  - type: input
+    id: codex
+    attributes:
+      label: Codex Desktop version
+      placeholder: "Open Codex > About and copy the version"
+    validations:
+      required: true
+  - type: input
+    id: artifact
+    attributes:
+      label: QuotaPin commit or Actions run
+      description: Paste the commit SHA or Actions artifact URL you tested.
+    validations:
+      required: true
+  - type: dropdown
+    id: stage
+    attributes:
+      label: Furthest stage reached
+      options:
+        - Build only
+        - Self-check passed
+        - Codex launched
+        - Quota appeared in the account row
+        - Restart persistence passed
+        - Uninstall passed
+    validations:
+      required: true
+  - type: textarea
+    id: result
+    attributes:
+      label: What happened?
+      description: Include exact steps and sanitized error text. Do not paste a full unsanitized log.
+    validations:
+      required: true
+  - type: checkboxes
+    id: privacy
+    attributes:
+      label: Privacy check
+      options:
+        - label: I removed account identity, task content, credentials, private paths, and unedited screenshots.
+          required: true

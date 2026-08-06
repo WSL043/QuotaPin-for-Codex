@@ -151,7 +151,7 @@ try {
         $PackageVersion = ([string]$PackageVersionInfo.ProductVersion).Trim()
         $PackageDescription = [string]$PackageVersionInfo.FileDescription
         if ($PackageVersion -cne $SelectedVersion -or $PackageDescription.IndexOf($OfficialRepository, [StringComparison]::Ordinal) -lt 0 -or
-            [string]$PackageVersionInfo.OriginalFilename -cne $PackageName) {
+            ([string]$PackageVersionInfo.OriginalFilename).Trim() -cne $PackageName) {
             throw 'The downloaded QuotaPin installer identity does not match the selected release.'
         }
         Invoke-QuotaPinPackage $PackagePath

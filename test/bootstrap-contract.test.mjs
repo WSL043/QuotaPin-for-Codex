@@ -16,7 +16,7 @@ test("the moving bootstrap defaults to immutable stable and accepts an explicit 
   assert.match(source, /\$PackageName = "QuotaPin-\$SelectedVersion\.exe"/);
   assert.match(source, /Receive-QuotaPinBootstrapFile/);
   assert.match(source, /Write-Host "Downloading \$DisplayName\$SizeText/);
-  assert.match(source, /OriginalFilename -cne \$PackageName/);
+  assert.match(source, /OriginalFilename\)\.Trim\(\) -cne \$PackageName/);
   assert.match(source, /\$Process\.WaitForExit\(\)/);
   assert.doesNotMatch(source, /Start-Process -FilePath \$PackagePath[^\r\n]*-Wait/);
   assert.match(source, /--continue-at -/);

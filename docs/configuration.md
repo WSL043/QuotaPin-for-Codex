@@ -227,7 +227,7 @@ Only compatible, immutable releases containing exactly one correctly named Windo
 The remote bootstrap without `-Version` resolves GitHub's immutable latest stable release. Supplying an exact published stable version permits a repair or compatible rollback. Reinstalling the same version follows the same transactional replacement path and does not reset configuration.
 
 ```powershell
-& ([scriptblock]::Create((irm https://raw.githubusercontent.com/WSL043/QuotaPin-for-Codex/main/install.ps1))) -Version '1.0.1'
+& ([scriptblock]::Create((irm https://raw.githubusercontent.com/WSL043/QuotaPin-for-Codex/main/install.ps1))) -Version '1.0.2'
 ```
 
 Older entries are user-selected recovery versions, not a transactional rollback guarantee. If an older Agent encounters a configuration from a newer schema, it opens that configuration read-only instead of overwriting it. Published update behavior is counted as supported only after the corresponding path appears in [observed compatibility](compatibility.md).

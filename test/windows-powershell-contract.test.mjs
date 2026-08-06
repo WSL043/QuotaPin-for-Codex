@@ -151,7 +151,7 @@ test("command updater contract keeps exact single-package trust, cleanup, and no
   assert.match(updater, /\$Assets\.Count -ne 1/);
   assert.match(updater, /\$Release\.immutable -ne \$true/);
   assert.match(updater, /\$AssetDigest -notmatch '\^sha256:/);
-  assert.match(updater, /OriginalFilename -cne \$PackageName/);
+  assert.match(updater, /OriginalFilename\)\.Trim\(\) -cne \$PackageName/);
   assert.match(updater, /Start-Process -FilePath \$PackagePath[\s\S]*'\/COMMANDINSTALL=1'/);
   assert.match(updater, /\$Process\.WaitForExit\(\)/);
   assert.doesNotMatch(updater, /Start-Process -FilePath \$PackagePath[^\r\n]*-Wait/);

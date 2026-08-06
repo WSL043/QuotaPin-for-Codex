@@ -242,7 +242,7 @@ namespace QuotaPin.Tray
             var description = info.FileDescription ?? "";
             if (!string.Equals(productVersion, expectedVersion, StringComparison.Ordinal) ||
                 description.IndexOf(RepositoryUrl, StringComparison.Ordinal) < 0 ||
-                !string.Equals(info.OriginalFilename ?? "", PackageName(expectedVersion), StringComparison.Ordinal))
+                !string.Equals((info.OriginalFilename ?? "").Trim(), PackageName(expectedVersion), StringComparison.Ordinal))
                 throw new SecurityException("The downloaded installer identity does not match the release.");
         }
 

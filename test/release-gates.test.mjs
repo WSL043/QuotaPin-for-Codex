@@ -157,10 +157,25 @@ test("release metadata imports the signing module from its active PowerShell hos
   assert.match(script, /release metadata cannot be trusted/);
 });
 
+test("platform builds retry transient upstream license downloads without changing the payload contract", () => {
+  const windowsBuild = fs.readFileSync(new URL("../scripts/build-agent.ps1", import.meta.url), "utf8");
+  const macBuild = fs.readFileSync(new URL("../scripts/macos/build-dev.sh", import.meta.url), "utf8");
+  assert.match(windowsBuild, /foreach \(\$Attempt in 1\.\.4\)/);
+  assert.match(windowsBuild, /Invoke-WebRequest[^\r\n]*-TimeoutSec 60/);
+  assert.match(macBuild, /--retry 4 --retry-all-errors/);
+});
+
 test("release identity checks normalize padded Windows version resources", () => {
   const verifier = fs.readFileSync(new URL("../scripts/public-release.mjs", import.meta.url), "utf8");
   assert.match(verifier, /String\(windowsIdentity\.ProductVersion \?\? ""\)\.trim\(\)/);
   assert.match(verifier, /String\(windowsIdentity\.OriginalFilename \?\? ""\)\.trim\(\)/);
+
+  const bootstrap = fs.readFileSync(new URL("../install.ps1", import.meta.url), "utf8");
+  const commandUpdater = fs.readFileSync(new URL("../scripts/update.ps1", import.meta.url), "utf8");
+  const trayUpdater = fs.readFileSync(new URL("../src/tray/Updater.cs", import.meta.url), "utf8");
+  assert.match(bootstrap, /PackageVersionInfo\.OriginalFilename\)\.Trim\(\)/);
+  assert.match(commandUpdater, /VersionInfo\.OriginalFilename\)\.Trim\(\)/);
+  assert.match(trayUpdater, /OriginalFilename \?\? ""\)\.Trim\(\)/);
 });
 
 test("the self-contained agent carries source origin and command install records it", () => {

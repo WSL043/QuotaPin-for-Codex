@@ -85,7 +85,17 @@ if ($Origin.schemaVersion -ne 'quotapin-origin/v1' -or
 $NodeVersion = ([Diagnostics.FileVersionInfo]::GetVersionInfo($NodePath).ProductVersion -split '-')[0]
 if ($NodeVersion -notmatch '^\d+\.\d+\.\d+$') { throw "Could not determine the Node.js version from $NodePath" }
 $NodeLicenseUrl = "https://raw.githubusercontent.com/nodejs/node/v$NodeVersion/LICENSE"
-$NodeLicense = (Invoke-WebRequest -UseBasicParsing -Uri $NodeLicenseUrl -TimeoutSec 30).Content
+$NodeLicense = $null
+foreach ($Attempt in 1..4) {
+    try {
+        $NodeLicense = (Invoke-WebRequest -UseBasicParsing -Uri $NodeLicenseUrl -TimeoutSec 60).Content
+        break
+    }
+    catch {
+        if ($Attempt -eq 4) { throw }
+        Start-Sleep -Seconds ([Math]::Min(8, [Math]::Pow(2, $Attempt)))
+    }
+}
 if ($NodeLicense -notmatch 'Copyright Node\.js contributors' -or $NodeLicense -notmatch 'Permission is hereby granted') {
     throw "The Node.js license response for $NodeVersion was not recognized"
 }

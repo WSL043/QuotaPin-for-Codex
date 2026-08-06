@@ -2,7 +2,7 @@
 
 | QuotaPin | Codex Desktop | Windows | Status |
 |---|---|---|---|
-| 1.0.1 release candidate | 26.730.8199.0 x64 | Windows 11 10.0.26200 | The single `QuotaPin-1.0.1.exe` built with Inno Setup 6.7.1. Clean command and guided modes completed in about six seconds with the expected watcher-only and tray-only ownership. Same-version repair and a 1.0.0-to-1.0.1 replacement preserved edited configuration. Each uninstall removed files, owned processes, startup state, and the Apps entry; Codex process identities stayed unchanged throughout. A forced partial download resumed from its saved byte range and matched the source payload exactly. |
+| 1.0.2 release candidate | 26.730.8199.0 x64 | Windows 11 10.0.26200 | The single `QuotaPin-1.0.2.exe` retains the command-install and guided-install ownership model. Its release consumers normalize Windows version-resource padding while still checking the exact immutable release, digest, version, filename, and project identity. Source, Chromium, PowerShell, installer, update, and lifecycle gates pass locally; published command and guided installation are repeated before this row is promoted from candidate evidence. |
 
 The one-line command accepts x64 Windows 10 version 2004 (build 19041) and later. Current end-to-end evidence is from Windows 11, so Windows 10 remains best-effort until a real-device report is recorded. Windows ARM64 is not supported.
 

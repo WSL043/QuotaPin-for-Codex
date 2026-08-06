@@ -174,7 +174,7 @@ try {
     $VersionInfo = (Get-Item -LiteralPath $PackagePath).VersionInfo
     if (([string]$VersionInfo.ProductVersion).Trim() -cne $Version -or
         ([string]$VersionInfo.FileDescription).IndexOf($OfficialRepository, [StringComparison]::Ordinal) -lt 0 -or
-        [string]$VersionInfo.OriginalFilename -cne $PackageName) {
+        ([string]$VersionInfo.OriginalFilename).Trim() -cne $PackageName) {
         throw 'The downloaded QuotaPin installer identity does not match the selected release.'
     }
     # Do not use Start-Process -Wait here: it waits for the long-running

@@ -46,7 +46,7 @@ node -e 'const value=JSON.parse(process.argv[1]); if(!value.ok) process.exit(1)'
 
 NODE_VERSION="$(node -p 'process.versions.node')"
 LICENSE_URL="https://raw.githubusercontent.com/nodejs/node/v$NODE_VERSION/LICENSE"
-curl --fail --silent --show-error --location "$LICENSE_URL" --output "$BUILD_ROOT/node-license.txt"
+curl --fail --silent --show-error --location --retry 4 --retry-all-errors --connect-timeout 20 --max-time 240 "$LICENSE_URL" --output "$BUILD_ROOT/node-license.txt"
 grep -q "Copyright Node.js contributors" "$BUILD_ROOT/node-license.txt"
 {
   printf 'QuotaPin macOS developer build\n\n'

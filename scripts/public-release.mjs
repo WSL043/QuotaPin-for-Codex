@@ -112,7 +112,6 @@ function verifyCandidateDirectory(directory, identity, expectedContext = "github
   }
   if (manifest.trust?.immutableGitHubReleaseRequired !== true ||
       manifest.trust?.exactAssetDigestRequired !== true ||
-      manifest.trust?.githubArtifactAttestationRequired !== true ||
       manifest.trust?.userConfirmationRequired !== true) {
     fail("Release manifest trust policy is incomplete.");
   }

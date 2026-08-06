@@ -47,10 +47,7 @@ test("tag workflow builds and publishes only the exact versioned executable", ()
   assert.match(release, /node scripts\/public-release\.mjs list/);
   assert.match(release, /release delete-asset/);
   assert.match(release, /Remote draft asset set differs from policy/);
-  assert.match(release, /PUBLIC_ASSET=QuotaPin-\$version\.exe/);
-  assert.match(release, /subject-path: release\/\$\{\{ env\.PUBLIC_ASSET \}\}/);
-  assert.match(release, /sbom-path: release\/QuotaPin\.spdx\.json/);
-  assert.match(release, /artifact-metadata: write/);
+  assert.doesNotMatch(release, /actions\/attest|attestations: write|artifact-metadata: write|id-token: write/);
   assert.match(release, /github\.event\.repository\.private == false/);
   assert.match(release, /--notes-file \$notesPath/);
   assert.doesNotMatch(release, /--generate-notes/);

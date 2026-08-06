@@ -236,6 +236,7 @@ has(installerBuilder, "$env:QUOTAPIN_ISCC_PATH", "the unified build must accept 
 has(publicRelease, 'return `QuotaPin-${normalized}.exe`', "public asset policy must publish one versioned executable");
 has(publicRelease, '"QuotaPin-release.json", "QuotaPin.spdx.json"', "candidate verification must retain internal manifest and SBOM evidence");
 lacks(publicRelease, '"QuotaPin-Windows-x64.zip"', "public asset policy must not revive the legacy ZIP");
+lacks(release, "actions/attest", "the release workflow must not add a second public attestation beside GitHub's immutable release record");
 has(release, "GitHub Releases accept reviewed stable or beta versions only", "tag releases must reject unreviewed prerelease channels");
 has(release, "$isBeta = $version -cmatch '^\\d+\\.\\d+\\.\\d+-beta\\.\\d+$'", "tag releases must recognize only the reviewed beta.N channel");
 has(release, "$latestFlag = if ($isStable) { 'true' } else { 'false' }", "beta releases must never replace the stable Latest channel");

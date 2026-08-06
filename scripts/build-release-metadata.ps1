@@ -106,7 +106,7 @@ if ($Phase -eq 'Stamp') {
         verification = [ordered]@{
             releaseManifest = 'QuotaPin-release.json'
             checksums = 'SHA256SUMS'
-            githubAttestationRepository = 'WSL043/QuotaPin-for-Codex'
+            releaseRepository = 'WSL043/QuotaPin-for-Codex'
         }
     }
     Write-Utf8Json (Join-Path $OutputRoot 'origin.json') $Origin
@@ -122,10 +122,10 @@ Source commit: $Commit
 Source snapshot: $SourceUrl
 QuotaPin.Agent.exe SHA-256: $AgentSha256
 
-For an official build, compare the version, commit, and SHA-256 with the files
-and GitHub artifact attestation published by the official project. If a third
-party charged you, confirm what service they sold; the official source itself
-is available without charge from the project above.
+For an official build, compare the version, commit, and SHA-256 with the asset
+digest on the official GitHub Release. If a third party charged you, confirm
+what service they sold; the official source itself is available without charge
+from the project above.
 "@
     [IO.File]::WriteAllText((Join-Path $OutputRoot 'OFFICIAL_SOURCE.txt'), ($OfficialSource.Trim() + "`r`n"), [Text.UTF8Encoding]::new($false))
     foreach ($Name in @('QuotaPin.Tray.exe')) {
@@ -244,7 +244,6 @@ $Manifest = [ordered]@{
     trust = [ordered]@{
         immutableGitHubReleaseRequired = $true
         exactAssetDigestRequired = $true
-        githubArtifactAttestationRequired = $true
         userConfirmationRequired = $true
     }
     artifacts = $Artifacts

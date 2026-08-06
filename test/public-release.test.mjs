@@ -50,7 +50,6 @@ function fixture(t) {
     trust: {
       immutableGitHubReleaseRequired: true,
       exactAssetDigestRequired: true,
-      githubArtifactAttestationRequired: true,
       userConfirmationRequired: true,
     },
     artifacts: [{ name: PACKAGE, bytes: fs.statSync(path.join(source, PACKAGE)).size, sha256: packageHash }],

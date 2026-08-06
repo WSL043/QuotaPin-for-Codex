@@ -140,16 +140,13 @@ jobs:
           path: dist/public/
 
   publish:
-    name: Attest and publish tagged release
+    name: Publish tagged release
     if: startsWith(github.ref, 'refs/tags/') && github.event.repository.private == false
     needs: build
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
       contents: write
-      id-token: write
-      attestations: write
-      artifact-metadata: write
     steps:
       - name: Check out the same tagged source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.0
@@ -177,18 +174,6 @@ jobs:
           --commit "$GITHUB_SHA"
           --tag "$GITHUB_REF_NAME"
           --workflow-run-id "$GITHUB_RUN_ID"
-
-      - name: Resolve the versioned public asset name
-        shell: pwsh
-        run: |
-          $version = (Get-Content -Raw VERSION).Trim()
-          "PUBLIC_ASSET=QuotaPin-$version.exe" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-
-      - name: Attest the versioned QuotaPin executable and its SBOM
-        uses: actions/attest@508db95dd578ae2727ebd6217d5ba78e4fbda05d # v4.0.0
-        with:
-          subject-path: release/${{ env.PUBLIC_ASSET }}
-          sbom-path: release/QuotaPin.spdx.json
 
       - name: Publish only the reviewed executable
         shell: pwsh

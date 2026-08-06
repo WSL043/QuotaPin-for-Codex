@@ -121,7 +121,8 @@ jobs:
             --directory dist/public `
             --repository $env:OFFICIAL_REPOSITORY `
             --commit $env:GITHUB_SHA `
-            --tag $env:GITHUB_REF_NAME
+            --tag $env:GITHUB_REF_NAME `
+            --workflow-run-id $env:GITHUB_RUN_ID
           if ($LASTEXITCODE -ne 0) { throw 'Public release verification failed.' }
 
       - name: Confirm build did not mutate source

@@ -85,10 +85,10 @@ jobs:
           & git tag $candidateTag $commit
           if ($LASTEXITCODE -ne 0) { throw 'Could not create the local candidate tag.' }
           try {
-            node scripts/public-release.mjs prepare --root . --source dist --output dist/public --repository https://github.com/WSL043/QuotaPin-for-Codex --commit $commit --tag $candidateTag --workflow-run-id $env:GITHUB_RUN_ID
-            if ($LASTEXITCODE -ne 0) { throw 'Public candidate preparation failed.' }
-            node scripts/public-release.mjs verify --root . --directory dist/public --repository https://github.com/WSL043/QuotaPin-for-Codex --commit $commit --tag $candidateTag
-            if ($LASTEXITCODE -ne 0) { throw 'Public candidate verification failed.' }
+            node scripts/public-release.mjs prepare-ci --root . --source dist --output dist/public --repository https://github.com/WSL043/QuotaPin-for-Codex --commit $commit --tag $candidateTag --workflow-run-id $env:GITHUB_RUN_ID
+            if ($LASTEXITCODE -ne 0) { throw 'CI candidate preparation failed.' }
+            node scripts/public-release.mjs verify-ci --root . --directory dist/public --repository https://github.com/WSL043/QuotaPin-for-Codex --commit $commit --tag $candidateTag --workflow-run-id $env:GITHUB_RUN_ID
+            if ($LASTEXITCODE -ne 0) { throw 'CI candidate verification failed.' }
           }
           finally {
             & git tag --delete $candidateTag | Out-Null

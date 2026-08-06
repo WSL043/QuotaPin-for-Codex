@@ -28,8 +28,9 @@ test("pull-request CI exercises source behavior without publishing an installer"
     assert.ok(workflow.includes(script), `check workflow does not run ${script}`);
   }
   assert.doesNotMatch(workflow, /choco install innosetup/i);
-  assert.match(workflow, /public-release\.mjs prepare/);
-  assert.match(workflow, /public-release\.mjs verify/);
+  assert.match(workflow, /public-release\.mjs prepare-ci/);
+  assert.match(workflow, /public-release\.mjs verify-ci/);
+  assert.match(workflow, /verify-ci[^\r\n]*--workflow-run-id \$env:GITHUB_RUN_ID/);
   assert.match(workflow, /git tag \$candidateTag \$commit/);
   assert.match(workflow, /finally \{[\s\S]*?git tag --delete \$candidateTag/);
 });
@@ -41,6 +42,7 @@ test("tag workflow builds and publishes only the exact versioned executable", ()
   assert.match(release, /scripts\\install-inno-ci\.ps1/);
   assert.match(release, /public-release\.mjs prepare[\s\S]*?--output dist\/public/);
   assert.match(release, /public-release\.mjs verify/);
+  assert.match(release, /verify[\s\S]*?--workflow-run-id \$env:GITHUB_RUN_ID/);
   assert.match(release, /path: dist\/public\//);
   assert.match(release, /node scripts\/public-release\.mjs list/);
   assert.match(release, /release delete-asset/);
@@ -153,6 +155,12 @@ test("release metadata imports the signing module from its active PowerShell hos
   assert.match(script, /Join-Path \$PSHOME 'Modules\\Microsoft\.PowerShell\.Security/);
   assert.match(script, /Microsoft\.PowerShell\.Security\\Get-AuthenticodeSignature/);
   assert.match(script, /release metadata cannot be trusted/);
+});
+
+test("release identity checks normalize padded Windows version resources", () => {
+  const verifier = fs.readFileSync(new URL("../scripts/public-release.mjs", import.meta.url), "utf8");
+  assert.match(verifier, /String\(windowsIdentity\.ProductVersion \?\? ""\)\.trim\(\)/);
+  assert.match(verifier, /String\(windowsIdentity\.OriginalFilename \?\? ""\)\.trim\(\)/);
 });
 
 test("the self-contained agent carries source origin and command install records it", () => {

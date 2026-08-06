@@ -91,7 +91,7 @@ function inspectWindowsPackage(packagePath) {
   return JSON.parse(raw.split(/\r?\n/).at(-1));
 }
 
-function verifyCandidateDirectory(directory, identity) {
+function verifyCandidateDirectory(directory, identity, expectedContext = "github-release-workflow") {
   const packageName = packageNameForVersion(identity.version);
   exactNames(directory, candidateFiles(identity.version), "Release candidate");
   const packagePath = path.join(directory, packageName);
@@ -107,7 +107,7 @@ function verifyCandidateDirectory(directory, identity) {
       manifest.source?.tag !== identity.tag || manifest.source?.dirty !== false) {
     fail("Release manifest source is invalid.");
   }
-  if (manifest.build?.context !== "github-release-workflow" || String(manifest.build?.workflowRunId ?? "") !== identity.workflowRunId) {
+  if (manifest.build?.context !== expectedContext || String(manifest.build?.workflowRunId ?? "") !== identity.workflowRunId) {
     fail("Release manifest workflow provenance is invalid.");
   }
   if (manifest.trust?.immutableGitHubReleaseRequired !== true ||
@@ -130,7 +130,7 @@ function verifyCandidateDirectory(directory, identity) {
   const windowsIdentity = inspectWindowsPackage(packagePath);
   if (windowsIdentity && (String(windowsIdentity.ProductVersion ?? "").trim() !== identity.version ||
       !String(windowsIdentity.FileDescription ?? "").includes(identity.repository) ||
-      String(windowsIdentity.OriginalFilename ?? "") !== packageName)) {
+      String(windowsIdentity.OriginalFilename ?? "").trim() !== packageName)) {
     fail(`${packageName} version metadata does not match the release.`);
   }
   return {
@@ -144,10 +144,9 @@ function verifyCandidateDirectory(directory, identity) {
   };
 }
 
-export function preparePublicRelease(options) {
-  const identity = sourceIdentity({ ...options, requireWorkflow: true });
+function stageCandidate(options, identity, outputLabel, expectedContext) {
   const source = normalizeDirectory(options.source, "Build output");
-  const output = normalizeDirectory(options.output, "Public output");
+  const output = normalizeDirectory(options.output, outputLabel);
   assertOutputIsInsideRoot(identity.root, output);
   if (!fs.existsSync(source) || !fs.statSync(source).isDirectory()) fail("Build output directory was not found.");
   const files = candidateFiles(identity.version);
@@ -158,13 +157,29 @@ export function preparePublicRelease(options) {
   fs.rmSync(output, { recursive: true, force: true });
   fs.mkdirSync(output, { recursive: true });
   for (const name of files) fs.copyFileSync(path.join(source, name), path.join(output, name));
-  return verifyCandidateDirectory(output, identity);
+  return verifyCandidateDirectory(output, identity, expectedContext);
+}
+
+export function preparePublicRelease(options) {
+  const identity = sourceIdentity({ ...options, requireWorkflow: true });
+  return stageCandidate(options, identity, "Public output", "github-release-workflow");
 }
 
 export function verifyPublicRelease(options) {
   const identity = sourceIdentity({ ...options, requireWorkflow: true });
   const directory = normalizeDirectory(options.directory, "Release candidate directory");
-  return verifyCandidateDirectory(directory, identity);
+  return verifyCandidateDirectory(directory, identity, "github-release-workflow");
+}
+
+export function prepareCiCandidate(options) {
+  const identity = sourceIdentity({ ...options, requireWorkflow: true });
+  return stageCandidate(options, identity, "CI candidate output", "github-ci-workflow");
+}
+
+export function verifyCiCandidate(options) {
+  const identity = sourceIdentity({ ...options, requireWorkflow: true });
+  const directory = normalizeDirectory(options.directory, "CI candidate directory");
+  return verifyCandidateDirectory(directory, identity, "github-ci-workflow");
 }
 
 export function verifyPublishedRelease(options) {
@@ -179,7 +194,7 @@ export function verifyPublishedRelease(options) {
   const windowsIdentity = inspectWindowsPackage(packagePath);
   if (windowsIdentity && (String(windowsIdentity.ProductVersion ?? "").trim() !== identity.version ||
       !String(windowsIdentity.FileDescription ?? "").includes(identity.repository) ||
-      String(windowsIdentity.OriginalFilename ?? "") !== packageName)) {
+      String(windowsIdentity.OriginalFilename ?? "").trim() !== packageName)) {
     fail(`Published ${packageName} version metadata does not match the release.`);
   }
   return { version: identity.version, commit: identity.commit, tag: identity.tag, asset: packageName, bytes: fs.statSync(packagePath).size, sha256: actual };
@@ -211,8 +226,10 @@ function main() {
   let result;
   if (command === "prepare") result = preparePublicRelease(options);
   else if (command === "verify") result = verifyPublicRelease(options);
+  else if (command === "prepare-ci") result = prepareCiCandidate(options);
+  else if (command === "verify-ci") result = verifyCiCandidate(options);
   else if (command === "verify-published") result = verifyPublishedRelease(options);
-  else fail("Usage: public-release.mjs <prepare|verify|verify-published|list> [options]");
+  else fail("Usage: public-release.mjs <prepare|verify|prepare-ci|verify-ci|verify-published|list> [options]");
   process.stdout.write(`${JSON.stringify(result)}\n`);
 }
 

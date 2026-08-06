@@ -7,8 +7,10 @@ import test from "node:test";
 import {
   OFFICIAL_REPOSITORY,
   packageNameForVersion,
+  prepareCiCandidate,
   publicReleaseAssets,
   preparePublicRelease,
+  verifyCiCandidate,
   verifyPublicRelease,
   verifyPublishedRelease,
 } from "../scripts/public-release.mjs";
@@ -89,6 +91,18 @@ test("single-package release verification rejects an extra candidate or a tamper
   fs.rmSync(path.join(paths.output, "internal.zip"));
   fs.appendFileSync(path.join(paths.output, PACKAGE), "tampered");
   assert.throws(() => verifyPublicRelease(options(paths)), /single public installer/i);
+});
+
+test("branch CI candidates are verified without pretending to be release provenance", (t) => {
+  const paths = fixture(t);
+  const manifestPath = path.join(paths.source, "QuotaPin-release.json");
+  const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8"));
+  manifest.build.context = "github-ci-workflow";
+  fs.writeFileSync(manifestPath, `${JSON.stringify(manifest)}\n`);
+  const prepared = prepareCiCandidate(options(paths));
+  assert.equal(prepared.asset, PACKAGE);
+  assert.equal(verifyCiCandidate(options(paths)).sha256, prepared.sha256);
+  assert.throws(() => verifyPublicRelease(options(paths)), /workflow provenance/i);
 });
 
 test("published release readback accepts only the versioned executable and GitHub's exact digest", (t) => {

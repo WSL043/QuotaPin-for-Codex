@@ -167,7 +167,17 @@ foreach ($Property in $Package.devDependencies.PSObject.Properties | Sort-Object
     $BuildDependencies += [ordered]@{ name = [string]$Property.Name; version = [string]$Property.Value }
 }
 $Tag = if ($env:GITHUB_REF_TYPE -eq 'tag' -and $env:GITHUB_REF_NAME) { [string]$env:GITHUB_REF_NAME } else { "v$Version" }
-$OfficialWorkflow = $env:GITHUB_REPOSITORY -eq 'WSL043/QuotaPin-for-Codex' -and $env:GITHUB_REF_TYPE -eq 'tag' -and $Tag -eq "v$Version"
+$OfficialRepositoryWorkflow = $env:GITHUB_REPOSITORY -eq 'WSL043/QuotaPin-for-Codex' -and $env:GITHUB_RUN_ID -match '^[1-9]\d*$'
+$OfficialReleaseWorkflow = $OfficialRepositoryWorkflow -and $env:GITHUB_REF_TYPE -eq 'tag' -and $Tag -eq "v$Version"
+$BuildContext = if ($OfficialReleaseWorkflow) {
+    'github-release-workflow'
+}
+elseif ($OfficialRepositoryWorkflow) {
+    'github-ci-workflow'
+}
+else {
+    'local-or-untrusted-workflow'
+}
 
 $SpdxPath = Join-Path $OutputRoot 'QuotaPin.spdx.json'
 $Spdx = [ordered]@{
@@ -224,7 +234,7 @@ $Manifest = [ordered]@{
     }
     build = [ordered]@{
         createdAt = $CreatedAt
-        context = if ($OfficialWorkflow) { 'github-release-workflow' } else { 'local-or-untrusted-workflow' }
+        context = $BuildContext
         workflowRunId = if ($env:GITHUB_RUN_ID) { [string]$env:GITHUB_RUN_ID } else { $null }
         node = $NodeVersion
         innoSetup = if ($env:QUOTAPIN_INNO_VERSION) { [string]$env:QUOTAPIN_INNO_VERSION } else { 'unrecorded' }

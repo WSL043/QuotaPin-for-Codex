@@ -39,7 +39,7 @@ write_update_result() {
   local status="$1"
   local temporary="$UPDATE_RESULT.$$.tmp"
   mkdir -p "$(dirname "$UPDATE_RESULT")"
-  plutil -create json -o "$temporary"
+  plutil -create json "$temporary"
   plutil -insert schema -integer 1 "$temporary"
   plutil -insert status -string "$status" "$temporary"
   plutil -insert version -string "$VERSION" "$temporary"

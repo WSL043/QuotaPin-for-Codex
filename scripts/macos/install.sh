@@ -177,7 +177,7 @@ chmod 600 "$STAGING/config.json"
 if [[ -d "$TARGET/logs" && ! -L "$TARGET/logs" ]]; then
   cp -R "$TARGET/logs/." "$STAGING/logs/"
 fi
-plutil -create json -o "$STAGING/install-state.json"
+plutil -create json "$STAGING/install-state.json"
 plutil -insert schema -integer 1 "$STAGING/install-state.json"
 plutil -insert owner -string command "$STAGING/install-state.json"
 plutil -insert platform -string macos "$STAGING/install-state.json"

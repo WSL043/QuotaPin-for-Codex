@@ -14,7 +14,13 @@ cleanup() {
 trap cleanup EXIT
 cleanup
 
-"$SOURCE/install.sh" --source "$SOURCE"
+INSTALL_TRACE="$(mktemp "${TMPDIR:-/tmp}/quotapin-install-trace.XXXXXX")"
+if ! bash -x "$SOURCE/install.sh" --source "$SOURCE" >"$INSTALL_TRACE" 2>&1; then
+  cat "$INSTALL_TRACE" >&2
+  rm -f "$INSTALL_TRACE"
+  exit 1
+fi
+rm -f "$INSTALL_TRACE"
 [[ -x "$TARGET/QuotaPin.Agent" && -x "$TARGET/QuotaPin.Mac" && -x "$TARGET/update.sh" ]]
 [[ "$(tr -d '\r\n' < "$TARGET/VERSION")" == "$(tr -d '\r\n' < "$SOURCE/VERSION")" ]]
 [[ "$($TARGET/QuotaPin.Agent --agent-version)" == "$(tr -d '\r\n' < "$SOURCE/VERSION")" ]]

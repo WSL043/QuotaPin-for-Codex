@@ -66,6 +66,8 @@ test("tag workflow builds and publishes only the exact cross-platform packages",
   assert.doesNotMatch(release, /actions\/attest|attestations: write|artifact-metadata: write|id-token: write/);
   assert.match(release, /github\.event\.repository\.private == false/);
   assert.match(release, /--notes-file \$notesPath/);
+  assert.match(release, /Get-FileHash -LiteralPath \$asset -Algorithm SHA256/);
+  assert.match(release, /## SHA-256/);
   assert.doesNotMatch(release, /--generate-notes/);
   assert.match(release, /GH_REPO:\s*\$\{\{ github\.repository \}\}/);
   assert.match(release, /GitHub Releases accept reviewed stable or beta versions only/);

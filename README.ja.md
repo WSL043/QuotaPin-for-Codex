@@ -14,7 +14,22 @@
   <img alt="macOS CI 検証済み" src="https://img.shields.io/badge/macOS-CI_検証済み-111827?style=flat-square">
   <img alt="データはローカルのみ" src="https://img.shields.io/badge/データ-ローカルのみ-10b981?style=flat-square">
   <img alt="MIT ライセンス" src="https://img.shields.io/badge/ライセンス-MIT-6366f1?style=flat-square">
+  <a href="https://github.com/WSL043/QuotaPin-for-Codex/releases/latest"><img alt="最新リリース" src="https://img.shields.io/github/v/release/WSL043/QuotaPin-for-Codex?display_name=tag&sort=semver&style=flat-square"></a>
+  <a href="https://github.com/WSL043/QuotaPin-for-Codex/actions/workflows/check.yml"><img alt="CI ステータス" src="https://img.shields.io/github/actions/workflow/status/WSL043/QuotaPin-for-Codex/check.yml?branch=main&style=flat-square&label=CI"></a>
 </p>
+
+<p align="center">
+  <img src="assets/screenshots/product-ja.png" width="960" alt="アカウントメニューを開かず、Codex のアカウント欄に残り1パーセントを表示する QuotaPin">
+</p>
+
+**最新安定版：v1.0.3。** Windows は実機確認済み。macOS パッケージは CI 検証済みで、サインイン済み実機での受け入れ確認を待っています。
+
+| プラットフォーム | 現在の状態 |
+|---|---|
+| Windows 11 x64 | ✅ 安定 / 確認済み |
+| Windows 10 x64（2004 以降） | ⚠️ ベストエフォート |
+| Windows ARM64 | ❌ 未対応 |
+| macOS Apple シリコン / Intel | 🧪 公開パッケージ / CI 検証済み |
 
 ## クイックスタート
 
@@ -34,9 +49,20 @@ curl -fsSL https://raw.githubusercontent.com/WSL043/QuotaPin-for-Codex/main/inst
 
 通常のインストーラーなら、[最新の安定版](https://github.com/WSL043/QuotaPin-for-Codex/releases/latest)を開きます。Windows はバージョン付きの `.exe` を実行。macOS は Universal `.dmg` を開き、**QuotaPin Installer** をダブルクリックします。
 
-<p align="center">
-  <img src="assets/screenshots/product-ja.png" width="960" alt="アカウントメニューを開かず、Codex のアカウント欄に残り1パーセントを表示する QuotaPin">
-</p>
+どちらも同じプラットフォーム用パッケージを使います。PowerShell はトレイアイコンのない静かな watcher 構成、Windows EXE の案内付きセットアップはトレイ機能を有効にします。ブートストラップは変更不能な GitHub Release を解決し、GitHub の SHA-256 ダイジェストとパッケージ識別情報を確認してから、管理者権限なしでユーザー単位にインストールします。詳しくは[セキュリティ](SECURITY.md)をご覧ください。
+
+<details>
+<summary>ブートストラップ自体も v1.0.3 に固定する</summary>
+
+```powershell
+irm https://raw.githubusercontent.com/WSL043/QuotaPin-for-Codex/v1.0.3/install.ps1 | iex
+```
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/WSL043/QuotaPin-for-Codex/v1.0.3/install-macos.sh | bash
+```
+
+</details>
 
 > [!IMPORTANT]
 > QuotaPin は非公式のコミュニティプロジェクトです。OpenAI との提携、承認、サポート関係はありません。

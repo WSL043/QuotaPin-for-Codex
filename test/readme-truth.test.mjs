@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 
 const root = new URL("../", import.meta.url);
+const version = fs.readFileSync(new URL("VERSION", root), "utf8").trim();
 
 function read(relativePath) {
   return fs.readFileSync(new URL(relativePath, root), "utf8");
@@ -24,6 +25,10 @@ test("localized READMEs keep one product hero and current interaction truth", ()
   for (const [readme, product, states, examples, currentBehavior] of variants) {
     const text = read(readme);
     assert.equal(text.split(product).length - 1, 1, `${readme} must have one product hero`);
+    assert.ok(text.indexOf(product) < text.search(/^## /m), `${readme} must show the product before onboarding`);
+    assert.ok(text.includes(version), `${readme} must state the current stable version`);
+    assert.match(text, /Windows 11/i, `${readme} must expose platform status near the top`);
+    assert.match(text, /macOS/i, `${readme} must expose the provisional Mac boundary near the top`);
     assert.match(text, new RegExp(states.replaceAll(".", "\\.")));
     assert.match(text, new RegExp(examples.replaceAll(".", "\\.")));
     assert.match(text, /assets\/screenshots\/drag-layout\.gif/);

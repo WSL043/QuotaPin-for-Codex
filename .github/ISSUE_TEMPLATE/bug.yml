@@ -20,10 +20,10 @@ body:
     validations:
       required: true
   - type: input
-    id: windows
+    id: platform
     attributes:
-      label: Windows version
-      description: Include x64 or ARM64.
+      label: Operating system
+      description: Include the Windows or macOS version and x64, Intel, or Apple silicon.
     validations:
       required: true
   - type: dropdown
@@ -31,7 +31,10 @@ body:
     attributes:
       label: Installation path
       options:
-        - One-line command
+        - Windows one-line command
+        - Downloaded Windows EXE / guided installer
+        - macOS one-line command
+        - Downloaded macOS DMG / Installer app
         - Local source checkout
     validations:
       required: true

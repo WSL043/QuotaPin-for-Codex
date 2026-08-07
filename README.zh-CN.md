@@ -14,7 +14,22 @@
   <img alt="macOS 已通过 CI 验证" src="https://img.shields.io/badge/macOS-CI_已验证-111827?style=flat-square">
   <img alt="数据只在本机" src="https://img.shields.io/badge/数据-只在本机-10b981?style=flat-square">
   <img alt="MIT 许可证" src="https://img.shields.io/badge/许可证-MIT-6366f1?style=flat-square">
+  <a href="https://github.com/WSL043/QuotaPin-for-Codex/releases/latest"><img alt="最新版本" src="https://img.shields.io/github/v/release/WSL043/QuotaPin-for-Codex?display_name=tag&sort=semver&style=flat-square"></a>
+  <a href="https://github.com/WSL043/QuotaPin-for-Codex/actions/workflows/check.yml"><img alt="CI 状态" src="https://img.shields.io/github/actions/workflow/status/WSL043/QuotaPin-for-Codex/check.yml?branch=main&style=flat-square&label=CI"></a>
 </p>
+
+<p align="center">
+  <img src="assets/screenshots/product-zh-CN.png" width="960" alt="账户菜单未打开时，QuotaPin 已在 Codex 账户栏显示百分之一剩余额度">
+</p>
+
+**最新稳定版：v1.0.3。** Windows 已实测；macOS 安装包已通过 CI，仍等待登录状态的 Mac 实机验收。
+
+| 平台 | 当前状态 |
+|---|---|
+| Windows 11 x64 | ✅ 稳定 / 已验证 |
+| Windows 10 x64（2004+） | ⚠️ 尽力兼容 |
+| Windows ARM64 | ❌ 不支持 |
+| macOS Apple 芯片 / Intel | 🧪 已公开安装包 / CI 已验证 |
 
 ## 快速开始
 
@@ -34,9 +49,20 @@ curl -fsSL https://raw.githubusercontent.com/WSL043/QuotaPin-for-Codex/main/inst
 
 更习惯双击安装？打开[最新稳定版](https://github.com/WSL043/QuotaPin-for-Codex/releases/latest)。Windows 运行带版本号的 `.exe`；macOS 打开通用 `.dmg`，再双击 **QuotaPin Installer**。
 
-<p align="center">
-  <img src="assets/screenshots/product-zh-CN.png" width="960" alt="账户菜单未打开时，QuotaPin 已在 Codex 账户栏显示百分之一剩余额度">
-</p>
+两种方式使用的是同一份平台安装包。PowerShell 采用安静的 watcher 模式，不显示托盘图标；Windows EXE 的引导安装会启用托盘伴侣。引导脚本只解析不可变的 GitHub Release，核对 GitHub SHA-256 摘要与安装包身份，再按当前用户安装，不需要提权。详见[安全说明](SECURITY.md)。
+
+<details>
+<summary>把引导脚本本身也固定到 v1.0.3</summary>
+
+```powershell
+irm https://raw.githubusercontent.com/WSL043/QuotaPin-for-Codex/v1.0.3/install.ps1 | iex
+```
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/WSL043/QuotaPin-for-Codex/v1.0.3/install-macos.sh | bash
+```
+
+</details>
 
 > [!IMPORTANT]
 > QuotaPin 是非官方社区项目，与 OpenAI 没有隶属、认可或支持关系。

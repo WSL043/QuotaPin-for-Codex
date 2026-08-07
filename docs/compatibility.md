@@ -2,10 +2,15 @@
 
 | QuotaPin | Codex Desktop | Platform | Status |
 |---|---|---|---|
-| 1.0.3 | CI package lifecycle | Windows 11 runner; macOS 15/26 native arm64 and x86_64 runners | Cross-platform stable package. The release gate builds one Windows EXE and one universal macOS DMG, then exercises the exact final DMG on all four macOS runner combinations before publishing. Real signed-in Codex account-row and Gatekeeper acceptance on Mac remains pending. |
-| 1.0.2 | 26.803.5235.0 x64 | Windows 11 10.0.26200 | The immutable Latest release contains one `QuotaPin-1.0.2.exe` asset (23,439,621 bytes; SHA-256 `329bbd698ca8a4207151c431004e8d481ccb133cc00da6d64a35463748f377ab`). Both the public one-line command and an independent download of that EXE completed installation and uninstall acceptance. Command mode used one hidden watcher and no tray; guided mode used one tray and no watcher. Both removals cleared the install root, startup entry, Apps entry, and QuotaPin processes while the Codex root PID and start time remained unchanged. |
+| 1.0.3 | CI package lifecycle | Windows 11 runner; macOS 15/26 native arm64 and x86_64 runners | 🧪 CI validated; real-Mac acceptance pending |
+| 1.0.2 | 26.803.5235.0 x64 | Windows 11 10.0.26200 | ✅ Verified |
 
 The one-line command accepts x64 Windows 10 version 2004 (build 19041) and later. Current end-to-end evidence is from Windows 11, so Windows 10 remains best-effort until a real-device report is recorded. Windows ARM64 is not supported.
+
+## Published artifact evidence
+
+- **1.0.3:** the cross-platform release gate builds one Windows EXE and one universal macOS DMG, then exercises the exact final DMG under macOS 15 and macOS 26 on native arm64 and x86_64 runners before publishing. Real signed-in Codex account-row and Gatekeeper acceptance on Mac remains pending.
+- **1.0.2:** the immutable release contains `QuotaPin-1.0.2.exe` (23,439,621 bytes; SHA-256 `329bbd698ca8a4207151c431004e8d481ccb133cc00da6d64a35463748f377ab`). Both the public one-line command and an independent EXE download completed install and uninstall acceptance. Command mode used one hidden watcher and no tray; guided mode used one tray and no watcher. Both removals cleared QuotaPin-owned files, startup entries, the Apps entry, and processes while the Codex root PID and start time remained unchanged.
 
 ## Automated evidence
 

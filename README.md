@@ -14,7 +14,22 @@
   <img alt="macOS CI validated" src="https://img.shields.io/badge/macOS-CI_validated-111827?style=flat-square">
   <img alt="Local only and zero telemetry" src="https://img.shields.io/badge/data-local_only-10b981?style=flat-square">
   <img alt="MIT license" src="https://img.shields.io/badge/license-MIT-6366f1?style=flat-square">
+  <a href="https://github.com/WSL043/QuotaPin-for-Codex/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/WSL043/QuotaPin-for-Codex?display_name=tag&sort=semver&style=flat-square"></a>
+  <a href="https://github.com/WSL043/QuotaPin-for-Codex/actions/workflows/check.yml"><img alt="CI status" src="https://img.shields.io/github/actions/workflow/status/WSL043/QuotaPin-for-Codex/check.yml?branch=main&style=flat-square&label=CI"></a>
 </p>
+
+<p align="center">
+  <img src="assets/screenshots/product-en.png" width="960" alt="QuotaPin showing one percent remaining in the closed Codex account row">
+</p>
+
+**Latest stable: v1.0.3.** Windows is verified; the macOS package is CI-validated and awaiting signed-in real-Mac acceptance.
+
+| Platform | Status |
+|---|---|
+| Windows 11 x64 | ✅ Stable / verified |
+| Windows 10 x64 (2004+) | ⚠️ Best effort |
+| Windows ARM64 | ❌ Not supported |
+| macOS Apple silicon / Intel | 🧪 Public package / CI validated |
 
 ## Quick Start
 
@@ -34,9 +49,20 @@ Both commands install the latest stable version. Launch Codex from its usual ico
 
 Prefer a normal installer? [Open the latest stable release](https://github.com/WSL043/QuotaPin-for-Codex/releases/latest). On Windows, run the versioned `.exe`. On macOS, open the universal `.dmg`, then double-click **QuotaPin Installer**.
 
-<p align="center">
-  <img src="assets/screenshots/product-en.png" width="960" alt="QuotaPin showing one percent remaining in the closed Codex account row">
-</p>
+Both methods use the same platform package. PowerShell installs the quiet watcher without a tray icon; the guided Windows EXE adds the tray companion. The bootstraps resolve an immutable GitHub Release, verify its GitHub SHA-256 digest and package identity, then install per user without elevation. See [Security](SECURITY.md).
+
+<details>
+<summary>Pin the bootstrap itself to v1.0.3</summary>
+
+```powershell
+irm https://raw.githubusercontent.com/WSL043/QuotaPin-for-Codex/v1.0.3/install.ps1 | iex
+```
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/WSL043/QuotaPin-for-Codex/v1.0.3/install-macos.sh | bash
+```
+
+</details>
 
 > [!IMPORTANT]
 > QuotaPin is an unofficial community project. It is not affiliated with, endorsed by, or supported by OpenAI.

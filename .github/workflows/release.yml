@@ -388,6 +388,15 @@ jobs:
             (Resolve-Path -LiteralPath $path).Path
           })
 
+          $publishedNotesPath = Join-Path $env:RUNNER_TEMP "QuotaPin-$version-release-notes.md"
+          Copy-Item -LiteralPath $notesPath -Destination $publishedNotesPath -Force
+          Add-Content -LiteralPath $publishedNotesPath -Encoding utf8 -Value "`n## SHA-256`n"
+          foreach ($asset in $assets) {
+            $hash = (Get-FileHash -LiteralPath $asset -Algorithm SHA256).Hash.ToLowerInvariant()
+            Add-Content -LiteralPath $publishedNotesPath -Encoding utf8 -Value "- ``$(Split-Path -Leaf $asset)``: ``$hash``"
+          }
+          $notesPath = $publishedNotesPath
+
           $existingJson = & gh release view $tag --json isDraft,assets 2>$null
           if ($LASTEXITCODE -eq 0) {
             $existing = $existingJson | ConvertFrom-Json

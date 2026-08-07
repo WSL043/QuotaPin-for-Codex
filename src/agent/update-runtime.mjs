@@ -15,7 +15,7 @@ function windowsPackageName(version) {
 }
 
 function macPackageName(version) {
-  return `QuotaPin-macOS-${version}.tar.gz`;
+  return `QuotaPin-macOS-${version}.dmg`;
 }
 
 function parseVersion(value) {

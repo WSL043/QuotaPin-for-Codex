@@ -46,6 +46,9 @@ for binary in QuotaPin.Agent QuotaPin.Mac; do
 done
 
 VERSION="$(tr -d '\r\n' < "$OUTPUT_ROOT/VERSION")"
+BUNDLE_SHORT_VERSION="${VERSION%%-*}"
+BUNDLE_VERSION="$BUNDLE_SHORT_VERSION"
+if [[ "$VERSION" =~ -beta\.([0-9]+)$ ]]; then BUNDLE_VERSION="$BUNDLE_SHORT_VERSION.${BASH_REMATCH[1]}"; fi
 [[ "$($OUTPUT_ROOT/QuotaPin.Agent --agent-version)" == "$VERSION" ]]
 [[ "$($OUTPUT_ROOT/QuotaPin.Mac --launcher-version)" == "$VERSION" ]]
 node -e 'const value=JSON.parse(process.argv[1]); if(!value.ok||!value.oneHandoffBudget) process.exit(1)' "$($OUTPUT_ROOT/QuotaPin.Mac --self-test)"
@@ -56,13 +59,47 @@ node -e 'const value=JSON.parse(process.argv[1]); if(!value.ok||!value.oneHandof
     QuotaPin.Agent QuotaPin.Mac config.default.json install.sh uninstall.sh update.sh > MANIFEST.sha256
 )
 
-PACKAGE_PARENT="$ROOT/dist/macos-package"
-PACKAGE_NAME="QuotaPin-macOS-$VERSION"
-PACKAGE_ROOT="$PACKAGE_PARENT/$PACKAGE_NAME"
-ARCHIVE="$ROOT/dist/$PACKAGE_NAME.tar.gz"
-rm -rf "$PACKAGE_PARENT" "$ARCHIVE"
-mkdir -p "$PACKAGE_ROOT"
-cp -R "$OUTPUT_ROOT/." "$PACKAGE_ROOT/"
-COPYFILE_DISABLE=1 tar -C "$PACKAGE_PARENT" -czf "$ARCHIVE" "$PACKAGE_NAME"
-tar -tzf "$ARCHIVE" >/dev/null
-echo "$ARCHIVE"
+IMAGE_ROOT="$ROOT/dist/macos-image"
+APP_ROOT="$IMAGE_ROOT/QuotaPin Installer.app"
+CONTENTS="$APP_ROOT/Contents"
+PAYLOAD="$CONTENTS/Resources/payload"
+IMAGE="$ROOT/dist/QuotaPin-macOS-$VERSION.dmg"
+rm -rf "$IMAGE_ROOT" "$IMAGE"
+mkdir -p "$CONTENTS/MacOS" "$PAYLOAD"
+cp -R "$OUTPUT_ROOT/." "$PAYLOAD/"
+cp "$ROOT/scripts/macos/installer-app.sh" "$CONTENTS/MacOS/QuotaPin Installer"
+cp "$OUTPUT_ROOT/README.txt" "$IMAGE_ROOT/README.txt"
+chmod 755 "$CONTENTS/MacOS/QuotaPin Installer"
+ICONSET="$IMAGE_ROOT/QuotaPin.iconset"
+mkdir -p "$ICONSET"
+for specification in "16 icon_16x16.png" "32 icon_16x16@2x.png" "32 icon_32x32.png" "64 icon_32x32@2x.png" "128 icon_128x128.png" "256 icon_128x128@2x.png" "256 icon_256x256.png" "512 icon_256x256@2x.png" "512 icon_512x512.png" "1024 icon_512x512@2x.png"; do
+  size="${specification%% *}"
+  name="${specification#* }"
+  sips -s format png -z "$size" "$size" "$ROOT/assets/quotapin-icon.png" --out "$ICONSET/$name" >/dev/null
+done
+iconutil -c icns "$ICONSET" -o "$CONTENTS/Resources/QuotaPin.icns"
+rm -rf "$ICONSET"
+cat > "$CONTENTS/Info.plist" <<EOF
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+  <key>CFBundleDevelopmentRegion</key><string>en</string>
+  <key>CFBundleDisplayName</key><string>QuotaPin Installer</string>
+  <key>CFBundleExecutable</key><string>QuotaPin Installer</string>
+  <key>CFBundleIdentifier</key><string>io.github.wsl043.quotapin.installer</string>
+  <key>CFBundleIconFile</key><string>QuotaPin</string>
+  <key>CFBundleInfoDictionaryVersion</key><string>6.0</string>
+  <key>CFBundleName</key><string>QuotaPin Installer</string>
+  <key>CFBundlePackageType</key><string>APPL</string>
+  <key>CFBundleShortVersionString</key><string>$BUNDLE_SHORT_VERSION</string>
+  <key>CFBundleVersion</key><string>$BUNDLE_VERSION</string>
+  <key>LSMinimumSystemVersion</key><string>13.0</string>
+  <key>LSUIElement</key><true/>
+</dict></plist>
+EOF
+plutil -lint "$CONTENTS/Info.plist" >/dev/null
+codesign --force --sign - "$APP_ROOT"
+codesign --verify --strict --deep "$APP_ROOT"
+hdiutil create -quiet -ov -format UDZO -volname "QuotaPin $VERSION" -srcfolder "$IMAGE_ROOT" "$IMAGE"
+[[ -s "$IMAGE" ]]
+echo "$IMAGE"

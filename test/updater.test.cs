@@ -60,7 +60,7 @@ namespace QuotaPin.Tray
             Require(stableSelection != null && stableSelection.Version == "1.0.1", "stable channel must ignore prereleases");
             Require(stableSelection.PackageSha256 == Digest.Substring("sha256:".Length), "the GitHub digest must be retained");
 
-            var macAsset = "{\"name\":\"QuotaPin-macOS-1.0.1.tar.gz\",\"browser_download_url\":\"https://github.com/WSL043/QuotaPin-for-Codex/releases/download/v1.0.1/QuotaPin-macOS-1.0.1.tar.gz\",\"digest\":\"" + Digest + "\",\"size\":42000000}";
+            var macAsset = "{\"name\":\"QuotaPin-macOS-1.0.1.dmg\",\"browser_download_url\":\"https://github.com/WSL043/QuotaPin-for-Codex/releases/download/v1.0.1/QuotaPin-macOS-1.0.1.dmg\",\"digest\":\"" + Digest + "\",\"size\":42000000}";
             var crossPlatform = Release(
                 "1.0.1",
                 false,

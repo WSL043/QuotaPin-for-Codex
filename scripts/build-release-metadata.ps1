@@ -150,7 +150,7 @@ from the project above.
 Import-BuildSecurityModule
 
 $PackageName = "QuotaPin-$Version.exe"
-$MacPackageName = "QuotaPin-macOS-$Version.tar.gz"
+$MacPackageName = "QuotaPin-macOS-$Version.dmg"
 $Required = @($PackageName, $MacPackageName, 'QuotaPin.Agent.exe', 'QuotaPin.Tray.exe', 'THIRD_PARTY_NOTICES.txt', 'OFFICIAL_SOURCE.txt', 'origin.json')
 foreach ($Name in $Required) {
     if (-not (Test-Path -LiteralPath (Join-Path $OutputRoot $Name))) { throw "Release artifact not found: $Name" }

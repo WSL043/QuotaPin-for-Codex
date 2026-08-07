@@ -9,7 +9,7 @@ const DIGEST = "sha256:0123456789abcdef0123456789abcdef0123456789abcdef012345678
 const release = (version, options = {}) => {
   const tag = `v${version}`;
   const packageName = `QuotaPin-${version}.exe`;
-  const macPackageName = `QuotaPin-macOS-${version}.tar.gz`;
+  const macPackageName = `QuotaPin-macOS-${version}.dmg`;
   const value = {
     tag_name: tag,
     html_url: `https://github.com/WSL043/QuotaPin-for-Codex/releases/tag/${tag}`,

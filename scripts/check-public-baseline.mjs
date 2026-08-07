@@ -89,6 +89,9 @@ if (!macBootstrap.includes("/releases/latest") || !macBootstrap.includes("/relea
 if (!macBootstrap.includes('IMMUTABLE" == "true"') || !macBootstrap.includes('assets.$index.digest')) {
   fail("macOS remote installer lost immutable release or GitHub digest validation");
 }
+if (!macBootstrap.includes('QuotaPin-macOS-$VERSION.dmg') || !macBootstrap.includes('hdiutil attach -quiet -readonly -nobrowse')) {
+  fail("macOS remote installer does not consume the verified read-only disk image");
+}
 
 for (const readme of ["README.md", "README.zh-CN.md", "README.ja.md"]) {
   const text = read(readme);

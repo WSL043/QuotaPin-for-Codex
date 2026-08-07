@@ -19,7 +19,7 @@ export function packageNameForVersion(version) {
 export function macPackageNameForVersion(version) {
   const normalized = String(version ?? "").trim();
   if (!VERSION_PATTERN.test(normalized)) fail("Release package version is invalid.");
-  return `QuotaPin-macOS-${normalized}.tar.gz`;
+  return `QuotaPin-macOS-${normalized}.dmg`;
 }
 
 export function publicReleaseAssets(version) {

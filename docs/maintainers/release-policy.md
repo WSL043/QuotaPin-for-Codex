@@ -16,7 +16,7 @@ Development candidates may be downloaded from GitHub Actions, but they are not G
 - Public stable tags use `vMAJOR.MINOR.PATCH`; public beta tags use `vMAJOR.MINOR.PATCH-beta.N`. Both must be reachable from `origin/main`.
 - Alpha, dev, nightly, preview, RC, and arbitrary `v*` tags are rejected by the release workflow.
 
-The public release page may contain reviewed beta and stable package releases. A cross-platform release exposes one versioned Windows executable and one versioned universal macOS archive; build manifests, checksums, and SBOM evidence stay inside the verified CI handoff. Betas are GitHub prereleases, are never Latest, and require exact-version installation. Development builds stay in Actions. Only stable releases feed the moving Quick Start and default update channel.
+The public release page may contain reviewed beta and stable package releases. A cross-platform release exposes one versioned Windows executable and one versioned universal macOS disk image; build manifests, checksums, and SBOM evidence stay inside the verified CI handoff. Betas are GitHub prereleases, are never Latest, and require exact-version installation. Development builds stay in Actions. Only stable releases feed the moving Quick Start and default update channel.
 
 ## Clean source gate
 

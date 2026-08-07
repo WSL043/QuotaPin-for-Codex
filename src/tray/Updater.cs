@@ -98,7 +98,7 @@ namespace QuotaPin.Tray
             selected = null;
             if (assets == null || (assets.Length != 1 && assets.Length != 2)) return false;
             var windowsName = PackageName(version);
-            var macName = "QuotaPin-macOS-" + version + ".tar.gz";
+            var macName = "QuotaPin-macOS-" + version + ".dmg";
             Dictionary<string, object> mac = null;
             foreach (var value in assets)
             {

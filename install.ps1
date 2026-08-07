@@ -130,7 +130,7 @@ try {
         throw 'GitHub returned a prerelease for the stable QuotaPin install channel.'
     }
     $PackageName = "QuotaPin-$SelectedVersion.exe"
-    $MacPackageName = "QuotaPin-macOS-$SelectedVersion.tar.gz"
+    $MacPackageName = "QuotaPin-macOS-$SelectedVersion.dmg"
     $Assets = @($Release.assets)
     $PackageAssets = @($Assets | Where-Object { [string]$_.name -ceq $PackageName })
     if ($PackageAssets.Count -eq 1) {

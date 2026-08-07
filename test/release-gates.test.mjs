@@ -140,7 +140,7 @@ test("the public asset contract exposes one package per platform and keeps build
   assert.deepEqual(assets, [PUBLIC_PACKAGE, PUBLIC_MAC_PACKAGE]);
   assert.equal(new Set(assets).size, 2);
   assert.match(PUBLIC_PACKAGE, new RegExp(`^QuotaPin-${VERSION.replaceAll(".", "\\.")}\\.exe$`));
-  assert.match(PUBLIC_MAC_PACKAGE, new RegExp(`^QuotaPin-macOS-${VERSION.replaceAll(".", "\\.")}\\.tar\\.gz$`));
+  assert.match(PUBLIC_MAC_PACKAGE, new RegExp(`^QuotaPin-macOS-${VERSION.replaceAll(".", "\\.")}\\.dmg$`));
   assert.ok(assets.every((name) => !/\.(?:zip|json|sha256)$/i.test(name)));
 });
 

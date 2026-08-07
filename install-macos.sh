@@ -64,7 +64,13 @@ if [[ -n "$REQUESTED_VERSION" && ! "$REQUESTED_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9
 fi
 
 TEMP_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/quotapin-macos.XXXXXX")"
-cleanup() { rm -rf "$TEMP_ROOT"; }
+MOUNT_ROOT="$TEMP_ROOT/mount"
+mkdir -p "$MOUNT_ROOT"
+ATTACHED=false
+cleanup() {
+  if [[ "$ATTACHED" == true ]]; then hdiutil detach -quiet "$MOUNT_ROOT" >/dev/null 2>&1 || true; fi
+  rm -rf "$TEMP_ROOT"
+}
 trap cleanup EXIT INT TERM
 RELEASE_JSON="$TEMP_ROOT/release.json"
 if [[ -n "$REQUESTED_VERSION" ]]; then
@@ -91,7 +97,7 @@ fi
 write_update_result started
 if [[ "$WRITE_RESULT" == true ]]; then trap report_update_failure ERR; fi
 
-ASSET_NAME="QuotaPin-macOS-$VERSION.tar.gz"
+ASSET_NAME="QuotaPin-macOS-$VERSION.dmg"
 WINDOWS_ASSET_NAME="QuotaPin-$VERSION.exe"
 ASSET_URL=""
 ASSET_DIGEST=""
@@ -139,18 +145,17 @@ curl --fail --show-error --location --retry 6 --retry-all-errors --connect-timeo
 ACTUAL_DIGEST="sha256:$(shasum -a 256 "$ARCHIVE" | awk '{print $1}')"
 [[ "$ACTUAL_DIGEST" == "$ASSET_DIGEST" ]] || { echo "The macOS package SHA-256 does not match GitHub." >&2; exit 4; }
 
-while IFS= read -r entry; do
-  case "$entry" in
-    /*|../*|*/../*|*/..) echo "Unsafe archive path: $entry" >&2; exit 4 ;;
-  esac
-done < <(tar -tzf "$ARCHIVE")
-tar -xzf "$ARCHIVE" -C "$TEMP_ROOT"
-PACKAGE_ROOT="$TEMP_ROOT/QuotaPin-macOS-$VERSION"
+hdiutil attach -quiet -readonly -nobrowse -mountpoint "$MOUNT_ROOT" "$ARCHIVE"
+ATTACHED=true
+APP_ROOT="$MOUNT_ROOT/QuotaPin Installer.app"
+PACKAGE_ROOT="$APP_ROOT/Contents/Resources/payload"
 [[ -d "$PACKAGE_ROOT" && ! -L "$PACKAGE_ROOT" ]] || { echo "The macOS package root is invalid." >&2; exit 4; }
 if find "$PACKAGE_ROOT" -type l -print -quit | grep -q .; then
   echo "The macOS package contains an unexpected symbolic link." >&2
   exit 4
 fi
+plutil -lint "$APP_ROOT/Contents/Info.plist" >/dev/null
+codesign --verify --strict --deep "$APP_ROOT"
 INSTALL_ARGUMENTS=(--source "$PACKAGE_ROOT")
 if [[ -n "$CODEX_APP" ]]; then INSTALL_ARGUMENTS+=(--codex-app "$CODEX_APP"); fi
 "$PACKAGE_ROOT/install.sh" "${INSTALL_ARGUMENTS[@]}"

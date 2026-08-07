@@ -36,7 +36,7 @@ npm ci
 ./scripts/macos/test-lifecycle.sh dist/macos-native
 ```
 
-`install-macos.sh` is the stable/default remote bootstrap once an owner-approved release contains `QuotaPin-macOS-VERSION.tar.gz`. It verifies the immutable GitHub release and asset digest. The installed universal package needs neither Node.js nor Homebrew, owns one user LaunchAgent, preserves `config.json` on update, and never interrupts a Codex session that was already open during installation.
+`install-macos.sh` is the stable/default remote bootstrap once an owner-approved release contains `QuotaPin-macOS-VERSION.dmg`. It verifies the immutable GitHub release and asset digest, mounts the image read-only, and runs the same payload as `QuotaPin Installer.app`. The installed universal package needs neither Node.js nor Homebrew, owns one user LaunchAgent, preserves `config.json` on update, and never interrupts a Codex session that was already open during installation.
 
 Before reporting success, verify all of the following:
 

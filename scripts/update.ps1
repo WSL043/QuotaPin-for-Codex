@@ -156,7 +156,7 @@ try {
     }
     $Assets = @($Release.assets)
     $PackageName = "QuotaPin-$Version.exe"
-    $MacPackageName = "QuotaPin-macOS-$Version.tar.gz"
+    $MacPackageName = "QuotaPin-macOS-$Version.dmg"
     $PackageAssets = @($Assets | Where-Object { [string]$_.name -ceq $PackageName })
     if ($PackageAssets.Count -ne 1) { throw "The selected release does not contain exactly one $PackageName asset." }
     if ($Assets.Count -eq 2) {

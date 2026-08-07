@@ -127,7 +127,7 @@ jobs:
           X64="dist/thin/QuotaPin-macOS-release-x86_64-${{ github.sha }}"
           ./scripts/macos/package-universal.sh "$ARM" "$X64" dist/macos-universal
           VERSION="$(tr -d '\r\n' < VERSION)"
-          PACKAGE="dist/QuotaPin-macOS-$VERSION.tar.gz"
+          PACKAGE="dist/QuotaPin-macOS-$VERSION.dmg"
           test -s "$PACKAGE"
           for binary in QuotaPin.Agent QuotaPin.Mac; do
             ARCHS="$(lipo -archs "dist/macos-universal/$binary")"
@@ -143,11 +143,11 @@ jobs:
           if-no-files-found: error
           retention-days: 2
           compression-level: 0
-          path: dist/QuotaPin-macOS-*.tar.gz
+          path: dist/QuotaPin-macOS-*.dmg
       - name: Record universal release evidence
         run: |
           VERSION="$(tr -d '\r\n' < VERSION)"
-          PACKAGE="dist/QuotaPin-macOS-$VERSION.tar.gz"
+          PACKAGE="dist/QuotaPin-macOS-$VERSION.dmg"
           {
             echo "### macOS universal release candidate"
             echo "- Package SHA-256: \`$(shasum -a 256 "$PACKAGE" | awk '{print $1}')\`"
@@ -188,7 +188,7 @@ jobs:
       - name: Exercise the exact release package on native hardware
         run: |
           VERSION="$(tr -d '\r\n' < VERSION)"
-          PACKAGE="dist/final/QuotaPin-macOS-$VERSION.tar.gz"
+          PACKAGE="dist/final/QuotaPin-macOS-$VERSION.dmg"
           test "$(shasum -a 256 "$PACKAGE" | awk '{print $1}')" = "${{ needs.macos-universal-release.outputs.package-sha256 }}"
           ./scripts/macos/test-universal-package.sh "$PACKAGE" "${{ matrix.arch }}"
       - name: Record final release acceptance

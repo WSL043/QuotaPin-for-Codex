@@ -548,6 +548,105 @@ test("Legacy and Beta switch one reversible account-row and gesture contract", {
   assert.ok(Math.abs(legacyGeometry.right - 220) <= .5, JSON.stringify(legacyGeometry));
 });
 
+test("live sidebar resizing uses a frame-coalesced layout path without full renderer churn", { skip: !canRun }, async () => {
+  await client.call("Emulation.setDeviceMetricsOverride", { width: 900, height: 640, deviceScaleFactor: 1, mobile: false });
+  await navigate("en");
+  await openPanel();
+  await client.evaluate(`document.querySelector('[data-editor-mode="advanced"]').click()`);
+  await client.evaluate(`document.querySelector('[data-config-key="accountRowMode"] [data-quick-value="beta"]').click()`);
+  await waitFor(() => client.evaluate(`getComputedStyle(document.querySelector('#native-help')).display === 'none'`));
+  await client.evaluate(`[...document.querySelectorAll('#quotapin-profile-editor button')].find(button=>button.textContent==='Done').click()`);
+  await waitFor(() => client.evaluate(`!document.querySelector('#quotapin-profile-editor')`));
+  const result = await client.evaluate(`(async () => {
+    const controller = window.__quotaPinController;
+    const before = controller.inspectLayoutRuntime();
+    const footer = document.querySelector('#account-footer');
+    await new Promise((resolve) => {
+      let index = 0;
+      const timer = setInterval(() => {
+        footer.style.width = (260 + (index % 2 === 0 ? index * 2 : index * 2 + 7)) + 'px';
+        index += 1;
+        if (index >= 48) {
+          clearInterval(timer);
+          footer.style.width = '356px';
+          resolve();
+        }
+      }, 4);
+    });
+    await new Promise((resolve) => setTimeout(resolve, 180));
+    const after = controller.inspectLayoutRuntime();
+    const row = document.querySelector('#account').getBoundingClientRect();
+    const visible = [...document.querySelectorAll('[data-quotapin-module]')]
+      .filter((node) => getComputedStyle(node).display !== 'none' && node.getBoundingClientRect().width > 0)
+      .map((node) => ({ id: node.dataset.quotapinModule, rect: node.getBoundingClientRect().toJSON(), transition: getComputedStyle(node).transitionDuration }));
+    visible.sort((left, right) => left.rect.left - right.rect.left);
+    return {
+      before,
+      after,
+      row,
+      visible,
+      contained: visible.every(({ rect }) => rect.left >= row.left - .5 && rect.right <= row.right + .5),
+      separated: visible.every(({ rect }, index) => index === 0 || rect.left >= visible[index - 1].rect.right - .5),
+    };
+  })()`);
+  const eventDelta = result.after.resizeEvents - result.before.resizeEvents;
+  const frameDelta = result.after.resizeFrames - result.before.resizeFrames;
+  assert.ok(eventDelta >= 10, JSON.stringify(result));
+  assert.ok(frameDelta > 0 && frameDelta <= eventDelta, JSON.stringify(result));
+  assert.ok(result.after.renders - result.before.renders <= 1, JSON.stringify(result));
+  assert.equal(result.after.integrityRepairs, result.before.integrityRepairs, JSON.stringify(result));
+  assert.equal(result.contained, true, JSON.stringify(result));
+  assert.equal(result.separated, true, JSON.stringify(result));
+  assert.deepEqual(new Set(result.visible.map(({ transition }) => transition)), new Set(["0s"]));
+});
+
+test("unrelated Codex content mutations do not wake the QuotaPin renderer", { skip: !canRun }, async () => {
+  await navigate("en");
+  const result = await client.evaluate(`(async () => {
+    const controller = window.__quotaPinController;
+    const before = controller.inspectLayoutRuntime();
+    const stream = document.createElement('main');
+    document.body.appendChild(stream);
+    await new Promise((resolve) => setTimeout(resolve, 120));
+    const mounted = controller.inspectLayoutRuntime();
+    for (let index = 0; index < 120; index += 1) {
+      const token = document.createElement('span');
+      token.textContent = 'token-' + index;
+      stream.appendChild(token);
+    }
+    await new Promise((resolve) => setTimeout(resolve, 160));
+    const after = controller.inspectLayoutRuntime();
+    stream.remove();
+    return { before, mounted, after };
+  })()`);
+  assert.equal(result.after.renders, result.mounted.renders, JSON.stringify(result));
+  assert.ok(result.after.ignoredUnrelatedMutations > result.before.ignoredUnrelatedMutations, JSON.stringify(result));
+});
+
+test("the seconds module ticks through the narrow time path instead of full renders", { skip: !canRun }, async () => {
+  await navigate("en");
+  const result = await client.evaluate(`(async () => {
+    const preferences = window.__quotaPinController.preferences;
+    const profile = preferences.profiles.find((item) => item.id === preferences.activeProfile) || preferences.profiles[0];
+    window.quotapinConfigAction(JSON.stringify({
+      actionId: 'targeted-live-seconds',
+      action: { type: 'updateProfile', id: profile.id, patch: { showSeconds: true } },
+    }));
+    await new Promise((resolve) => setTimeout(resolve, 180));
+    const controller = window.__quotaPinController;
+    const seconds = document.querySelector('[data-part="seconds"]');
+    const before = { runtime: controller.inspectLayoutRuntime(), text: seconds.textContent };
+    await new Promise((resolve) => setTimeout(resolve, 1250));
+    const after = { runtime: controller.inspectLayoutRuntime(), text: seconds.textContent };
+    return { before, after };
+  })()`);
+  assert.notEqual(result.after.text, result.before.text, JSON.stringify(result));
+  assert.equal(result.after.runtime.renders, result.before.runtime.renders, JSON.stringify(result));
+  assert.ok(result.after.runtime.liveTimeUpdates > result.before.runtime.liveTimeUpdates, JSON.stringify(result));
+  assert.ok(result.after.runtime.liveTimeLayoutPasses > result.before.runtime.liveTimeLayoutPasses, JSON.stringify(result));
+  assert.equal(result.after.runtime.integrityRepairs, result.before.runtime.integrityRepairs, JSON.stringify(result));
+});
+
 test("the hidden idea route appears only after discovery and opens the public feature form", { skip: !canRun }, async () => {
   await navigate("en");
   await openPanel();
@@ -1256,6 +1355,8 @@ test("a new Agent owner rejects a retired Agent's higher-sequence global deliver
     ownedTimeouts: 0,
     settingsTimeouts: 0,
     framePending: false,
+    resizeFramePending: false,
+    resizeSettlePending: false,
     liveTimeTimer: false,
     profileUsageTimer: false,
     profileUsageRequest: false,

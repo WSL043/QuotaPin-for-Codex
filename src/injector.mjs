@@ -224,13 +224,30 @@ const installScript = String.raw`(() => {
   let effectSignalObserver = null;
   let observedAccountRow = null;
   let observedAccountWidth = 0;
+  let accountResizeFrame = 0;
+  let accountResizeSettleTimer = 0;
+  let accountResizePending = false;
   let responsiveFreeLayout = null;
   let lastLayoutBinding = null;
   let lastLayoutSignature = "";
   let lastLayoutPlan = null;
   let moduleIntegrityObserver = null;
   let integrityBadge = null;
-  const layoutRuntimeMetrics = { renders: 0, reconciliations: 0, skippedReconciliations: 0, integrityRepairs: 0 };
+  const layoutRuntimeMetrics = {
+    renders: 0,
+    reconciliations: 0,
+    skippedReconciliations: 0,
+    integrityRepairs: 0,
+    resizeEvents: 0,
+    resizeFrames: 0,
+    resizeCoalesced: 0,
+    resizeSettles: 0,
+    ignoredResizeIntegrityChecks: 0,
+    ignoredUnrelatedMutations: 0,
+    liveTimeUpdates: 0,
+    liveTimeLayoutPasses: 0,
+    liveTimeFallbackRenders: 0,
+  };
   let lastOverdriveResult = { active: false, model: false, ultra: false, fast: false, effortCode: "", detectionSource: "inactive" };
   const effectMonitorMetrics = { targetedInvalidations: 0, watchdogWakeups: 0 };
   const accountResizeObserver = typeof ResizeObserver === "function"
@@ -354,6 +371,11 @@ const installScript = String.raw`(() => {
     if (row === observedAccountRow) return;
     if (accountChromeBinding?.row && accountChromeBinding.row !== row) restoreAccountChrome();
     accountResizeObserver?.disconnect();
+    if (accountResizeFrame) cancelAnimationFrame(accountResizeFrame);
+    if (accountResizeSettleTimer) clearTimeout(accountResizeSettleTimer);
+    accountResizeFrame = 0;
+    accountResizeSettleTimer = 0;
+    accountResizePending = false;
     observedAccountRow = row instanceof Element ? row : null;
     observedAccountWidth = observedAccountRow?.getBoundingClientRect().width ?? 0;
     responsiveFreeLayout = null;
@@ -382,18 +404,62 @@ const installScript = String.raw`(() => {
     };
   }
 
-  function handleAccountResize() {
+  function reflowAccountLayoutForResize() {
+    if (!isActiveRenderer() || layoutDragActive) return false;
+    const row = observedAccountRow;
+    const badge = document.getElementById(badgeId);
+    if (!(row instanceof HTMLElement) || !row.isConnected || !(badge instanceof HTMLElement) || badge.parentElement !== row) return false;
+    const captured = captureResponsiveFreeLayout(row);
+    if (captured) responsiveFreeLayout = captured;
+    const view = viewWithOptimisticLayout(state.view ?? {});
+    const solved = paintPositionedModuleLayout(row, badge, view.layout, { resizing: true });
+    if (!solved) return false;
+    lastLayoutBinding = captureAccountBinding(row, badge);
+    lastLayoutPlan = committedLayoutPlan(row, badge, solved);
+    lastLayoutSignature = layoutInputSignature(row, badge, view.layout);
+    layoutRuntimeMetrics.reconciliations += 1;
+    return true;
+  }
+
+  function flushAccountResizeFrame() {
+    accountResizeFrame = 0;
+    if (!accountResizePending || !isActiveRenderer()) return;
+    layoutRuntimeMetrics.resizeFrames += 1;
+    if (!reflowAccountLayoutForResize()) schedule(undefined, true);
+  }
+
+  function settleAccountResize() {
+    accountResizeSettleTimer = 0;
+    if (!isActiveRenderer()) return;
+    if (accountResizeFrame) {
+      accountResizeSettleTimer = setTimeout(settleAccountResize, 32);
+      return;
+    }
+    accountResizePending = false;
+    layoutRuntimeMetrics.resizeSettles += 1;
+    const badge = document.getElementById(badgeId);
+    if (!modulePresentationDrifted(badge)) return;
+    layoutRuntimeMetrics.integrityRepairs += 1;
+    schedule(undefined, true);
+  }
+
+  function handleAccountResize(entries = []) {
     if (!isActiveRenderer()) return;
     const row = observedAccountRow;
     if (!(row instanceof Element) || !row.isConnected) return;
-    const width = row.getBoundingClientRect().width;
+    const entry = entries.find((candidate) => candidate.target === row);
+    const borderSize = Array.isArray(entry?.borderBoxSize) ? entry.borderBoxSize[0] : entry?.borderBoxSize;
+    const width = Number(borderSize?.inlineSize) || row.getBoundingClientRect().width;
     if (!Number.isFinite(width) || width <= 0) return;
     const changed = observedAccountWidth > 0 && Math.abs(width - observedAccountWidth) > .5;
     observedAccountWidth = width;
     if (!changed) return;
-    const captured = captureResponsiveFreeLayout(row);
-    if (captured) responsiveFreeLayout = captured;
-    schedule(undefined, true);
+    layoutRuntimeMetrics.resizeEvents += 1;
+    accountResizePending = true;
+    if (accountResizeFrame) layoutRuntimeMetrics.resizeCoalesced += 1;
+    else accountResizeFrame = requestAnimationFrame(flushAccountResizeFrame);
+    if (accountResizeSettleTimer) clearTimeout(accountResizeSettleTimer);
+    accountResizeSettleTimer = setTimeout(settleAccountResize, 96);
   }
 
   function captureAccountBinding(row, badge) {
@@ -846,10 +912,51 @@ const installScript = String.raw`(() => {
   function refreshLiveTime() {
     liveTimeTimer = 0;
     if (!isActiveRenderer() || document.hidden) return;
-    // Time is state input, not an alternate DOM writer. One renderer commit
-    // updates copy, intrinsic measurements, positions, hover text, and previews
-    // together so a ticking module cannot temporarily diverge from its layout.
-    schedule(undefined, true);
+    if (accountResizePending || layoutDragActive) {
+      liveTimeTimer = setTimeout(refreshLiveTime, 96);
+      return;
+    }
+    const row = observedAccountRow;
+    const badge = document.getElementById(badgeId);
+    if (!(row instanceof HTMLElement) || !row.isConnected || !(badge instanceof HTMLElement) || badge.parentElement !== row) {
+      layoutRuntimeMetrics.liveTimeFallbackRenders += 1;
+      schedule(undefined, true);
+      return;
+    }
+    const view = viewWithOptimisticLayout(state.view ?? {});
+    const liveCopy = liveQuotaCopy(view);
+    const usageCopy = profileUsageCopy();
+    const modules = findAccountModules(row, badge);
+    const moduleMode = view.displayMode !== "template";
+    const nextCopy = moduleMode
+      ? {
+          countdown: liveCopy.parts?.countdown ?? "--",
+          relative: liveCopy.parts?.relative ?? "--",
+          seconds: liveCopy.parts?.seconds ?? "--:--:--",
+          date: liveCopy.parts?.date ?? "--",
+          reset: liveCopy.parts?.reset ?? "--",
+        }
+      : { value: liveCopy.text ?? "--%" };
+    let layoutChanged = false;
+    for (const [module, text] of Object.entries(nextCopy)) {
+      if (!(modules[module] instanceof HTMLElement) || modules[module].textContent === text) continue;
+      modules[module].textContent = text;
+      layoutChanged = true;
+    }
+    if (layoutChanged) {
+      reconcileModuleLayout(row, badge, view.layout);
+      layoutRuntimeMetrics.liveTimeLayoutPasses += 1;
+    }
+    const hover = completeHoverCopy(liveCopy, usageCopy);
+    badge.title = hover;
+    for (const module of layoutModules) if (modules[module] instanceof HTMLElement) modules[module].title = hover;
+    const bar = badge.querySelector('[data-part="bar"]');
+    if (bar instanceof HTMLElement) bar.title = hover;
+    const accessibleValue = view.showValue === false ? view.severity : liveCopy.text;
+    badge.setAttribute("aria-label", t("Codex remaining quota") + (accessibleValue ? ": " + accessibleValue : ""));
+    paintQuickPreview?.();
+    layoutRuntimeMetrics.liveTimeUpdates += 1;
+    armLiveTimeTimer(view);
   }
 
   function findAccountModules(row, badge) {
@@ -3915,6 +4022,10 @@ const installScript = String.raw`(() => {
     if (!integrityBadge) return;
     moduleIntegrityObserver = new MutationObserver(() => {
       if (disposed || window.__quotaPinController !== controller) return;
+      if (accountResizePending || accountResizeFrame) {
+        layoutRuntimeMetrics.ignoredResizeIntegrityChecks += 1;
+        return;
+      }
       const currentBadge = document.getElementById(badgeId);
       if (!modulePresentationDrifted(currentBadge)) return;
       layoutRuntimeMetrics.integrityRepairs += 1;
@@ -3942,12 +4053,36 @@ const installScript = String.raw`(() => {
     frame = setTimeout(render, 80);
   }
 
+  function mutationNodeTouchesRoot(node, root) {
+    if (!(root instanceof Element) || !(node instanceof Node)) return false;
+    if (node === root || root.contains(node)) return true;
+    return node instanceof Element && node.contains(root);
+  }
+
+  function mutationsTouchAccountHost(records) {
+    const roots = [observedAccountRow, accountChromeBinding?.surface].filter((node) => node instanceof Element);
+    if (!roots.length || roots.some((root) => !root.isConnected)) return true;
+    const badge = document.getElementById(badgeId);
+    return records.some((record) => {
+      // QuotaPin owns the badge subtree and has a dedicated integrity observer
+      // for hostile writes. Feeding our own text commits back through the host
+      // observer would turn one update into a redundant second render.
+      if (badge instanceof Element && badge.contains(record.target)) return false;
+      return roots.some((root) => {
+        if (root.contains(record.target)) return true;
+        return [...record.addedNodes, ...record.removedNodes].some((node) => mutationNodeTouchesRoot(node, root));
+      });
+    });
+  }
+
   const observer = new MutationObserver((records) => {
     if (!isActiveRenderer()) return;
-    if (mutationsReplaceEffectSignal(records)) {
+    const effectSignalReplaced = mutationsReplaceEffectSignal(records);
+    if (effectSignalReplaced) {
       bindEffectSignalRoot();
     }
-    schedule();
+    if (effectSignalReplaced || mutationsTouchAccountHost(records)) schedule();
+    else layoutRuntimeMetrics.ignoredUnrelatedMutations += records.length;
   });
   observer.observe(document.documentElement, {
     childList: true,
@@ -4096,6 +4231,8 @@ const installScript = String.raw`(() => {
         ownedTimeouts: ownedTimeouts.size,
         settingsTimeouts: settingsTimeouts.size,
         framePending: Boolean(frame || immediateRenderQueued),
+        resizeFramePending: Boolean(accountResizeFrame),
+        resizeSettlePending: Boolean(accountResizeSettleTimer),
         liveTimeTimer: Boolean(liveTimeTimer),
         profileUsageTimer: Boolean(profileUsageTimer),
         profileUsageRequest: Boolean(profileUsageRequest),
@@ -4223,6 +4360,11 @@ const installScript = String.raw`(() => {
       };
       safely(() => observer.disconnect());
       safely(() => accountResizeObserver?.disconnect());
+      if (accountResizeFrame) safely(() => cancelAnimationFrame(accountResizeFrame));
+      if (accountResizeSettleTimer) safely(() => clearTimeout(accountResizeSettleTimer));
+      accountResizeFrame = 0;
+      accountResizeSettleTimer = 0;
+      accountResizePending = false;
       safely(() => moduleIntegrityObserver?.disconnect());
       moduleIntegrityObserver = null;
       integrityBadge = null;

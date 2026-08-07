@@ -11,7 +11,7 @@ The one-line command accepts x64 Windows 10 version 2004 (build 19041) and later
 
 ## Published artifact evidence
 
-- **1.1.0-beta.1:** Legacy/Beta switching, reversible Help suppression, freed-width layout, full-footer short/hold classification, and fail-closed fallback are covered by the isolated production renderer. It remains a prerelease until live Codex acceptance.
+- **1.1.0-beta.1:** Legacy/Beta switching, reversible Help suppression, freed-width layout, full-footer short/hold classification, and fail-closed fallback are covered by the isolated production renderer. High-frequency sidebar resizing is frame-bounded and position-only; unrelated Codex content and live countdown ticks do not enter the full-render path. It remains a prerelease until live Codex acceptance.
 - **1.0.4:** the release gate builds `QuotaPin-1.0.4.exe` and `QuotaPin-macOS-1.0.4.dmg`, then validates the exact platform packages before publication. It is the clean stable baseline; withdrawn earlier releases are not part of its supported update matrix.
 - **1.0.3:** cross-platform package CI passed, but the two-asset publication exposed an incompatibility in the 1.0.2 updater and was withdrawn from public downloads.
 - **1.0.2:** Windows install and uninstall acceptance passed, but its exact-one-asset update filter could not cross into the first multi-platform release. It was withdrawn when 1.0.4 became the new clean baseline.
@@ -22,6 +22,7 @@ The one-line command accepts x64 Windows 10 version 2004 (build 19041) and later
 - App Server reads are single-flight; a response made stale by a newer quota notification is rejected before it can reach the renderer.
 - Complete renderer states carry monotonic delivery sequences. A 240-cycle Chromium stress case deliberately delivers an older value and ten disabled modules after each current state; every stale state is rejected, while a newer control state proves the detector can observe the same flash when it is legitimately accepted.
 - Unchanged CDP target polls and unchanged ten-second local token scans do not rebroadcast the renderer document. A replacement Agent receives a distinct renderer instance id, so same-version hot-resume replaces old code without restarting Codex.
+- A 48-step Chromium sidebar-resize stress case commits no more than one position-only layout per observed frame, performs no integrity repair, and triggers at most one settling full render. A separate streaming-content case proves 120 unrelated DOM additions trigger zero QuotaPin renders; the seconds module advances through its narrow clock path without a full render.
 - The badge attaches only to the unique account row and stays inside its visible boundary.
 - Hidden modules keep their saved anchors; a single visible name, value, date, or seconds module retains its requested horizontal position.
 - Quick exposes one smart horizontal drag behavior: the grabbed module tracks the pointer, displaced neighbours use a short position-only spring, and exact drops retain small left, center, right, and adjacent-module alignment zones; every visible module is vertically centered.

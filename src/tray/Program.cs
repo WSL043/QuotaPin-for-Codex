@@ -18,8 +18,8 @@ using Microsoft.Win32;
 [assembly: AssemblyCompany("QuotaPin contributors")]
 [assembly: AssemblyProduct("QuotaPin")]
 [assembly: AssemblyCopyright("Copyright 2026 QuotaPin contributors")]
-[assembly: AssemblyVersion("1.1.0.1")]
-[assembly: AssemblyFileVersion("1.1.0.1")]
+[assembly: AssemblyVersion("1.1.0.0")]
+[assembly: AssemblyFileVersion("1.1.0.0")]
 
 namespace QuotaPin.Tray
 {

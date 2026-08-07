@@ -19,7 +19,7 @@ import { createTimeStateToolkit } from "./renderer/time-state.mjs";
 import { createCodeConfigStateToolkit } from "./renderer/code-config-state.mjs";
 import { createProfileUsageStateToolkit } from "./renderer/profile-usage-state.mjs";
 
-const VERSION = "1.1.0-beta.1";
+const VERSION = "1.1.0";
 const SOURCE_REPOSITORY = "https://github.com/WSL043/QuotaPin-for-Codex";
 const BUILD_COMMIT = "__QUOTAPIN_BUILD_COMMIT__";
 const MAIN_TARGET_URL = "app://-/index.html";
@@ -111,7 +111,7 @@ const installScript = String.raw`(() => {
     nextRefreshDelay, shouldRefreshProfileUsage
   } = rendererToolkits.profileUsage();
   delete globalThis.__quotaPinRendererToolkits;
-  const version = "1.1.0-beta.1";
+  const version = "1.1.0";
   const instanceId = "__QUOTAPIN_RENDERER_INSTANCE_ID__";
   const sourceRepository = "https://github.com/WSL043/QuotaPin-for-Codex";
   const previous = window.__quotaPinController;
@@ -1781,6 +1781,14 @@ const installScript = String.raw`(() => {
     });
     profileBar.append(profileSelect, profileMenuButton, profileMenu);
 
+    function paintSingleChoice(button, selected) {
+      button.dataset.selected = String(selected);
+      button.style.borderColor = "transparent";
+      button.style.background = selected ? "var(--quotapin-panel-fill-strong)" : "transparent";
+      button.style.color = selected ? "var(--quotapin-panel-text)" : "var(--quotapin-panel-muted)";
+      button.style.boxShadow = "none";
+    }
+
     function tabButton(labelText, selected) {
       const button = document.createElement("button");
       button.type = "button";
@@ -1789,10 +1797,9 @@ const installScript = String.raw`(() => {
       button.tabIndex = selected ? 0 : -1;
       button.textContent = t(labelText);
       Object.assign(button.style, {
-        height: "27px", border: "0", borderRadius: "6px", cursor: "pointer", font: "inherit", fontSize: "11px",
-        color: selected ? "var(--quotapin-panel-text)" : "var(--quotapin-panel-faint)",
-        background: selected ? "var(--quotapin-panel-fill-strong)" : "transparent",
+        height: "27px", border: "1px solid transparent", borderRadius: "6px", cursor: "pointer", font: "inherit", fontSize: "11px",
       });
+      paintSingleChoice(button, selected);
       return button;
     }
 
@@ -1838,8 +1845,7 @@ const installScript = String.raw`(() => {
       for (const [button, selected] of [[quickMode, mode === "quick"], [advancedMode, mode === "advanced"], [codeMode, mode === "code"], [arcadeMode, mode === "arcade"]]) {
         button.setAttribute("aria-selected", String(selected));
         button.tabIndex = selected ? 0 : -1;
-        button.style.color = selected ? "var(--quotapin-panel-text)" : "var(--quotapin-panel-faint)";
-        button.style.background = selected ? "var(--quotapin-panel-fill-strong)" : "transparent";
+        paintSingleChoice(button, selected);
       }
       setLayoutEditing(isLayoutEditingMode(mode));
       paintCodeDraftState();
@@ -1879,7 +1885,10 @@ const installScript = String.raw`(() => {
     function quickChoices(options, current, onChange, columns = options.length) {
       const group = document.createElement("div");
       group.setAttribute("role", "radiogroup");
-      Object.assign(group.style, { display: "grid", gridTemplateColumns: "repeat(" + columns + ", minmax(0, 1fr))", gap: "5px" });
+      Object.assign(group.style, {
+        display: "grid", gridTemplateColumns: "repeat(" + columns + ", minmax(0, 1fr))", gap: "4px",
+        padding: "3px", borderRadius: "9px", background: "var(--quotapin-panel-fill)",
+      });
       const buttons = [];
       for (const option of options) {
         const selected = option.value === current;
@@ -1887,21 +1896,19 @@ const installScript = String.raw`(() => {
         button.type = "button";
         button.setAttribute("role", "radio");
         button.setAttribute("aria-checked", String(selected));
+        button.setAttribute("aria-label", t(option.label));
         button.dataset.quickValue = option.value;
         button.textContent = t(option.label);
         Object.assign(button.style, {
           minWidth: "0", height: "30px", padding: "0 6px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
-          border: selected ? "1px solid var(--quotapin-panel-accent-line)" : "1px solid var(--quotapin-panel-line)", borderRadius: "8px",
-          background: selected ? "var(--quotapin-panel-accent-fill)" : "var(--quotapin-panel-fill)",
-          color: selected ? "var(--quotapin-panel-accent)" : "var(--quotapin-panel-text-soft)", font: "inherit", fontSize: "10px", cursor: "pointer",
+          border: "1px solid transparent", borderRadius: "7px", font: "inherit", fontSize: "10px", cursor: "pointer",
         });
+        paintSingleChoice(button, selected);
         button.addEventListener("click", () => {
           for (const peer of buttons) {
             const active = peer === button;
             peer.setAttribute("aria-checked", String(active));
-            peer.style.borderColor = active ? "var(--quotapin-panel-accent-line)" : "var(--quotapin-panel-line)";
-            peer.style.background = active ? "var(--quotapin-panel-accent-fill)" : "var(--quotapin-panel-fill)";
-            peer.style.color = active ? "var(--quotapin-panel-accent)" : "var(--quotapin-panel-text-soft)";
+            paintSingleChoice(peer, active);
           }
           onChange(option.value);
         });
@@ -2254,8 +2261,14 @@ const installScript = String.raw`(() => {
     mountModuleChips();
     badgeControls.append(elementRows);
 
-    quickCompositionBody.append(badgeControls);
-    quickGrid.append(quickModule("Composition", quickCompositionBody));
+    const quickCompositionHint = document.createElement("div");
+    quickCompositionHint.dataset.quickHelp = "true";
+    quickCompositionHint.textContent = t("Click to show or hide. Drag the live row below to arrange.");
+    Object.assign(quickCompositionHint.style, {
+      color: "var(--quotapin-panel-faint)", fontSize: "9px", lineHeight: "1.4", textAlign: "center",
+    });
+    quickCompositionBody.append(badgeControls, quickCompositionHint);
+    quickGrid.append(quickModule("Visible modules", quickCompositionBody));
 
     function makeModePanel(mode, scroll = true) {
       const section = document.createElement("div");
@@ -2301,13 +2314,17 @@ const installScript = String.raw`(() => {
       section.append(heading, body);
       return { section, body };
     }
-    const detailGroup = visualGroup("Details");
+    const accountGroup = visualGroup("Account row");
+    accountGroup.section.dataset.settingsScope = "global";
+    const detailGroup = visualGroup("Current view");
+    detailGroup.section.dataset.settingsScope = "profile";
     const styleGroup = visualGroup("Colors");
     const behaviorGroup = visualGroup("Alerts");
+    const accountGrid = accountGroup.body;
     const displayGrid = detailGroup.body;
     const styleGrid = styleGroup.body;
     const alertGrid = behaviorGroup.body;
-    visualGrid.append(detailGroup.section, styleGroup.section, behaviorGroup.section);
+    visualGrid.append(accountGroup.section, detailGroup.section, styleGroup.section, behaviorGroup.section);
     const codeGrid = makeModePanel("code", false);
     codeGrid.setAttribute("aria-labelledby", codeMode.id);
     syncPanelModeSize = () => {
@@ -2335,15 +2352,25 @@ const installScript = String.raw`(() => {
       sendAction({ type: "updateAccountRowMode", mode });
     });
     rowModeControl.dataset.configKey = "accountRowMode";
+    rowModeControl.setAttribute("aria-labelledby", "quotapin-account-row-mode-label");
+    rowModeControl.setAttribute("aria-describedby", "quotapin-account-row-mode-hint");
     const rowModeHint = document.createElement("div");
-    rowModeHint.textContent = t("Beta hides Help and gives short/hold gestures the whole footer.");
+    rowModeHint.id = "quotapin-account-row-mode-hint";
+    rowModeHint.textContent = t("Applies to every saved view.") + " " + t("Beta hides Help and gives short/hold gestures the whole footer.");
     Object.assign(rowModeHint.style, { color: "var(--quotapin-panel-faint)", fontSize: "9px", lineHeight: "1.35" });
     rowModeWrap.append(rowModeControl, rowModeHint);
-    const rowModeField = field(t("Account row mode"), rowModeWrap, true);
+    const rowModeField = document.createElement("div");
+    rowModeField.style.gridColumn = "1 / -1";
+    const rowModeCaption = document.createElement("div");
+    rowModeCaption.id = "quotapin-account-row-mode-label";
+    rowModeCaption.textContent = t("Account row mode");
+    Object.assign(rowModeCaption.style, { margin: "0 0 4px", color: "var(--quotapin-panel-muted)", fontSize: "10px", letterSpacing: ".02em" });
+    rowModeField.append(rowModeCaption, rowModeWrap);
     const avatarShapeControl = makeSelect(selectOptions.avatarShape, profile.avatarShape ?? "native");
     avatarShapeControl.addEventListener("change", () => sendAction({ type: "updateProfile", id: profile.id, patch: { avatarShape: avatarShapeControl.value } }));
     const avatarShapeField = field(t("Avatar shape"), avatarShapeControl, true);
-    displayGrid.append(rowModeField, nameField, avatarShapeField);
+    accountGrid.append(rowModeField);
+    displayGrid.append(nameField, avatarShapeField);
 
     const windowControl = makeSelect(selectOptions.window, profile.window);
     windowControl.addEventListener("change", () => sendAction({ type: "updateProfile", id: profile.id, patch: { window: windowControl.value } }));
@@ -2405,12 +2432,34 @@ const installScript = String.raw`(() => {
     identityColorField.style.gridColumn = "1 / -1";
     styleGrid.append(identityColorField);
 
+    const alertControls = {};
+    const alertFields = {};
+    const syncAlertDependencies = () => {
+      const enabled = alertControls.effect?.value !== "none";
+      for (const key of ["effectTarget", "effectAt"]) {
+        const control = alertControls[key];
+        const controlField = alertFields[key];
+        if (!control || !controlField) continue;
+        control.disabled = !enabled;
+        controlField.dataset.inactive = String(!enabled);
+        controlField.style.opacity = enabled ? "1" : ".46";
+        control.title = enabled ? "" : t("Choose an attention effect first.");
+      }
+    };
     for (const [key, labelText] of [["effect", "Attention"], ["effectTarget", "Animate"], ["effectAt", "Start at"]]) {
       const control = makeSelect(selectOptions[key], profile[key]);
       control.dataset.configKey = key;
-      control.addEventListener("change", () => sendAction({ type: "updateProfile", id: profile.id, patch: { [key]: control.value } }));
-      alertGrid.append(field(t(labelText), control, key === "effectAt"));
+      const controlField = field(t(labelText), control, key === "effectAt");
+      alertControls[key] = control;
+      alertFields[key] = controlField;
+      control.addEventListener("change", () => {
+        profile[key] = control.value;
+        syncAlertDependencies();
+        sendAction({ type: "updateProfile", id: profile.id, patch: { [key]: control.value } });
+      });
+      alertGrid.append(controlField);
     }
+    syncAlertDependencies();
 
     for (const [key, labelText] of [["warning", "Warning at"], ["critical", "Critical at"]]) {
       const input = styleControl(document.createElement("input"));
@@ -2482,7 +2531,7 @@ const installScript = String.raw`(() => {
     jsonCaption.textContent = t("Configuration JSON");
     Object.assign(jsonCaption.style, { color: "var(--quotapin-panel-muted)", fontSize: "10px", fontWeight: "600", letterSpacing: ".035em" });
     const configReference = document.createElement("a");
-    configReference.href = sourceRepository + "/blob/main/docs/configuration.md#configuration-json-schema-15";
+    configReference.href = sourceRepository + "/blob/main/docs/configuration.md#configuration-json-schema-17";
     configReference.target = "_blank";
     configReference.rel = "noreferrer";
     configReference.textContent = t("Configuration reference");
@@ -2791,12 +2840,23 @@ const installScript = String.raw`(() => {
     updatePopover.dataset.updatePopover = "true";
     updatePopover.setAttribute("role", "dialog");
     updatePopover.setAttribute("aria-modal", "false");
-    updatePopover.setAttribute("aria-label", t("QuotaPin updates"));
+    updatePopover.setAttribute("aria-labelledby", "quotapin-update-title");
     Object.assign(updatePopover.style, {
       display: "none", position: "absolute", left: "12px", right: "12px", bottom: "48px", zIndex: "5",
       padding: "10px", border: "1px solid var(--quotapin-panel-line)", borderRadius: "10px", background: "var(--quotapin-panel-surface)",
       boxShadow: "0 16px 38px rgba(0,0,0,.48)", gap: "8px",
     });
+    const updateHeader = document.createElement("div");
+    Object.assign(updateHeader.style, { display: "flex", alignItems: "center", justifyContent: "space-between", gap: "8px" });
+    const updateTitle = document.createElement("strong");
+    updateTitle.id = "quotapin-update-title";
+    updateTitle.textContent = t("Updates");
+    Object.assign(updateTitle.style, { color: "var(--quotapin-panel-text)", fontSize: "11px", fontWeight: "650" });
+    const updateClose = actionButton(t("Close"), t("Close"));
+    updateClose.dataset.updateClose = "true";
+    Object.assign(updateClose.style, { minWidth: "0", height: "26px", paddingInline: "8px", background: "transparent" });
+    updateClose.addEventListener("click", () => closeUpdateLayer(true));
+    updateHeader.append(updateTitle, updateClose);
     const updateStatus = document.createElement("div");
     updateStatus.setAttribute("role", "status");
     updateStatus.setAttribute("aria-live", "polite");
@@ -2806,6 +2866,7 @@ const installScript = String.raw`(() => {
     const updateVersions = makeSelect([], "");
     updateVersions.setAttribute("aria-label", t("Release version"));
     const updateAction = actionButton(t("Check"), t("Check for updates"));
+    updateAction.dataset.updateAction = "true";
     updateControls.append(updateVersions, updateAction);
     const updateConfirm = document.createElement("div");
     updateConfirm.dataset.updateConfirm = "true";
@@ -2818,7 +2879,7 @@ const installScript = String.raw`(() => {
     const updateCancel = actionButton(t("Cancel"), t("Cancel"));
     updateCancel.dataset.updateCancel = "true";
     updateConfirm.append(updateConfirmText, updateConfirmAction, updateCancel);
-    updatePopover.append(updateStatus, updateControls, updateConfirm);
+    updatePopover.append(updateHeader, updateStatus, updateControls, updateConfirm);
     let pendingUpdate = null;
     const updateIntentLabel = (intent) => intent === "update" ? "Update" : intent === "rollback" ? "Roll back" : "Repair";
     const clearUpdateConfirmation = () => {

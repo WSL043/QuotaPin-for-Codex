@@ -1,6 +1,6 @@
 # QuotaPin for macOS
 
-QuotaPin 1.0.4 includes the public macOS delivery path. The runtime is self-contained, per user, and does not modify the official Codex application. GitHub Actions validates the package lifecycle on native Apple silicon and Intel runners; the account-row adapter and Gatekeeper behavior still need evidence from a signed-in Mac before macOS can be listed as fully supported.
+QuotaPin 1.1.0 includes the public macOS delivery path. The runtime is self-contained, per user, and does not modify the official Codex application. GitHub Actions validates the package lifecycle on native Apple silicon and Intel runners; the account-row adapter and Gatekeeper behavior still need evidence from a signed-in Mac before macOS can be listed as fully supported.
 
 ## What is implemented
 

@@ -57,6 +57,8 @@ test("the update surface uses complete versions, explicit intents, and inline co
   assert.match(renderer, /updateConfirm\.dataset\.updateConfirm = "true"/);
   assert.match(renderer, /versionButton\.setAttribute\("aria-expanded", "false"\)/);
   assert.match(renderer, /updateConfirmAction\.focus\(\{ preventScroll: true \}\)/);
+  assert.match(renderer, /updateClose\.dataset\.updateClose = "true"/);
+  assert.match(renderer, /updatePopover\.setAttribute\("aria-labelledby", "quotapin-update-title"\)/);
   const updateSource = renderer.match(/const versionButton = document\.createElement\("button"\)[\s\S]*?footer\.append\(projectLink, hint, versionButton\)/)?.[0] ?? "";
   assert.doesNotMatch(updateSource, /\bconfirm\(/);
 });
@@ -215,6 +217,13 @@ test("Quick, Customize, and Code keep one coherent settings chain without duplic
   assert.match(renderer, /diffJsonPaths\(submitted, canonical/);
   assert.match(renderer, /paintQuickPreview = \(\) =>/);
   assert.match(renderer, /paintQuickPreview\?\.\(\)/);
+  assert.match(renderer, /quickModule\("Visible modules"/);
+  assert.match(renderer, /data\.quickHelp|dataset\.quickHelp/);
+  assert.match(renderer, /accountGroup\.section\.dataset\.settingsScope = "global"/);
+  assert.match(renderer, /detailGroup\.section\.dataset\.settingsScope = "profile"/);
+  assert.match(renderer, /syncAlertDependencies/);
+  assert.match(renderer, /configuration-json-schema-17/);
+  assert.doesNotMatch(renderer, /configuration-json-schema-15/);
 });
 
 test("every settings mode keeps one stable bounded panel height", () => {

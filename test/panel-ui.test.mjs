@@ -475,6 +475,48 @@ test("programmatic panel focus never paints a transient outer outline", { skip: 
   assert.equal(result.advanced.rowBoxShadow, result.initial.rowBoxShadow, "switching between layout tabs must not introduce a whole-row editing outline");
 });
 
+test("Customize separates global and view settings and disables inactive alert dependencies", { skip: !canRun }, async () => {
+  await navigate("en");
+  await openPanel();
+  const result = await client.evaluate(`(async () => {
+    document.querySelector('[data-editor-mode="advanced"]').click();
+    const global = document.querySelector('[data-settings-scope="global"]');
+    const profile = document.querySelector('[data-settings-scope="profile"]');
+    const rowMode = document.querySelector('[data-config-key="accountRowMode"]');
+    const effect = document.querySelector('[data-config-key="effect"]');
+    const target = document.querySelector('[data-config-key="effectTarget"]');
+    const level = document.querySelector('[data-config-key="effectAt"]');
+    const before = {
+      globalContainsRowMode: global?.contains(rowMode) === true,
+      profileContainsRowMode: profile?.contains(rowMode) === true,
+      rowModeLabel: document.getElementById(rowMode?.getAttribute('aria-labelledby') || '')?.textContent,
+      rowModeDescription: document.getElementById(rowMode?.getAttribute('aria-describedby') || '')?.textContent,
+      targetDisabled: target?.disabled,
+      levelDisabled: level?.disabled,
+      targetFieldInactive: target?.closest('label')?.dataset.inactive,
+    };
+    effect.value = 'pulse';
+    effect.dispatchEvent(new Event('change', { bubbles: true }));
+    await new Promise(queueMicrotask);
+    return {
+      before,
+      after: { targetDisabled: target.disabled, levelDisabled: level.disabled },
+      headings: [...document.querySelectorAll('[data-settings-scope] [role="heading"]')].map((node) => node.textContent),
+    };
+  })()`);
+  assert.deepEqual(result.before, {
+    globalContainsRowMode: true,
+    profileContainsRowMode: false,
+    rowModeLabel: "Account row mode",
+    rowModeDescription: "Applies to every saved view. Beta hides Help and gives short/hold gestures the whole footer.",
+    targetDisabled: true,
+    levelDisabled: true,
+    targetFieldInactive: "true",
+  });
+  assert.deepEqual(result.after, { targetDisabled: false, levelDisabled: false });
+  assert.deepEqual(result.headings, ["Account row", "Current view"]);
+});
+
 test("Legacy and Beta switch one reversible account-row and gesture contract", { skip: !canRun }, async () => {
   await client.call("Emulation.setDeviceMetricsOverride", { width: 800, height: 600, deviceScaleFactor: 1, mobile: false });
   await navigate("en");
@@ -715,7 +757,7 @@ test("the update surface exposes full versions and explicit update, repair, and 
     trigger.click();
     await new Promise(queueMicrotask);
     const select = document.querySelector('[aria-label="Release version"]');
-    const action = document.querySelector('[data-update-popover="true"] button:not([data-update-confirm-action]):not([data-update-cancel])');
+    const action = document.querySelector('[data-update-action="true"]');
     const choose = (version) => { select.value = version; select.dispatchEvent(new Event('change', { bubbles: true })); return action.textContent; };
     const labels = [choose('1.1.0'), choose('1.0.0'), choose('1.0.0-beta.2'), choose('1.0.0-beta.1')];
     action.click();
@@ -736,6 +778,31 @@ test("the update surface exposes full versions and explicit update, repair, and 
   assert.equal(result.confirmation.focus, true);
   assert.equal(result.cancelFocus, true);
   assert.deepEqual(result.installAction, { type: "install", version: "1.0.0-beta.1" });
+});
+
+test("the update surface has a visible close action that restores the version trigger", { skip: !canRun }, async () => {
+  await navigate("en");
+  await openPanel();
+  const result = await client.evaluate(`(async () => {
+    const trigger = document.querySelector('[data-update-button="true"]');
+    trigger.click();
+    await new Promise(queueMicrotask);
+    const popover = document.querySelector('[data-update-popover="true"]');
+    const close = document.querySelector('[data-update-close="true"]');
+    const before = {
+      title: document.getElementById(popover.getAttribute('aria-labelledby'))?.textContent,
+      closeText: close?.textContent,
+      display: getComputedStyle(popover).display,
+      expanded: trigger.getAttribute('aria-expanded'),
+    };
+    close.click();
+    return {
+      before,
+      after: { display: getComputedStyle(popover).display, expanded: trigger.getAttribute('aria-expanded'), focus: document.activeElement === trigger },
+    };
+  })()`);
+  assert.deepEqual(result.before, { title: "Updates", closeText: "Close", display: "grid", expanded: "true" });
+  assert.deepEqual(result.after, { display: "none", expanded: "false", focus: true });
 });
 
 test("a valid Code draft survives tab changes without rebuilding or changing the live row", { skip: !canRun }, async () => {

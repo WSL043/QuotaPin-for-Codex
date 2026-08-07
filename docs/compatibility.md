@@ -2,8 +2,8 @@
 
 | QuotaPin | Codex Desktop | Platform | Status |
 |---|---|---|---|
-| 1.1.0-beta.1 | 26.803.5235.0 x64; production DOM fixture and package gates | Windows 11; platform-neutral renderer on macOS CI | 🧪 Live resize acceptance passed; Beta publication pending final review |
-| 1.0.4 | CI package lifecycle; 26.803.5235.0 x64 | Windows 11; macOS 15/26 native arm64 and x86_64 runners | ✅ Current stable; real-Mac acceptance pending |
+| 1.1.0 | 26.803.5235.0 x64; production DOM fixture and package gates | Windows 11; macOS 15/26 native arm64 and x86_64 runners | ✅ Current stable; real-Mac acceptance pending |
+| 1.0.4 | CI package lifecycle; 26.803.5235.0 x64 | Windows 11; macOS 15/26 native arm64 and x86_64 runners | Previous stable |
 | 1.0.3 | CI package lifecycle | Windows 11 runner; macOS 15/26 native arm64 and x86_64 runners | Withdrawn; release transition was incompatible |
 | 1.0.2 | 26.803.5235.0 x64 | Windows 11 10.0.26200 | Withdrawn; updater required one-asset releases |
 
@@ -11,8 +11,8 @@ The one-line command accepts x64 Windows 10 version 2004 (build 19041) and later
 
 ## Published artifact evidence
 
-- **1.1.0-beta.1:** Legacy/Beta switching, reversible Help suppression, freed-width layout, semantic quota-rail alignment, full-footer short/hold classification, and fail-closed fallback are covered by the isolated production renderer. On Codex Desktop 26.803.5235.0, a 20-second manual resize pass produced 457 width events and 457 position-only frames, one unrelated full state render, zero integrity repairs, zero module overlaps, and zero unexpected modules. It remains unpublished until the complete Beta review is accepted.
-- **1.0.4:** the release gate builds `QuotaPin-1.0.4.exe` and `QuotaPin-macOS-1.0.4.dmg`, then validates the exact platform packages before publication. It is the clean stable baseline; withdrawn earlier releases are not part of its supported update matrix.
+- **1.1.0:** the optional Legacy/Beta account-row modes, reversible Help suppression, freed-width layout, semantic quota-rail alignment, full-footer short/hold classification, and fail-closed fallback are covered by the isolated production renderer. On Codex Desktop 26.803.5235.0, a 20-second manual resize pass produced 457 width events and 457 position-only frames, one unrelated full state render, zero integrity repairs, zero module overlaps, and zero unexpected modules. A supported setup-owned local acceptance preserved the running Codex root and user configuration, installed matching Agent payloads, reached `quota-ready`, and produced no Agent stderr. The real panel measured 376 by 480 pixels with one visible tab panel, no outer focus outline, and no live-module overlap; 386 samples over 12 seconds observed one stable module geometry and one stable panel geometry.
+- **1.0.4:** the release gate built `QuotaPin-1.0.4.exe` and `QuotaPin-macOS-1.0.4.dmg`, then validated the exact platform packages before publication. It remains the previous clean stable baseline.
 - **1.0.3:** cross-platform package CI passed, but the two-asset publication exposed an incompatibility in the 1.0.2 updater and was withdrawn from public downloads.
 - **1.0.2:** Windows install and uninstall acceptance passed, but its exact-one-asset update filter could not cross into the first multi-platform release. It was withdrawn when 1.0.4 became the new clean baseline.
 
@@ -39,11 +39,10 @@ The one-line command accepts x64 Windows 10 version 2004 (build 19041) and later
 - An independent download of the sole public 1.0.2 EXE matched the GitHub digest and Windows version metadata, installed setup ownership with its tray startup companion, and uninstalled cleanly without changing the running Codex root process.
 - Command uninstall stopped the persistent Agent before renderer cleanup, removed its startup and Start-menu entries, and left no QuotaPin controller in the live renderer.
 
-## Live acceptance still required
+## Further device coverage
 
 - normal Codex launch and automatic attachment on a clean command installation;
 - short press, hold, second-press close, outside-click close, and three-module drag feel;
-- stable editor size across Quick, Customize, and Code, with one scroll owner per tab;
 - first-launch handoff and degraded circuit-breaker recovery on a clean installed copy;
 - update from a tagged GitHub release, including user confirmation, progress, preserved settings, and a recoverable failure result;
 - high-DPI behavior and Windows 10 real-device coverage.
@@ -52,4 +51,4 @@ Host UI changes can invalidate an otherwise compatible release. QuotaPin fails c
 
 Development evidence is marked as development. A tagged release is added only after the same checks are repeated against its published artifacts. Windows 10 remains best-effort until a real-device report is recorded.
 
-The macOS package is CI-validated and included in 1.0.4. Real signed-in Codex and Gatekeeper acceptance remains provisional; see [the macOS implementation and acceptance boundary](macos.md).
+The macOS package is CI-validated and included in 1.1.0. Real signed-in Codex and Gatekeeper acceptance remains provisional; see [the macOS implementation and acceptance boundary](macos.md).

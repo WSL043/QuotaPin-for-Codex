@@ -76,7 +76,9 @@ codesign --verify --strict "$SOURCE/QuotaPin.Mac"
 [[ "$($SOURCE/QuotaPin.Mac --launcher-version)" == "$VERSION" ]]
 
 if [[ -z "$CODEX_APP" && -f "$TARGET/install-state.json" ]]; then
-  CODEX_APP="$(plutil -extract codexApp raw -o - "$TARGET/install-state.json" 2>/dev/null || true)"
+  if SAVED_CODEX_APP="$(plutil -extract codexApp raw -o - "$TARGET/install-state.json" 2>/dev/null)"; then
+    CODEX_APP="$SAVED_CODEX_APP"
+  fi
 fi
 if [[ -n "$CODEX_APP" ]]; then
   [[ "$CODEX_APP" == /* && "$CODEX_APP" == *.app && -d "$CODEX_APP" && ! -L "$CODEX_APP" ]] || {

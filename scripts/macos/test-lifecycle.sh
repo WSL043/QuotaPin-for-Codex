@@ -23,8 +23,8 @@ fi
 rm -f "$INSTALL_TRACE"
 [[ -x "$TARGET/QuotaPin.Agent" && -x "$TARGET/QuotaPin.Mac" && -x "$TARGET/update.sh" ]]
 [[ "$(tr -d '\r\n' < "$TARGET/VERSION")" == "$(tr -d '\r\n' < "$SOURCE/VERSION")" ]]
-[[ "$($TARGET/QuotaPin.Agent --agent-version)" == "$(tr -d '\r\n' < "$SOURCE/VERSION")" ]]
-[[ "$($TARGET/QuotaPin.Mac --launcher-version)" == "$(tr -d '\r\n' < "$SOURCE/VERSION")" ]]
+[[ "$("$TARGET/QuotaPin.Agent" --agent-version)" == "$(tr -d '\r\n' < "$SOURCE/VERSION")" ]]
+[[ "$("$TARGET/QuotaPin.Mac" --launcher-version)" == "$(tr -d '\r\n' < "$SOURCE/VERSION")" ]]
 plutil -lint "$PLIST" >/dev/null
 launchctl print "$DOMAIN/$LABEL" >/dev/null
 

@@ -182,8 +182,7 @@ plutil -insert schema -integer 1 "$STAGING/install-state.json"
 plutil -insert owner -string command "$STAGING/install-state.json"
 plutil -insert platform -string macos "$STAGING/install-state.json"
 plutil -insert version -string "$VERSION" "$STAGING/install-state.json"
-plutil -insert preferences -dictionary "$STAGING/install-state.json"
-plutil -insert preferences.autoAttach -bool true "$STAGING/install-state.json"
+plutil -insert preferences -json '{"autoAttach":true}' "$STAGING/install-state.json"
 if [[ -n "$CODEX_APP" ]]; then plutil -insert codexApp -string "$CODEX_APP" "$STAGING/install-state.json"; fi
 chmod 600 "$STAGING/install-state.json"
 test_fault after-stage

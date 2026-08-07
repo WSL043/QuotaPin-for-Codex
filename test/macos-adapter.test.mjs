@@ -133,6 +133,8 @@ test("macOS production package owns a user LaunchAgent and a bounded uninstall p
   assert.match(install, /--codex-app/);
   assert.match(install, /plutil -extract codexApp/);
   assert.match(install, /plutil -insert codexApp/);
+  assert.match(install, /plutil -insert preferences -json '\{"autoAttach":true\}'/);
+  assert.doesNotMatch(install, /plutil -insert preferences -dictionary/);
   assert.doesNotMatch(install, /plutil -create json -o/);
   assert.doesNotMatch(bootstrap, /plutil -create json -o/);
   assert.match(install, /config\.json/);

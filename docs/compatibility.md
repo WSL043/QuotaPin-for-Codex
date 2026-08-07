@@ -2,7 +2,7 @@
 
 | QuotaPin | Codex Desktop | Windows | Status |
 |---|---|---|---|
-| 1.0.2 release candidate | 26.730.8199.0 x64 | Windows 11 10.0.26200 | The single `QuotaPin-1.0.2.exe` retains the command-install and guided-install ownership model. Its release consumers normalize Windows version-resource padding while still checking the exact immutable release, digest, version, filename, and project identity. Source, Chromium, PowerShell, installer, update, and lifecycle gates pass locally; published command and guided installation are repeated before this row is promoted from candidate evidence. |
+| 1.0.2 | 26.803.5235.0 x64 | Windows 11 10.0.26200 | The immutable Latest release contains one `QuotaPin-1.0.2.exe` asset (23,439,621 bytes; SHA-256 `329bbd698ca8a4207151c431004e8d481ccb133cc00da6d64a35463748f377ab`). Both the public one-line command and an independent download of that EXE completed installation and uninstall acceptance. Command mode used one hidden watcher and no tray; guided mode used one tray and no watcher. Both removals cleared the install root, startup entry, Apps entry, and QuotaPin processes while the Codex root PID and start time remained unchanged. |
 
 The one-line command accepts x64 Windows 10 version 2004 (build 19041) and later. Current end-to-end evidence is from Windows 11, so Windows 10 remains best-effort until a real-device report is recorded. Windows ARM64 is not supported.
 
@@ -24,7 +24,8 @@ The one-line command accepts x64 Windows 10 version 2004 (build 19041) and later
 - The official Codex installation remains unchanged when QuotaPin is installed or removed.
 - The one-line command and guided installer use the same versioned executable, self-contained Agent, renderer, and provenance gates; only their startup companion differs.
 - A Windows PowerShell 5.1 `Restricted` caller completed the in-memory bootstrap, fresh installation, and Start-menu uninstall path; installation and update use controlled child processes without changing the user's policy.
-- A local exact-version replacement preserved the configuration, restored `quota-ready` on the same loopback port, and left the WindowsApps Codex PID unchanged. This is not yet evidence for the public GitHub release path.
+- The public 1.0.2 command bootstrap selected the immutable Latest release, displayed resumable download progress, verified the exact GitHub digest and Windows identity, installed command ownership, and uninstalled cleanly without changing the running Codex root process.
+- An independent download of the sole public 1.0.2 EXE matched the GitHub digest and Windows version metadata, installed setup ownership with its tray startup companion, and uninstalled cleanly without changing the running Codex root process.
 - Command uninstall stopped the persistent Agent before renderer cleanup, removed its startup and Start-menu entries, and left no QuotaPin controller in the live renderer.
 
 ## Live acceptance still required

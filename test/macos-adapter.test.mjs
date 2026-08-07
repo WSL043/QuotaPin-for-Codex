@@ -126,6 +126,7 @@ test("macOS production package owns a user LaunchAgent and a bounded uninstall p
   const launcher = fs.readFileSync(new URL("../src/macos/launcher.mjs", import.meta.url), "utf8");
   assert.match(build, /--macho-segment-name NODE_SEA/);
   assert.match(build, /codesign --force --sign -/);
+  assert.match(build, /update\.sh/);
   assert.match(install, /Library\/LaunchAgents/);
   assert.match(install, /io\.github\.wsl043\.quotapin/);
   assert.match(install, /--ignore-existing/);
@@ -139,6 +140,8 @@ test("macOS production package owns a user LaunchAgent and a bounded uninstall p
   assert.match(bootstrap, /releases\/tags\/v\$REQUESTED_VERSION/);
   assert.match(bootstrap, /assets\.\$index\.digest/);
   assert.match(bootstrap, /INSTALL_ARGUMENTS\+\=\(--codex-app/);
+  assert.match(bootstrap, /--write-result/);
+  assert.match(install, /update\.sh/);
   assert.match(launcher, /budget=1\/1/);
   assert.match(launcher, /"--codex-app", bundleIdentity\.bundlePath/);
   assert.match(launcher, /degraded-latched/);

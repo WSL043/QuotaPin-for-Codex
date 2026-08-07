@@ -28,7 +28,7 @@ npm ci
 ./scripts/macos/test-lifecycle.sh dist/macos-native
 ```
 
-GitHub Actions runs that lifecycle independently on Apple silicon and Intel runners: build, signature check, install, LaunchAgent start, same-version update, configuration preservation, and uninstall. A second job combines the two verified slices into `QuotaPin-macOS-VERSION.tar.gz` and checks both Mach-O architectures.
+GitHub Actions runs that lifecycle independently on Apple silicon and Intel runners: build, signature check, install, LaunchAgent start, same-version update, rollback, configuration preservation, and uninstall. A second job combines the two verified slices into `QuotaPin-macOS-VERSION.tar.gz`. GitHub validates the artifact digest when the archive moves between jobs, then fresh macOS 15 and macOS 26 runners on both architectures independently extract and exercise that exact final archive again.
 
 Development candidates are short-lived Actions artifacts. They are not GitHub Releases and do not enter the stable update channel. The stable remote bootstrap is already implemented in `install-macos.sh`; it accepts only an immutable published release and verifies GitHub's SHA-256 digest before extraction. It becomes a normal Quick Start only after an owner-approved stable release contains the matching macOS package.
 

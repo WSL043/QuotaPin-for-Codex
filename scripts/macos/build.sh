@@ -61,8 +61,9 @@ cp "$ROOT/config.default.json" "$OUTPUT_ROOT/config.default.json"
 cp "$ROOT/LICENSE" "$OUTPUT_ROOT/LICENSE"
 cp "$ROOT/scripts/macos/install.sh" "$OUTPUT_ROOT/install.sh"
 cp "$ROOT/scripts/macos/uninstall.sh" "$OUTPUT_ROOT/uninstall.sh"
+cp "$ROOT/install-macos.sh" "$OUTPUT_ROOT/update.sh"
 cp "$ROOT/docs/macos-readme.txt" "$OUTPUT_ROOT/README.txt"
-chmod 755 "$OUTPUT_ROOT/install.sh" "$OUTPUT_ROOT/uninstall.sh"
+chmod 755 "$OUTPUT_ROOT/install.sh" "$OUTPUT_ROOT/uninstall.sh" "$OUTPUT_ROOT/update.sh"
 printf '%s\n' "$VERSION" > "$OUTPUT_ROOT/VERSION"
 printf '%s\n' "$COMMIT" > "$OUTPUT_ROOT/COMMIT"
 printf '%s\n' "$(uname -m)" > "$OUTPUT_ROOT/ARCH"
@@ -70,7 +71,7 @@ printf '%s\n' "$(uname -m)" > "$OUTPUT_ROOT/ARCH"
 (
   cd "$OUTPUT_ROOT"
   shasum -a 256 ARCH COMMIT LICENSE README.txt THIRD_PARTY_NOTICES.txt VERSION \
-    QuotaPin.Agent QuotaPin.Mac config.default.json install.sh uninstall.sh > MANIFEST.sha256
+    QuotaPin.Agent QuotaPin.Mac config.default.json install.sh uninstall.sh update.sh > MANIFEST.sha256
 )
 
 echo "$OUTPUT_ROOT"

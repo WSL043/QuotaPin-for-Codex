@@ -14,7 +14,15 @@ if [[ ! -d "$ARM_SOURCE" || ! -d "$X64_SOURCE" ]]; then
   exit 2
 fi
 
-for name in VERSION COMMIT LICENSE README.txt THIRD_PARTY_NOTICES.txt config.default.json install.sh uninstall.sh; do
+for source in "$ARM_SOURCE" "$X64_SOURCE"; do
+  if find "$source" -type l -print -quit | grep -q .; then
+    echo "A native slice contains an unexpected symbolic link: $source" >&2
+    exit 3
+  fi
+  (cd "$source" && shasum -a 256 -c MANIFEST.sha256 >/dev/null)
+done
+
+for name in VERSION COMMIT LICENSE README.txt THIRD_PARTY_NOTICES.txt config.default.json install.sh uninstall.sh update.sh; do
   cmp "$ARM_SOURCE/$name" "$X64_SOURCE/$name"
 done
 [[ "$(tr -d '\r\n' < "$ARM_SOURCE/ARCH")" == "arm64" ]]
@@ -22,11 +30,11 @@ done
 
 rm -rf "$OUTPUT_ROOT"
 mkdir -p "$OUTPUT_ROOT"
-for name in VERSION COMMIT LICENSE README.txt THIRD_PARTY_NOTICES.txt config.default.json install.sh uninstall.sh; do
+for name in VERSION COMMIT LICENSE README.txt THIRD_PARTY_NOTICES.txt config.default.json install.sh uninstall.sh update.sh; do
   cp "$ARM_SOURCE/$name" "$OUTPUT_ROOT/$name"
 done
 printf 'universal\n' > "$OUTPUT_ROOT/ARCH"
-chmod 755 "$OUTPUT_ROOT/install.sh" "$OUTPUT_ROOT/uninstall.sh"
+chmod 755 "$OUTPUT_ROOT/install.sh" "$OUTPUT_ROOT/uninstall.sh" "$OUTPUT_ROOT/update.sh"
 
 for binary in QuotaPin.Agent QuotaPin.Mac; do
   lipo -create "$ARM_SOURCE/$binary" "$X64_SOURCE/$binary" -output "$OUTPUT_ROOT/$binary"
@@ -45,7 +53,7 @@ node -e 'const value=JSON.parse(process.argv[1]); if(!value.ok||!value.oneHandof
 (
   cd "$OUTPUT_ROOT"
   shasum -a 256 ARCH COMMIT LICENSE README.txt THIRD_PARTY_NOTICES.txt VERSION \
-    QuotaPin.Agent QuotaPin.Mac config.default.json install.sh uninstall.sh > MANIFEST.sha256
+    QuotaPin.Agent QuotaPin.Mac config.default.json install.sh uninstall.sh update.sh > MANIFEST.sha256
 )
 
 PACKAGE_PARENT="$ROOT/dist/macos-package"

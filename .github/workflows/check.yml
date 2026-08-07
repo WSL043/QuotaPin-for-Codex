@@ -10,6 +10,10 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: quotapin-check-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   macos-native-lifecycle:
     name: macOS native lifecycle (${{ matrix.arch }})
@@ -53,18 +57,30 @@ jobs:
       - name: Exercise install, update, LaunchAgent, and uninstall
         run: ./scripts/macos/test-lifecycle.sh dist/macos-native
       - name: Upload native macOS slice
+        id: upload-native
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.0
         with:
           name: QuotaPin-macOS-${{ matrix.arch }}-${{ github.sha }}
           if-no-files-found: error
           retention-days: 7
           path: dist/macos-native/
+      - name: Record native lifecycle evidence
+        run: |
+          {
+            echo "### macOS native lifecycle"
+            echo "- Runner: \`${{ matrix.runner }}\`"
+            echo "- Architecture: \`${{ matrix.arch }}\`"
+            echo "- Artifact digest: \`${{ steps.upload-native.outputs.artifact-digest }}\`"
+            echo "- Result: build, self-check, install, LaunchAgent, transactional repair, config preservation, uninstall"
+          } >> "$GITHUB_STEP_SUMMARY"
 
   macos-universal-package:
     name: macOS universal package
     needs: macos-native-lifecycle
     runs-on: macos-15
     timeout-minutes: 15
+    outputs:
+      package-sha256: ${{ steps.package.outputs.package-sha256 }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.0
         with:
@@ -79,27 +95,83 @@ jobs:
           pattern: QuotaPin-macOS-*-${{ github.sha }}
           path: dist/thin
       - name: Assemble and verify one universal package
+        id: package
         run: |
           npm ci
           ARM="dist/thin/QuotaPin-macOS-arm64-${{ github.sha }}"
           X64="dist/thin/QuotaPin-macOS-x86_64-${{ github.sha }}"
           ./scripts/macos/package-universal.sh "$ARM" "$X64" dist/macos-universal
           VERSION="$(tr -d '\r\n' < VERSION)"
-          test -s "dist/QuotaPin-macOS-$VERSION.tar.gz"
+          PACKAGE="dist/QuotaPin-macOS-$VERSION.tar.gz"
+          test -s "$PACKAGE"
           lipo -archs dist/macos-universal/QuotaPin.Agent | grep -q arm64
           lipo -archs dist/macos-universal/QuotaPin.Agent | grep -q x86_64
           lipo -archs dist/macos-universal/QuotaPin.Mac | grep -q arm64
           lipo -archs dist/macos-universal/QuotaPin.Mac | grep -q x86_64
+          echo "package-sha256=$(shasum -a 256 "$PACKAGE" | awk '{print $1}')" >> "$GITHUB_OUTPUT"
       - name: Upload commit-scoped universal macOS package
+        id: upload-universal
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.0
         with:
           name: QuotaPin-macOS-universal-${{ github.sha }}
           if-no-files-found: error
           retention-days: 7
           path: dist/QuotaPin-macOS-*.tar.gz
+      - name: Record universal package evidence
+        run: |
+          VERSION="$(tr -d '\r\n' < VERSION)"
+          PACKAGE="dist/QuotaPin-macOS-$VERSION.tar.gz"
+          {
+            echo "### macOS universal package"
+            echo "- Package: \`$(basename "$PACKAGE")\`"
+            echo "- Package SHA-256: \`$(shasum -a 256 "$PACKAGE" | awk '{print $1}')\`"
+            echo "- Artifact digest: \`${{ steps.upload-universal.outputs.artifact-digest }}\`"
+            echo "- Slices: \`arm64 x86_64\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  macos-universal-lifecycle:
+    name: macOS final package lifecycle (${{ matrix.runner }} / ${{ matrix.arch }})
+    needs: macos-universal-package
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-15
+            arch: arm64
+          - runner: macos-15-intel
+            arch: x86_64
+          - runner: macos-26
+            arch: arm64
+          - runner: macos-26-intel
+            arch: x86_64
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.0
+        with:
+          persist-credentials: false
+      - name: Download digest-verified universal package
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: QuotaPin-macOS-universal-${{ github.sha }}
+          path: dist/final
+      - name: Exercise the exact final package on native hardware
+        run: |
+          VERSION="$(tr -d '\r\n' < VERSION)"
+          PACKAGE="dist/final/QuotaPin-macOS-$VERSION.tar.gz"
+          test "$(shasum -a 256 "$PACKAGE" | awk '{print $1}')" = "${{ needs.macos-universal-package.outputs.package-sha256 }}"
+          ./scripts/macos/test-universal-package.sh "$PACKAGE" "${{ matrix.arch }}"
+      - name: Record final-package evidence
+        run: |
+          {
+            echo "### macOS final package acceptance"
+            echo "- Native architecture: \`${{ matrix.arch }}\`"
+            echo "- Artifact handoff: GitHub digest validated on download"
+            echo "- Result: safe extraction, universal slices, code integrity, install, LaunchAgent, rollback, update, uninstall"
+          } >> "$GITHUB_STEP_SUMMARY"
 
   validate:
-    needs: macos-universal-package
+    needs: macos-universal-lifecycle
     runs-on: windows-latest
     timeout-minutes: 20
     steps:

@@ -145,7 +145,7 @@ $Strict = Get-QuotaPinResumableRuntime -InstallRoot 'C:\fixture' -AgentPath 'C:\
   });
 });
 
-test("command updater contract keeps exact single-package trust, cleanup, and no-restart ownership", () => {
+test("command updater contract keeps exact platform-package trust, cleanup, and no-restart ownership", () => {
   const updater = fs.readFileSync(path.join(root, "scripts", "update.ps1"), "utf8");
   assert.match(updater, /\$PackageName = "QuotaPin-\$Version\.exe"/);
   assert.match(updater, /\$Assets\.Count -ne 1/);

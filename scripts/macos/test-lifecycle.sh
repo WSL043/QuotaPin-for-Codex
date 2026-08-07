@@ -14,36 +14,36 @@ cleanup() {
 trap cleanup EXIT
 cleanup
 
-"$ROOT/scripts/macos/install.sh" --source "$SOURCE"
-[[ -x "$TARGET/QuotaPin.Agent" && -x "$TARGET/QuotaPin.Mac" ]]
+"$SOURCE/install.sh" --source "$SOURCE"
+[[ -x "$TARGET/QuotaPin.Agent" && -x "$TARGET/QuotaPin.Mac" && -x "$TARGET/update.sh" ]]
 [[ "$(tr -d '\r\n' < "$TARGET/VERSION")" == "$(tr -d '\r\n' < "$SOURCE/VERSION")" ]]
 [[ "$($TARGET/QuotaPin.Agent --agent-version)" == "$(tr -d '\r\n' < "$SOURCE/VERSION")" ]]
 [[ "$($TARGET/QuotaPin.Mac --launcher-version)" == "$(tr -d '\r\n' < "$SOURCE/VERSION")" ]]
 plutil -lint "$PLIST" >/dev/null
 launchctl print "$DOMAIN/$LABEL" >/dev/null
 
-node -e 'const fs=require("fs"); const p=process.argv[1]; const v=JSON.parse(fs.readFileSync(p,"utf8")); v.locale="ja"; fs.writeFileSync(p,JSON.stringify(v,null,2)+"\n")' "$TARGET/config.json"
+plutil -replace locale -string ja "$TARGET/config.json"
 BEFORE="$(shasum -a 256 "$TARGET/config.json" | awk '{print $1}')"
 FIRST_PID="$(launchctl print "$DOMAIN/$LABEL" | awk '/^[[:space:]]*pid = [0-9]+/{print $3; exit}')"
 [[ -n "$FIRST_PID" ]]
 
 for fault in after-stage after-target-move after-plist-replace; do
   BEFORE_FAULT="$(shasum -a 256 "$TARGET/config.json" | awk '{print $1}')"
-  if QUOTAPIN_TEST_FAULT_AT="$fault" "$ROOT/scripts/macos/install.sh" --source "$SOURCE" >/dev/null 2>&1; then
+  if QUOTAPIN_TEST_FAULT_AT="$fault" "$SOURCE/install.sh" --source "$SOURCE" >/dev/null 2>&1; then
     echo "Injected installer fault unexpectedly succeeded: $fault" >&2
     exit 1
   fi
-  [[ -x "$TARGET/QuotaPin.Agent" && -x "$TARGET/QuotaPin.Mac" ]]
+  [[ -x "$TARGET/QuotaPin.Agent" && -x "$TARGET/QuotaPin.Mac" && -x "$TARGET/update.sh" ]]
   [[ "$(shasum -a 256 "$TARGET/config.json" | awk '{print $1}')" == "$BEFORE_FAULT" ]]
   launchctl print "$DOMAIN/$LABEL" >/dev/null
 done
 
-"$ROOT/scripts/macos/install.sh" --source "$SOURCE"
+"$SOURCE/install.sh" --source "$SOURCE"
 AFTER="$(shasum -a 256 "$TARGET/config.json" | awk '{print $1}')"
 [[ "$BEFORE" == "$AFTER" ]]
 SECOND_PID="$(launchctl print "$DOMAIN/$LABEL" | awk '/^[[:space:]]*pid = [0-9]+/{print $3; exit}')"
 [[ -n "$SECOND_PID" && "$SECOND_PID" != "$FIRST_PID" ]]
-[[ "$(node -p 'JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")).locale' "$TARGET/config.json")" == "ja" ]]
+[[ "$(plutil -extract locale raw -o - "$TARGET/config.json")" == "ja" ]]
 
 "$TARGET/uninstall.sh"
 [[ ! -e "$TARGET" && ! -e "$PLIST" ]]

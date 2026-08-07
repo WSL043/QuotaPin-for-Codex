@@ -60,6 +60,16 @@ namespace QuotaPin.Tray
             Require(stableSelection != null && stableSelection.Version == "1.0.1", "stable channel must ignore prereleases");
             Require(stableSelection.PackageSha256 == Digest.Substring("sha256:".Length), "the GitHub digest must be retained");
 
+            var macAsset = "{\"name\":\"QuotaPin-macOS-1.0.1.tar.gz\",\"browser_download_url\":\"https://github.com/WSL043/QuotaPin-for-Codex/releases/download/v1.0.1/QuotaPin-macOS-1.0.1.tar.gz\",\"digest\":\"" + Digest + "\",\"size\":42000000}";
+            var crossPlatform = Release(
+                "1.0.1",
+                false,
+                "https://github.com/WSL043/QuotaPin-for-Codex/releases/download/v1.0.1/QuotaPin-1.0.1.exe",
+                Digest,
+                90000000,
+                macAsset);
+            Require(UpdateService.SelectRelease("[" + crossPlatform + "]", "1.0.0") != null, "the exact two-platform package set must remain installable on Windows");
+
             var mutable = stable.Replace("\"immutable\":true", "\"immutable\":false");
             Require(UpdateService.SelectRelease("[" + mutable + "]", "1.0.0") == null, "a mutable release must be rejected");
 
@@ -77,7 +87,7 @@ namespace QuotaPin.Tray
 
             var missingDigest = stable.Replace(Digest, "");
             Require(UpdateService.SelectRelease("[" + missingDigest + "]", "1.0.0") == null, "an asset without GitHub's digest must be rejected");
-            Console.WriteLine("Updater single-package selection and trust-boundary tests: OK");
+            Console.WriteLine("Updater cross-platform selection and trust-boundary tests: OK");
         }
     }
 }

@@ -130,10 +130,22 @@ try {
         throw 'GitHub returned a prerelease for the stable QuotaPin install channel.'
     }
     $PackageName = "QuotaPin-$SelectedVersion.exe"
+    $MacPackageName = "QuotaPin-macOS-$SelectedVersion.tar.gz"
     $Assets = @($Release.assets)
     $PackageAssets = @($Assets | Where-Object { [string]$_.name -ceq $PackageName })
     if ($PackageAssets.Count -eq 1) {
-        if ($Assets.Count -ne 1) { throw "Release $SelectedTag must contain only $PackageName." }
+        if ($Assets.Count -eq 2) {
+            $MacAssets = @($Assets | Where-Object { [string]$_.name -ceq $MacPackageName })
+            if ($MacAssets.Count -ne 1) { throw "Release $SelectedTag does not match the two-platform package policy." }
+            $MacAsset = $MacAssets[0]
+            $ExpectedMacUrl = "$OfficialRepository/releases/download/$SelectedTag/$MacPackageName"
+            if ([string]$MacAsset.browser_download_url -cne $ExpectedMacUrl -or
+                [string]$MacAsset.digest -notmatch '^sha256:[0-9a-f]{64}$' -or
+                [long]$MacAsset.size -le 0 -or [long]$MacAsset.size -gt 160MB) {
+                throw 'The companion macOS package does not have an exact official URL and SHA-256 digest.'
+            }
+        }
+        elseif ($Assets.Count -ne 1) { throw "Release $SelectedTag contains an unexpected public asset set." }
         $PackageAsset = $PackageAssets[0]
         $ExpectedPackageUrl = "$OfficialRepository/releases/download/$SelectedTag/$PackageName"
         $PackageUrl = [string]$PackageAsset.browser_download_url

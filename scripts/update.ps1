@@ -156,8 +156,21 @@ try {
     }
     $Assets = @($Release.assets)
     $PackageName = "QuotaPin-$Version.exe"
+    $MacPackageName = "QuotaPin-macOS-$Version.tar.gz"
     $PackageAssets = @($Assets | Where-Object { [string]$_.name -ceq $PackageName })
-    if ($Assets.Count -ne 1 -or $PackageAssets.Count -ne 1) { throw "The selected release must contain exactly one $PackageName asset." }
+    if ($PackageAssets.Count -ne 1) { throw "The selected release does not contain exactly one $PackageName asset." }
+    if ($Assets.Count -eq 2) {
+        $MacAssets = @($Assets | Where-Object { [string]$_.name -ceq $MacPackageName })
+        if ($MacAssets.Count -ne 1) { throw 'The selected release does not match the two-platform package policy.' }
+        $MacAsset = $MacAssets[0]
+        $ExpectedMacUrl = "$OfficialRepository/releases/download/$ExpectedTag/$MacPackageName"
+        if ([string]$MacAsset.browser_download_url -cne $ExpectedMacUrl -or
+            [string]$MacAsset.digest -notmatch '^sha256:[0-9a-f]{64}$' -or
+            [long]$MacAsset.size -le 0 -or [long]$MacAsset.size -gt 160MB) {
+            throw 'The companion macOS package does not have an exact official URL and SHA-256 digest.'
+        }
+    }
+    elseif ($Assets.Count -ne 1) { throw 'The selected release contains an unexpected public asset set.' }
     $Asset = $PackageAssets[0]
     $ExpectedUrl = "$OfficialRepository/releases/download/$ExpectedTag/$PackageName"
     $AssetUrl = [string]$Asset.browser_download_url

@@ -72,7 +72,8 @@ matches(
 has(bootstrap, 'Write-Host "Downloading $DisplayName$SizeText', "remote install must show the selected download and curl progress");
 lacks(bootstrap, "--silent", "remote install must not hide a long package download");
 has(bootstrap, '$PackageName = "QuotaPin-$SelectedVersion.exe"', "remote install must bind the public executable name to the selected version");
-has(bootstrap, "if ($Assets.Count -ne 1)", "remote install must reject a cluttered or ambiguous release asset set");
+has(bootstrap, "$MacPackageName", "remote Windows install must recognize the companion macOS package");
+has(bootstrap, "two-platform package policy", "remote install must reject a cluttered or ambiguous release asset set");
 has(bootstrap, "$Process.WaitForExit()", "remote install must wait only for the installer process");
 lacks(bootstrap, "Start-Process -FilePath $PackagePath -ArgumentList $Arguments -Wait", "remote install must not wait forever on the persistent watcher descendant");
 lacks(sourceInstaller, "Get-CimInstance", "normal command installation must not depend on CIM process discovery");
@@ -173,7 +174,8 @@ lacks(sourceInstaller, "CurrentVersion\\Run", "source install must not register 
 lacks(sourceInstaller, "open-settings", "source install must not copy setup-only tray controls");
 has(commandUpdater, "--continue-at -", "command update downloads must resume after a slow-link interruption");
 has(commandUpdater, '$PackageName = "QuotaPin-$Version.exe"', "command updates must bind the public executable name to the requested version");
-has(commandUpdater, "$Assets.Count -ne 1", "command updates must reject a release with extra public assets");
+has(commandUpdater, "$MacPackageName", "command updates must recognize the companion macOS package");
+has(commandUpdater, "two-platform package policy", "command updates must reject a release with extra public assets");
 has(commandUpdater, "$AssetDigest -notmatch '^sha256:[0-9a-f]{64}$'", "command updates must require GitHub's exact asset digest");
 has(commandUpdater, "OriginalFilename", "command updates must verify the versioned Windows package identity");
 has(commandUpdater, "'/COMMANDINSTALL=1'", "command updates must preserve the command-install flavor when invoking the shared executable");
@@ -190,7 +192,10 @@ has(runtimeTrust, "codexCreationTimeUtc", "runtime trust must bind a saved PID t
 has(runtimeTrust, 'app://-/index.html', "runtime trust must verify the Codex main renderer target");
 has(runtimeTrust, "$Lifecycle.generation", "runtime trust must bind lifecycle and runtime to one generation");
 has(updateRuntime, "`QuotaPin-${version}.exe`", "the update picker must require the exact versioned executable");
-has(updateRuntime, "assets.length !== 1", "the update picker must reject releases with extra assets");
+has(updateRuntime, "`QuotaPin-macOS-${version}.tar.gz`", "the update picker must recognize the exact versioned universal macOS package");
+has(updateRuntime, "assets.length !== 2", "cross-platform update discovery must reject releases outside the exact two-package policy");
+has(updateRuntime, 'this.platform === "darwin"', "the update picker must select its installed macOS updater by platform");
+has(updateRuntime, '"/bin/bash"', "macOS updates must use the system shell rather than PowerShell");
 has(updateRuntime, "^sha256:[0-9a-f]{64}$", "the update picker must require GitHub's exact digest");
 has(sourceInstaller, "foreach ($Attempt in 1..6)", "release downloads must have a bounded retry count");
 has(sourceInstaller, "--continue-at -", "release downloads must resume partial assets");

@@ -26,6 +26,11 @@ test("pull-request CI exercises source behavior without publishing an installer"
   assert.match(workflow, /scripts\/macos\/test-lifecycle\.sh/);
   assert.match(workflow, /QuotaPin-macOS-universal-\$\{\{ github\.sha \}\}/);
   assert.match(workflow, /package-universal\.sh/);
+  assert.match(workflow, /macos-universal-lifecycle:/);
+  assert.match(workflow, /test-universal-package\.sh/);
+  assert.match(workflow, /runner: macos-26[\s\S]*?runner: macos-26-intel/);
+  assert.match(workflow, /cancel-in-progress: true/);
+  assert.match(workflow, /artifact-digest/);
   assert.match(workflow, /retention-days: 7/);
   for (const script of ["scripts\\install-inno-ci.ps1", "scripts\\build-windows.ps1"]) {
     assert.ok(workflow.includes(script), `check workflow does not run ${script}`);
@@ -46,6 +51,10 @@ test("tag workflow builds and publishes only the exact cross-platform packages",
   assert.match(release, /scripts\/macos\/test-lifecycle\.sh/);
   assert.match(release, /scripts\/macos\/package-universal\.sh/);
   assert.match(release, /QuotaPin-macOS-universal-\$\{\{ github\.sha \}\}/);
+  assert.match(release, /macos-final-release-lifecycle:/);
+  assert.match(release, /test-universal-package\.sh/);
+  assert.match(release, /runner: macos-26[\s\S]*?runner: macos-26-intel/);
+  assert.match(release, /artifact-digest/);
   assert.match(release, /scripts\\install-inno-ci\.ps1/);
   assert.match(release, /public-release\.mjs prepare[\s\S]*?--output dist\/public/);
   assert.match(release, /public-release\.mjs verify/);

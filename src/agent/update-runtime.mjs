@@ -10,8 +10,12 @@ const UPDATE_RESULT_STATUSES = new Set(["started", "succeeded", "degraded", "fai
 const OFFICIAL_REPOSITORY = "https://github.com/WSL043/QuotaPin-for-Codex";
 export const MINIMUM_SAFE_VERSION = "0.3.0-alpha.25";
 
-function packageName(version) {
+function windowsPackageName(version) {
   return `QuotaPin-${version}.exe`;
+}
+
+function macPackageName(version) {
+  return `QuotaPin-macOS-${version}.tar.gz`;
 }
 
 function parseVersion(value) {
@@ -59,7 +63,29 @@ function decorateRelease(release, currentVersion) {
   return { ...release, direction: updateDirection(release.version, currentVersion) };
 }
 
-export function normalizeReleases(payload, currentVersion, minimumSafeVersion = MINIMUM_SAFE_VERSION) {
+function validReleaseAsset(asset, expectedName, tag) {
+  return String(asset?.name ?? "") === expectedName
+    && String(asset?.browser_download_url ?? "") === `${OFFICIAL_REPOSITORY}/releases/download/${tag}/${expectedName}`
+    && /^sha256:[0-9a-f]{64}$/.test(String(asset?.digest ?? ""))
+    && Number.isSafeInteger(Number(asset?.size))
+    && Number(asset?.size) > 0
+    && Number(asset?.size) <= 160 * 1024 * 1024;
+}
+
+function releaseAssetsAreTrusted(assets, version, tag, platform) {
+  const windowsName = windowsPackageName(version);
+  const macName = macPackageName(version);
+  if (platform === "win32" && assets.length === 1) {
+    return validReleaseAsset(assets[0], windowsName, tag);
+  }
+  if (!['win32', 'darwin'].includes(platform) || assets.length !== 2) return false;
+  const byName = new Map(assets.map((asset) => [String(asset?.name ?? ""), asset]));
+  return byName.size === 2
+    && validReleaseAsset(byName.get(windowsName), windowsName, tag)
+    && validReleaseAsset(byName.get(macName), macName, tag);
+}
+
+export function normalizeReleases(payload, currentVersion, minimumSafeVersion = MINIMUM_SAFE_VERSION, platform = process.platform) {
   const current = parseVersion(currentVersion);
   if (!current || !parseVersion(minimumSafeVersion) || !Array.isArray(payload)) return [];
   const acceptsPrerelease = current.pre.length > 0;
@@ -73,12 +99,7 @@ export function normalizeReleases(payload, currentVersion, minimumSafeVersion = 
     if (parsed.pre.length && !acceptsPrerelease) continue;
     if (compareVersions(parsed.text, minimumSafeVersion) < 0) continue;
     const assets = Array.isArray(item.assets) ? item.assets : [];
-    const expectedName = packageName(parsed.text);
-    const expectedUrl = `${OFFICIAL_REPOSITORY}/releases/download/${tag}/${expectedName}`;
-    if (assets.length !== 1 || String(assets[0]?.name ?? "") !== expectedName ||
-        String(assets[0]?.browser_download_url ?? "") !== expectedUrl ||
-        !/^sha256:[0-9a-f]{64}$/.test(String(assets[0]?.digest ?? "")) ||
-        !Number.isSafeInteger(Number(assets[0]?.size)) || Number(assets[0]?.size) <= 0 || Number(assets[0]?.size) > 160 * 1024 * 1024 ||
+    if (!releaseAssetsAreTrusted(assets, parsed.text, tag, platform) ||
         String(item.html_url ?? "") !== `${OFFICIAL_REPOSITORY}/releases/tag/${tag}`) continue;
     releases.push(decorateRelease({ version: parsed.text, prerelease: item.prerelease === true }, currentVersion));
   }
@@ -106,7 +127,9 @@ function normalizeCachedReleases(payload, currentVersion, minimumSafeVersion = M
 export class UpdateRuntime {
   constructor(options = {}) {
     this.currentVersion = String(options.currentVersion ?? "");
-    this.installRoot = options.installRoot ? path.resolve(options.installRoot) : null;
+    this.platform = String(options.platform ?? process.platform);
+    this.pathImpl = options.pathImpl ?? (this.platform === "win32" ? path.win32 : path);
+    this.installRoot = options.installRoot ? this.pathImpl.resolve(options.installRoot) : null;
     this.fetchImpl = options.fetchImpl ?? globalThis.fetch;
     this.spawnImpl = options.spawnImpl ?? spawn;
     this.fsImpl = options.fsImpl ?? fs;
@@ -118,8 +141,8 @@ export class UpdateRuntime {
     this.cacheMs = Number(options.cacheMs) || 24 * 60 * 60 * 1000;
     this.autoCheckDelayMs = Number.isFinite(Number(options.autoCheckDelayMs)) ? Math.max(0, Number(options.autoCheckDelayMs)) : 10_000;
     this.autoCheck = options.autoCheck !== false;
-    this.cachePath = this.installRoot ? path.join(this.installRoot, "logs", "update-cache.json") : null;
-    this.resultPath = this.installRoot ? path.join(this.installRoot, "logs", "update-result.json") : null;
+    this.cachePath = this.installRoot ? this.pathImpl.join(this.installRoot, "logs", "update-cache.json") : null;
+    this.resultPath = this.installRoot ? this.pathImpl.join(this.installRoot, "logs", "update-result.json") : null;
     this.lastCheckedAt = 0;
     this.inFlight = null;
     this.resultMonitor = null;
@@ -183,7 +206,7 @@ export class UpdateRuntime {
   #persistCache() {
     if (!this.cachePath || typeof this.fsImpl.writeFileSync !== "function" || typeof this.fsImpl.renameSync !== "function") return;
     try {
-      this.fsImpl.mkdirSync?.(path.dirname(this.cachePath), { recursive: true });
+      this.fsImpl.mkdirSync?.(this.pathImpl.dirname(this.cachePath), { recursive: true });
       const temporary = `${this.cachePath}.${process.pid}.tmp`;
       this.fsImpl.writeFileSync(temporary, JSON.stringify({ schema: 2, checkedAt: this.lastCheckedAt, currentVersion: this.currentVersion, releases: this.state.releases }), "utf8");
       this.fsImpl.renameSync(temporary, this.cachePath);
@@ -205,7 +228,10 @@ export class UpdateRuntime {
 
   #applyUpdateResult(result, publish = true) {
     if (!result || !["succeeded", "degraded", "failed", "rolled-back", "rollback-failed"].includes(result.status)) return false;
-    if (["succeeded", "degraded"].includes(result.status) && result.version !== this.currentVersion) return false;
+    const deferredUpgrade = result.status === "degraded"
+      && result.fromVersion === this.currentVersion
+      && compareVersions(result.version, this.currentVersion) === 1;
+    if (["succeeded", "degraded"].includes(result.status) && result.version !== this.currentVersion && !deferredUpgrade) return false;
     const direction = result.direction ?? updateDirection(result.version, result.fromVersion ?? this.currentVersion) ?? "repair";
     const operation = {
       direction,
@@ -222,8 +248,10 @@ export class UpdateRuntime {
       patch = { status: "error", message: "QuotaPin could not complete the update. Open the version menu to retry.", selectedVersion: result.version, selectedDirection: direction, lastOperation: operation };
     } else {
       patch = {
-        status: "current",
-        message: result.status === "degraded" ? "QuotaPin updated. Attachment will retry on the next Codex launch." : "QuotaPin updated successfully.",
+        status: deferredUpgrade ? "available" : "current",
+        message: result.status === "degraded"
+          ? "QuotaPin updated. The new version will join the next Codex launch."
+          : "QuotaPin updated successfully.",
         selectedVersion: null,
         selectedDirection: null,
         lastOperation: operation,
@@ -309,7 +337,7 @@ export class UpdateRuntime {
           signal: AbortSignal.timeout(8000),
         });
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
-        const releases = normalizeReleases(await response.json(), this.currentVersion);
+        const releases = normalizeReleases(await response.json(), this.currentVersion, MINIMUM_SAFE_VERSION, this.platform);
         const latest = releases[0]?.version ?? null;
         const available = latest && compareVersions(latest, this.currentVersion) === 1;
         this.lastCheckedAt = this.now();
@@ -341,17 +369,20 @@ export class UpdateRuntime {
       this.#publish({ status: "error", message: "Choose a supported QuotaPin release first." });
       return false;
     }
-    const updater = this.installRoot ? path.join(this.installRoot, "update.ps1") : "";
+    const updaterName = this.platform === "darwin" ? "update.sh" : this.platform === "win32" ? "update.ps1" : "";
+    const updater = this.installRoot && updaterName ? this.pathImpl.join(this.installRoot, updaterName) : "";
     if (!updater || !this.fsImpl.existsSync(updater)) {
       this.#publish({ status: "error", message: "The QuotaPin update helper is unavailable. Run the install command once to repair it." });
       return false;
     }
-    const windowsPowerShell = path.join(process.env.SystemRoot || process.env.WINDIR || "C:\\Windows", "System32", "WindowsPowerShell", "v1.0", "powershell.exe");
     try {
-      const child = this.spawnImpl(windowsPowerShell, [
-        "-NoLogo", "-NoProfile", "-ExecutionPolicy", "Bypass", "-WindowStyle", "Hidden",
-        "-File", updater, "-Version", requested,
-      ], { detached: true, stdio: "ignore", windowsHide: true });
+      const executable = this.platform === "darwin"
+        ? "/bin/bash"
+        : this.pathImpl.join(process.env.SystemRoot || process.env.WINDIR || "C:\\Windows", "System32", "WindowsPowerShell", "v1.0", "powershell.exe");
+      const args = this.platform === "darwin"
+        ? [updater, "--version", requested, "--write-result"]
+        : ["-NoLogo", "-NoProfile", "-ExecutionPolicy", "Bypass", "-WindowStyle", "Hidden", "-File", updater, "-Version", requested];
+      const child = this.spawnImpl(executable, args, { detached: true, stdio: "ignore", windowsHide: this.platform === "win32" });
       const failLaunch = (error) => {
         if (this.state.status !== "installing" || this.state.selectedVersion !== requested) return;
         const startedResult = this.#readUpdateResult();

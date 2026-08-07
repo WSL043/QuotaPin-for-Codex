@@ -51,7 +51,7 @@ case "$TARGET" in
   *) echo "Refusing unresolved install target: $TARGET" >&2; exit 3 ;;
 esac
 
-for name in ARCH QuotaPin.Agent QuotaPin.Mac config.default.json install.sh uninstall.sh VERSION COMMIT LICENSE README.txt THIRD_PARTY_NOTICES.txt MANIFEST.sha256; do
+for name in ARCH QuotaPin.Agent QuotaPin.Mac config.default.json install.sh uninstall.sh update.sh VERSION COMMIT LICENSE README.txt THIRD_PARTY_NOTICES.txt MANIFEST.sha256; do
   [[ -f "$SOURCE/$name" && ! -L "$SOURCE/$name" ]] || {
     echo "The macOS package is incomplete: $name" >&2
     exit 4
@@ -161,12 +161,12 @@ trap rollback ERR INT TERM
 mkdir -p "$TARGET_PARENT" "$LAUNCH_AGENTS"
 rm -rf "$STAGING" "$PREVIOUS"
 mkdir -p "$STAGING/logs"
-for name in ARCH QuotaPin.Agent QuotaPin.Mac LICENSE README.txt THIRD_PARTY_NOTICES.txt VERSION COMMIT MANIFEST.sha256 config.default.json; do
+for name in ARCH QuotaPin.Agent QuotaPin.Mac LICENSE README.txt THIRD_PARTY_NOTICES.txt VERSION COMMIT MANIFEST.sha256 config.default.json update.sh; do
   cp "$SOURCE/$name" "$STAGING/$name"
 done
 cp "$SOURCE/install.sh" "$STAGING/install.sh"
 cp "$SOURCE/uninstall.sh" "$STAGING/uninstall.sh"
-chmod 755 "$STAGING/QuotaPin.Agent" "$STAGING/QuotaPin.Mac" "$STAGING/install.sh" "$STAGING/uninstall.sh"
+chmod 755 "$STAGING/QuotaPin.Agent" "$STAGING/QuotaPin.Mac" "$STAGING/install.sh" "$STAGING/uninstall.sh" "$STAGING/update.sh"
 
 if [[ -f "$TARGET/config.json" && ! -L "$TARGET/config.json" ]]; then
   cp "$TARGET/config.json" "$STAGING/config.json"

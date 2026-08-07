@@ -71,10 +71,9 @@ namespace QuotaPin.Tray
                 var pageUrl = StringValue(release, "html_url");
                 if (!string.Equals(pageUrl, expectedPage, StringComparison.Ordinal)) continue;
                 var assets = release.ContainsKey("assets") ? release["assets"] as object[] : null;
-                if (assets == null || assets.Length != 1) continue;
-                var asset = assets[0] as Dictionary<string, object>;
                 var packageName = PackageName(tag);
-                if (asset == null || StringValue(asset, "name") != packageName) continue;
+                Dictionary<string, object> asset;
+                if (!TrySelectWindowsAsset(assets, tag, rawTag, out asset)) continue;
                 var expectedUrl = ReleaseDownloadPrefix + rawTag + "/" + packageName;
                 var packageUrl = StringValue(asset, "browser_download_url");
                 var digest = StringValue(asset, "digest");
@@ -92,6 +91,34 @@ namespace QuotaPin.Tray
                 };
             }
             return selected;
+        }
+
+        private static bool TrySelectWindowsAsset(object[] assets, string version, string rawTag, out Dictionary<string, object> selected)
+        {
+            selected = null;
+            if (assets == null || (assets.Length != 1 && assets.Length != 2)) return false;
+            var windowsName = PackageName(version);
+            var macName = "QuotaPin-macOS-" + version + ".tar.gz";
+            Dictionary<string, object> mac = null;
+            foreach (var value in assets)
+            {
+                var candidate = value as Dictionary<string, object>;
+                if (candidate == null) return false;
+                var name = StringValue(candidate, "name");
+                if (string.Equals(name, windowsName, StringComparison.Ordinal) && selected == null) selected = candidate;
+                else if (string.Equals(name, macName, StringComparison.Ordinal) && mac == null) mac = candidate;
+                else return false;
+            }
+            if (selected == null) return false;
+            return assets.Length == 1 || (mac != null && TrustedCompanionAsset(mac, macName, rawTag));
+        }
+
+        private static bool TrustedCompanionAsset(Dictionary<string, object> asset, string packageName, string rawTag)
+        {
+            var expectedUrl = ReleaseDownloadPrefix + rawTag + "/" + packageName;
+            return string.Equals(StringValue(asset, "browser_download_url"), expectedUrl, StringComparison.Ordinal) &&
+                Regex.IsMatch(StringValue(asset, "digest"), "\\Asha256:[0-9a-f]{64}\\z", RegexOptions.CultureInvariant) &&
+                IntegerValue(asset, "size") > 0 && IntegerValue(asset, "size") <= PackageFileLimit;
         }
 
         internal static DownloadedUpdate DownloadAndVerify(ReleaseInfo release, string currentVersion)

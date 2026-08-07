@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { EventEmitter } from "node:events";
+import path from "node:path";
 import { compareVersions, MINIMUM_SAFE_VERSION, normalizeReleases, updateDirection, UpdateRuntime } from "../src/agent/update-runtime.mjs";
 
 const DIGEST = "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
@@ -8,21 +9,33 @@ const DIGEST = "sha256:0123456789abcdef0123456789abcdef0123456789abcdef012345678
 const release = (version, options = {}) => {
   const tag = `v${version}`;
   const packageName = `QuotaPin-${version}.exe`;
+  const macPackageName = `QuotaPin-macOS-${version}.tar.gz`;
   const value = {
     tag_name: tag,
     html_url: `https://github.com/WSL043/QuotaPin-for-Codex/releases/tag/${tag}`,
     draft: options.draft ?? false,
     prerelease: options.prerelease ?? version.includes("-"),
     immutable: Object.hasOwn(options, "immutable") ? options.immutable : true,
-    assets: [{
-      name: packageName,
-      browser_download_url: `https://github.com/WSL043/QuotaPin-for-Codex/releases/download/${tag}/${packageName}`,
-      digest: DIGEST,
-      size: 24_000_000,
-    }],
+    assets: [
+      {
+        name: packageName,
+        browser_download_url: `https://github.com/WSL043/QuotaPin-for-Codex/releases/download/${tag}/${packageName}`,
+        digest: DIGEST,
+        size: 24_000_000,
+      },
+      {
+        name: macPackageName,
+        browser_download_url: `https://github.com/WSL043/QuotaPin-for-Codex/releases/download/${tag}/${macPackageName}`,
+        digest: DIGEST,
+        size: 42_000_000,
+      },
+    ],
   };
+  if (options.windowsOnly) value.assets = value.assets.slice(0, 1);
   return value;
 };
+
+const windowsRuntime = (options) => new UpdateRuntime({ platform: "win32", pathImpl: path.win32, ...options });
 
 test("semantic versions compare stable and prerelease identifiers", () => {
   assert.equal(compareVersions("0.3.0-alpha.25", "0.3.0-alpha.24"), 1);
@@ -43,8 +56,10 @@ test("release normalization requires the command-install assets and respects sta
   delete missingImmutable.immutable;
   const payload = [release("0.3.0-alpha.26"), mutable, missingImmutable, mislabeledPrerelease, release("0.3.0-alpha.24"), release("0.3.0"), release("0.2.9"), incomplete, { ...release("9.0.0"), draft: true }];
   assert.equal(MINIMUM_SAFE_VERSION, "0.3.0-alpha.25");
-  assert.deepEqual(normalizeReleases(payload, "0.3.0-alpha.25").map((item) => item.version), ["0.3.0", "0.3.0-alpha.26"]);
-  assert.deepEqual(normalizeReleases(payload, "0.3.0").map((item) => item.version), ["0.3.0"]);
+  assert.deepEqual(normalizeReleases(payload, "0.3.0-alpha.25", MINIMUM_SAFE_VERSION, "darwin").map((item) => item.version), ["0.3.0", "0.3.0-alpha.26"]);
+  assert.deepEqual(normalizeReleases(payload, "0.3.0", MINIMUM_SAFE_VERSION, "darwin").map((item) => item.version), ["0.3.0"]);
+  assert.deepEqual(normalizeReleases([release("1.0.2", { windowsOnly: true })], "1.0.3", MINIMUM_SAFE_VERSION, "win32").map((item) => item.version), ["1.0.2"]);
+  assert.deepEqual(normalizeReleases([release("1.0.2", { windowsOnly: true })], "1.0.3", MINIMUM_SAFE_VERSION, "darwin"), []);
 });
 
 test("release normalization rejects missing, renamed, or extra public assets", () => {
@@ -55,7 +70,7 @@ test("release normalization rejects missing, renamed, or extra public assets", (
   const extra = release("0.3.0-alpha.26");
   extra.assets.push({ name: "internal.zip" });
   for (const [label, candidate] of [["missing", missing], ["renamed", renamed], ["extra", extra]]) {
-    assert.deepEqual(normalizeReleases([candidate], "0.3.0-alpha.25"), [], label);
+    assert.deepEqual(normalizeReleases([candidate], "0.3.0-alpha.25", MINIMUM_SAFE_VERSION, "darwin"), [], label);
   }
 });
 
@@ -64,7 +79,7 @@ test("release normalization exposes update, repair, and rollback direction", () 
     release("0.3.0-alpha.27"),
     release("0.3.0-alpha.26"),
     release("0.3.0-alpha.25"),
-  ], "0.3.0-alpha.26");
+  ], "0.3.0-alpha.26", MINIMUM_SAFE_VERSION, "darwin");
   assert.deepEqual(releases.map(({ version, direction }) => ({ version, direction })), [
     { version: "0.3.0-alpha.27", direction: "update" },
     { version: "0.3.0-alpha.26", direction: "repair" },
@@ -72,9 +87,9 @@ test("release normalization exposes update, repair, and rollback direction", () 
   ]);
   const missingImmutable = release("0.3.0-alpha.27");
   delete missingImmutable.immutable;
-  assert.deepEqual(normalizeReleases([missingImmutable], "0.3.0-alpha.26"), [], "missing immutable metadata fails closed");
+  assert.deepEqual(normalizeReleases([missingImmutable], "0.3.0-alpha.26", MINIMUM_SAFE_VERSION, "darwin"), [], "missing immutable metadata fails closed");
   for (const immutable of [false, null, "true", 1]) {
-    assert.deepEqual(normalizeReleases([release("0.3.0-alpha.27", { immutable })], "0.3.0-alpha.26"), [], `immutable=${String(immutable)}`);
+    assert.deepEqual(normalizeReleases([release("0.3.0-alpha.27", { immutable })], "0.3.0-alpha.26", MINIMUM_SAFE_VERSION, "darwin"), [], `immutable=${String(immutable)}`);
   }
 });
 
@@ -82,7 +97,7 @@ test("update runtime checks without installing and launches only an eligible sel
   const changes = [];
   const launches = [];
   const requests = [];
-  const runtime = new UpdateRuntime({
+  const runtime = windowsRuntime({
     currentVersion: "0.3.0-alpha.25",
     installRoot: "C:\\Users\\Test\\AppData\\Local\\QuotaPin",
     fetchImpl: async (url, options) => {
@@ -114,9 +129,63 @@ test("update runtime checks without installing and launches only an eligible sel
   assert.ok(changes.includes("checking") && changes.includes("available"));
 });
 
+test("macOS update runtime selects the universal asset and the installed bash updater", async () => {
+  const launches = [];
+  const root = "/Users/Test/Library/Application Support/QuotaPin";
+  const runtime = new UpdateRuntime({
+    currentVersion: "0.3.0-alpha.25",
+    installRoot: root,
+    platform: "darwin",
+    pathImpl: path.posix,
+    autoCheck: false,
+    fsImpl: { existsSync: (value) => value === `${root}/update.sh` },
+    fetchImpl: async () => ({ ok: true, json: async () => [release("0.3.0-alpha.26")] }),
+    spawnImpl: (file, args, options) => {
+      launches.push({ file, args, options });
+      return { unref() {} };
+    },
+  });
+  await runtime.check(true);
+  assert.equal(runtime.install("0.3.0-alpha.26"), true);
+  assert.equal(launches.length, 1);
+  assert.equal(launches[0].file, "/bin/bash");
+  assert.deepEqual(launches[0].args, [`${root}/update.sh`, "--version", "0.3.0-alpha.26", "--write-result"]);
+  assert.equal(launches[0].options.windowsHide, false);
+});
+
+test("a running macOS Agent recognizes an update staged for the next normal Codex launch", () => {
+  const root = "/Users/Test/Library/Application Support/QuotaPin";
+  const resultPath = `${root}/logs/update-result.json`;
+  const removed = [];
+  const runtime = new UpdateRuntime({
+    currentVersion: "0.3.0-alpha.25",
+    installRoot: root,
+    platform: "darwin",
+    pathImpl: path.posix,
+    autoCheck: false,
+    now: () => 1_000_000,
+    fsImpl: {
+      readFileSync(filePath) {
+        if (filePath === resultPath) return JSON.stringify({
+          schema: 1,
+          status: "degraded",
+          version: "0.3.0-alpha.26",
+          fromVersion: "0.3.0-alpha.25",
+          writtenAt: new Date(999_000).toISOString(),
+        });
+        throw new Error("missing");
+      },
+      unlinkSync(filePath) { removed.push(filePath); },
+    },
+  });
+  assert.equal(runtime.clientState().status, "available");
+  assert.match(runtime.clientState().message, /next Codex launch/i);
+  assert.deepEqual(removed, [resultPath]);
+});
+
 test("a recent terminal update result survives Agent replacement", () => {
   const resultPath = "C:\\Users\\Test\\AppData\\Local\\QuotaPin\\logs\\update-result.json";
-  const runtime = new UpdateRuntime({
+  const runtime = windowsRuntime({
     currentVersion: "0.3.0-alpha.25",
     installRoot: "C:\\Users\\Test\\AppData\\Local\\QuotaPin",
     autoCheck: false,
@@ -142,7 +211,7 @@ test("a restored rollback is observable and a failed terminal result still sched
   const root = "C:\\Users\\Test\\AppData\\Local\\QuotaPin";
   const resultPath = `${root}\\logs\\update-result.json`;
   const scheduled = [];
-  const runtime = new UpdateRuntime({
+  const runtime = windowsRuntime({
     currentVersion: "0.3.0-alpha.25",
     installRoot: root,
     now: () => 1_000_000,
@@ -175,7 +244,7 @@ test("a failed restored result does not permanently stop periodic discovery", ()
   const root = "C:\\Users\\Test\\AppData\\Local\\QuotaPin";
   const resultPath = `${root}\\logs\\update-result.json`;
   const scheduled = [];
-  new UpdateRuntime({
+  windowsRuntime({
     currentVersion: "0.3.0-alpha.25",
     installRoot: root,
     now: () => 1_000_000,
@@ -199,7 +268,7 @@ test("a restored update remains single-flight until its terminal result arrives"
   const scheduled = [];
   let fetches = 0;
   let result = { schema: 1, status: "started", version: "0.3.0-alpha.25", writtenAt: new Date(999_000).toISOString() };
-  const runtime = new UpdateRuntime({
+  const runtime = windowsRuntime({
     currentVersion: "0.3.0-alpha.25",
     installRoot: "C:\\Users\\Test\\AppData\\Local\\QuotaPin",
     now: () => 1_000_000,
@@ -237,7 +306,7 @@ test("a restored update remains single-flight until its terminal result arrives"
 test("a stable Agent filters prereleases restored from its current cache", () => {
   const cachePath = "C:\\Users\\Test\\AppData\\Local\\QuotaPin\\logs\\update-cache.json";
   const launches = [];
-  const runtime = new UpdateRuntime({
+  const runtime = windowsRuntime({
     currentVersion: "0.3.0",
     installRoot: "C:\\Users\\Test\\AppData\\Local\\QuotaPin",
     autoCheck: false,
@@ -264,7 +333,7 @@ test("cache and successful terminal state from another installed version are dis
   const resultPath = `${root}\\logs\\update-result.json`;
   const removed = [];
   const scheduled = [];
-  const runtime = new UpdateRuntime({
+  const runtime = windowsRuntime({
     currentVersion: "0.3.0-alpha.25",
     installRoot: root,
     autoCheckDelayMs: 5000,
@@ -291,7 +360,7 @@ test("cache and successful terminal state from another installed version are dis
 test("automatic update discovery schedules one bounded check and never installs", async () => {
   const scheduled = [];
   let checks = 0;
-  const runtime = new UpdateRuntime({
+  const runtime = windowsRuntime({
     currentVersion: "0.3.0-alpha.25",
     installRoot: "C:\\Users\\Test\\AppData\\Local\\QuotaPin",
     autoCheckDelayMs: 5000,
@@ -319,7 +388,7 @@ test("manual refresh bypasses an otherwise fresh release cache", async () => {
   const root = "C:\\Users\\Test\\AppData\\Local\\QuotaPin";
   const cachePath = `${root}\\logs\\update-cache.json`;
   let fetches = 0;
-  const runtime = new UpdateRuntime({
+  const runtime = windowsRuntime({
     currentVersion: "0.3.0-alpha.25",
     installRoot: root,
     autoCheck: false,
@@ -347,7 +416,7 @@ test("manual refresh bypasses an otherwise fresh release cache", async () => {
 test("an install cannot race an in-flight release check", async () => {
   let releaseFetch;
   const launched = [];
-  const runtime = new UpdateRuntime({
+  const runtime = windowsRuntime({
     currentVersion: "0.3.0-alpha.25",
     installRoot: "C:\\Users\\Test\\AppData\\Local\\QuotaPin",
     autoCheck: false,
@@ -370,7 +439,7 @@ test("an install cannot race an in-flight release check", async () => {
 test("an asynchronous spawn error leaves installing immediately", async () => {
   const child = new EventEmitter();
   child.unref = () => {};
-  const runtime = new UpdateRuntime({
+  const runtime = windowsRuntime({
     currentVersion: "0.3.0-alpha.25",
     installRoot: "C:\\Users\\Test\\AppData\\Local\\QuotaPin",
     autoCheck: false,
@@ -391,7 +460,7 @@ test("an updater early exit consumes its matching started receipt", async () => 
   const child = new EventEmitter();
   child.unref = () => {};
   let result = null;
-  const runtime = new UpdateRuntime({
+  const runtime = windowsRuntime({
     currentVersion: "0.3.0-alpha.25",
     installRoot: root,
     autoCheck: false,
@@ -424,7 +493,7 @@ test("future update results and caches never suppress a fresh check", () => {
   const scheduled = [];
   const now = 1_000_000;
   const future = new Date(now + 6 * 60 * 1000).toISOString();
-  const runtime = new UpdateRuntime({
+  const runtime = windowsRuntime({
     currentVersion: "0.3.0-alpha.25",
     installRoot: root,
     now: () => now,

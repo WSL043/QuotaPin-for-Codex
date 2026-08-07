@@ -28,6 +28,16 @@ The moving bootstrap selects only GitHub's immutable latest stable release. Exac
 
 Both installations are per-user and preserve `%LOCALAPPDATA%\QuotaPin\config.json`. Public GitHub Releases are command-only: beta releases are explicit prereleases and never Latest; stable releases alone feed the moving channel. Keep the official Codex icon as the normal launch path. Do not offer unpublished packaging experiments as installation choices.
 
+The macOS source and package lifecycle is:
+
+```bash
+npm ci
+./scripts/macos/build.sh
+./scripts/macos/test-lifecycle.sh dist/macos-native
+```
+
+`install-macos.sh` is the stable/default remote bootstrap once an owner-approved release contains `QuotaPin-macOS-VERSION.tar.gz`. It verifies the immutable GitHub release and asset digest. The installed universal package needs neither Node.js nor Homebrew, owns one user LaunchAgent, preserves `config.json` on update, and never interrupts a Codex session that was already open during installation.
+
 Before reporting success, verify all of the following:
 
 - x64 Windows 10 version 2004 (build 19041) or later and a signed-in Codex Desktop are available. Windows 10 support is best-effort until real-device evidence is recorded; current end-to-end coverage is Windows 11. Windows ARM64 is unsupported. QuotaPin must use its version-matched Agent and prefer the signed app-managed `codex.exe`.
@@ -90,7 +100,7 @@ Useful source map:
 - `src/renderer/`: pure settings, layout, gesture, effect, experiment, and localization state;
 - `src/injector.mjs`: composition root plus the version-sensitive Windows DOM adapter;
 - `scripts/build-agent.ps1`: self-contained Windows Agent build;
-- `src/macos/` and `scripts/macos/`: fail-closed macOS developer launcher, self-contained build, and explicit developer install lifecycle;
+- `src/macos/` and `scripts/macos/`: fail-closed macOS watcher/launcher, universal self-contained build, transactional user LaunchAgent install, update, and uninstall lifecycle;
 - `src/launch.ps1`: official Codex activation with loopback CDP;
 - `src/tray/`: notification-area companion;
 - `scripts/`: install, uninstall, build, stop, and runtime verification;

@@ -1,11 +1,11 @@
 name: macOS compatibility report
-description: Share sanitized real-Mac evidence for the developer preview.
+description: Share sanitized real-Mac evidence for the macOS build.
 title: "[macOS] "
 body:
   - type: markdown
     attributes:
       value: |
-        The current Mac build is a developer preview, not a support claim. Please remove account names, task content, tokens, private paths, and unedited screenshots before submitting.
+        CI verifies the macOS package lifecycle, but this form records the real Codex UI and Gatekeeper evidence needed for a support claim. Please remove account names, task content, tokens, private paths, and unedited screenshots before submitting.
   - type: input
     id: macos
     attributes:
@@ -32,8 +32,8 @@ body:
   - type: input
     id: artifact
     attributes:
-      label: QuotaPin commit or Actions run
-      description: Paste the commit SHA or Actions artifact URL you tested.
+      label: QuotaPin version, commit, or Actions run
+      description: Paste the release version, commit SHA, or Actions artifact URL you tested.
     validations:
       required: true
   - type: dropdown

@@ -5,15 +5,65 @@ on:
   push:
     branches:
       - main
-      - develop
   pull_request:
 
 permissions:
   contents: read
 
 jobs:
-  macos-developer-preview:
-    runs-on: macos-latest
+  macos-native-lifecycle:
+    name: macOS native lifecycle (${{ matrix.arch }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-15
+            arch: arm64
+          - runner: macos-15-intel
+            arch: x86_64
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22.23.1
+          package-manager-cache: false
+      - name: Verify portable core and macOS adapter
+        run: |
+          npm ci
+          tests=()
+          for file in test/*.test.mjs; do
+            case "$(basename "$file")" in
+              auto-attach-policy.test.mjs|bootstrap-contract.test.mjs|bootstrap-download.test.mjs|install-lifecycle-transaction.test.mjs|lifecycle-rollback.test.mjs|release-gates.test.mjs|release-trust.test.mjs|update-transaction.test.mjs|windows-powershell-contract.test.mjs) ;;
+              *) tests+=("$file") ;;
+            esac
+          done
+          node --test "${tests[@]}"
+      - name: Check macOS lifecycle scripts
+        run: |
+          bash -n install-macos.sh
+          for file in scripts/macos/*.sh; do bash -n "$file"; done
+      - name: Build and self-check native macOS binaries
+        run: |
+          test "$(uname -m)" = "${{ matrix.arch }}"
+          ./scripts/macos/build.sh
+      - name: Exercise install, update, LaunchAgent, and uninstall
+        run: ./scripts/macos/test-lifecycle.sh dist/macos-native
+      - name: Upload native macOS slice
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.0
+        with:
+          name: QuotaPin-macOS-${{ matrix.arch }}-${{ github.sha }}
+          if-no-files-found: error
+          retention-days: 7
+          path: dist/macos-native/
+
+  macos-universal-package:
+    name: macOS universal package
+    needs: macos-native-lifecycle
+    runs-on: macos-15
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.0
@@ -23,26 +73,33 @@ jobs:
         with:
           node-version: 22.23.1
           package-manager-cache: false
-      - name: Verify platform-neutral quota, renderer, and Mac adapter core
+      - name: Download both native slices
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          pattern: QuotaPin-macOS-*-${{ github.sha }}
+          path: dist/thin
+      - name: Assemble and verify one universal package
         run: |
           npm ci
-          node --test test/experiments.test.mjs test/format.test.mjs test/renderer-state.test.mjs test/showcase-renderer.test.mjs test/macos-adapter.test.mjs
-      - name: Check macOS developer lifecycle scripts
-        run: |
-          bash -n scripts/macos/build-dev.sh
-          bash -n scripts/macos/install-dev.sh
-          bash -n scripts/macos/uninstall-dev.sh
-      - name: Build and self-check macOS developer preview
-        run: ./scripts/macos/build-dev.sh
-      - name: Upload commit-scoped macOS development artifact
+          ARM="dist/thin/QuotaPin-macOS-arm64-${{ github.sha }}"
+          X64="dist/thin/QuotaPin-macOS-x86_64-${{ github.sha }}"
+          ./scripts/macos/package-universal.sh "$ARM" "$X64" dist/macos-universal
+          VERSION="$(tr -d '\r\n' < VERSION)"
+          test -s "dist/QuotaPin-macOS-$VERSION.tar.gz"
+          lipo -archs dist/macos-universal/QuotaPin.Agent | grep -q arm64
+          lipo -archs dist/macos-universal/QuotaPin.Agent | grep -q x86_64
+          lipo -archs dist/macos-universal/QuotaPin.Mac | grep -q arm64
+          lipo -archs dist/macos-universal/QuotaPin.Mac | grep -q x86_64
+      - name: Upload commit-scoped universal macOS package
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.0
         with:
-          name: QuotaPin-macOS-dev-${{ github.sha }}
+          name: QuotaPin-macOS-universal-${{ github.sha }}
           if-no-files-found: error
           retention-days: 7
-          path: dist/macos-dev/
+          path: dist/QuotaPin-macOS-*.tar.gz
 
   validate:
+    needs: macos-universal-package
     runs-on: windows-latest
     timeout-minutes: 20
     steps:
@@ -74,10 +131,15 @@ jobs:
       - name: Install the pinned Inno Setup compiler
         shell: powershell
         run: .\scripts\install-inno-ci.ps1
+      - name: Download the verified universal macOS package
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: QuotaPin-macOS-universal-${{ github.sha }}
+          path: dist
       - name: Build and self-check the complete Windows package
         shell: powershell
         run: .\scripts\build-windows.ps1
-      - name: Verify the single-package public candidate
+      - name: Verify the cross-platform public candidate
         shell: powershell
         run: |
           $version = (Get-Content -Raw VERSION).Trim()

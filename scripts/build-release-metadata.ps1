@@ -150,7 +150,8 @@ from the project above.
 Import-BuildSecurityModule
 
 $PackageName = "QuotaPin-$Version.exe"
-$Required = @($PackageName, 'QuotaPin.Agent.exe', 'QuotaPin.Tray.exe', 'THIRD_PARTY_NOTICES.txt', 'OFFICIAL_SOURCE.txt', 'origin.json')
+$MacPackageName = "QuotaPin-macOS-$Version.tar.gz"
+$Required = @($PackageName, $MacPackageName, 'QuotaPin.Agent.exe', 'QuotaPin.Tray.exe', 'THIRD_PARTY_NOTICES.txt', 'OFFICIAL_SOURCE.txt', 'origin.json')
 foreach ($Name in $Required) {
     if (-not (Test-Path -LiteralPath (Join-Path $OutputRoot $Name))) { throw "Release artifact not found: $Name" }
 }
@@ -219,7 +220,7 @@ $Spdx = [ordered]@{
 }
 Write-Utf8Json $SpdxPath $Spdx
 
-$Artifacts = @((Get-ReleaseArtifact $PackageName))
+$Artifacts = @((Get-ReleaseArtifact $PackageName), (Get-ReleaseArtifact $MacPackageName))
 
 $ManifestPath = Join-Path $OutputRoot 'QuotaPin-release.json'
 $Manifest = [ordered]@{
@@ -260,7 +261,7 @@ $ManifestHash = Get-Sha256 $ManifestPath
 
 Copy-Item -LiteralPath (Join-Path $RepositoryRoot 'LICENSE') -Destination (Join-Path $OutputRoot 'LICENSE') -Force
 
-$ChecksumNames = @($PackageName, 'QuotaPin-release.json', 'QuotaPin.spdx.json')
+$ChecksumNames = @($PackageName, $MacPackageName, 'QuotaPin-release.json', 'QuotaPin.spdx.json')
 $ChecksumLines = foreach ($Name in $ChecksumNames) {
     $Path = Join-Path $OutputRoot $Name
     '{0}  {1}' -f (Get-Sha256 $Path), $Name
@@ -272,5 +273,5 @@ $ChecksumLines = foreach ($Name in $ChecksumNames) {
     commit = $Commit
     manifest = $ManifestPath
     sbom = $SpdxPath
-    publicAsset = $PackageName
+    publicAssets = @($PackageName, $MacPackageName)
 } | ConvertTo-Json -Compress

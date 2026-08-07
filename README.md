@@ -90,9 +90,9 @@ Details: [configuration](docs/configuration.md) · [security](SECURITY.md) · [p
 
 QuotaPin checks for updates at most once a day and never installs one without confirmation. It never restarts Codex; when safe in-place reattachment is unavailable, the new version waits for the next normal launch.
 
-## The Mac build still needs a real Mac
+## macOS build
 
-GitHub Actions builds a self-contained macOS developer artifact, but CI cannot prove compatibility with the current Codex app, Gatekeeper, or real account-row geometry. The [macOS port kit](docs/macos-port.md) lists the required hardware evidence and links to a sanitized [compatibility report](https://github.com/WSL043/QuotaPin-for-Codex/issues/new?template=macos-compatibility.yml).
+GitHub Actions builds one self-contained universal macOS package and exercises install, update, LaunchAgent startup, configuration preservation, and uninstall on both Apple silicon and Intel runners. A signed-in Mac is still required to verify the current Codex account row and Gatekeeper behavior. See the [macOS implementation and acceptance boundary](docs/macos.md), or send a sanitized [compatibility report](https://github.com/WSL043/QuotaPin-for-Codex/issues/new?template=macos-compatibility.yml).
 
 ## Ideas & contributions
 
@@ -100,10 +100,16 @@ GitHub Actions builds a self-contained macOS developer artifact, but CI cannot p
 
 ## Uninstall
 
-Use **Start > QuotaPin > Uninstall QuotaPin**, or run:
+On Windows, use **Start > QuotaPin > Uninstall QuotaPin**, or run:
 
 ```powershell
 & "$env:LOCALAPPDATA\QuotaPin\unins000.exe"
+```
+
+On macOS:
+
+```bash
+"$HOME/Library/Application Support/QuotaPin/uninstall.sh"
 ```
 
 QuotaPin removes its own files and shortcuts. Codex stays untouched.

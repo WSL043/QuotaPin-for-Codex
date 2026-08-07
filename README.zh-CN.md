@@ -90,9 +90,9 @@ QuotaPin 只从本机 Codex 读取剩余额度，不读取任务内容、提示�
 
 QuotaPin 一天最多检查一次更新，未经确认不会安装，也不会重启 Codex。无法安全原位接入时，新版本会等到下次正常启动再生效。
 
-## Mac 版还需要真机验收
+## macOS 版
 
-GitHub Actions 可以构建独立运行的 macOS 开发版，但不能证明它适配当前 Codex、Gatekeeper 和真实账户栏。所需的真机证据与脱敏反馈入口都在 [macOS 移植说明](docs/macos-port.md)里。
+GitHub Actions 会构建一个自包含的 macOS 通用包，并分别在 Apple 芯片与 Intel runner 上跑完安装、更新、LaunchAgent 自启动、配置保留和卸载。当前 Codex 的真实账户栏与 Gatekeeper 表现仍需登录状态的 Mac 验收。实现边界和验收项目见 [macOS 说明](docs/macos.md)，也可以提交[脱敏兼容性报告](https://github.com/WSL043/QuotaPin-for-Codex/issues/new?template=macos-compatibility.yml)。
 
 ## 想法与贡献
 
@@ -100,10 +100,16 @@ GitHub Actions 可以构建独立运行的 macOS 开发版，但不能证明它�
 
 ## 卸载
 
-打开 **开始菜单 > QuotaPin > Uninstall QuotaPin**，或者运行：
+Windows 可以打开 **开始菜单 > QuotaPin > Uninstall QuotaPin**，或者运行：
 
 ```powershell
 & "$env:LOCALAPPDATA\QuotaPin\unins000.exe"
+```
+
+macOS：
+
+```bash
+"$HOME/Library/Application Support/QuotaPin/uninstall.sh"
 ```
 
 QuotaPin 只移除自己的文件和快捷方式，Codex 不受影响。

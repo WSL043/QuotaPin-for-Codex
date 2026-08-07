@@ -82,6 +82,14 @@ if (!bootstrap.includes("$Release.immutable -ne $true") || !bootstrap.includes("
   fail("remote installer lost immutable stable-channel validation");
 }
 
+const macBootstrap = read("install-macos.sh");
+if (!macBootstrap.includes("/releases/latest") || !macBootstrap.includes("/releases/tags/v$REQUESTED_VERSION")) {
+  fail("macOS remote installer does not expose stable-default and explicit-version channels");
+}
+if (!macBootstrap.includes('IMMUTABLE" == "true"') || !macBootstrap.includes('assets.$index.digest')) {
+  fail("macOS remote installer lost immutable release or GitHub digest validation");
+}
+
 for (const readme of ["README.md", "README.zh-CN.md", "README.ja.md"]) {
   const text = read(readme);
   if (!text.includes("https://raw.githubusercontent.com/WSL043/QuotaPin-for-Codex/main/install.ps1")) fail(`${readme} does not use the stable bootstrap`);

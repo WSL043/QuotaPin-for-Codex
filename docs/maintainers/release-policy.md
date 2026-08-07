@@ -2,13 +2,13 @@
 
 This file is for maintainers. It is deliberately separate from the user-facing README.
 
-## Branches
+## Development and publication
 
-- `main` contains the canonical released source and is the only branch from which a public release may be tagged.
-- `develop` contains normal public development work.
-- short-lived topic branches merge into `develop` through review, then an accepted beta or stable release commit is promoted to `main`.
+- `main` is the canonical public source and the only branch used by the current project workflow.
+- Normal fixes accumulate as commits and CI artifacts. They do not create a GitHub Release.
+- Do not create a stable tag or invoke the release workflow until the owner explicitly approves that exact version after development acceptance.
 
-Both long-lived branches are public after the repository opens. Development candidates may be downloaded from GitHub Actions, but they are not GitHub Releases.
+Development candidates may be downloaded from GitHub Actions, but they are not GitHub Releases.
 
 ## Versions and GitHub Releases
 
@@ -16,7 +16,7 @@ Both long-lived branches are public after the repository opens. Development cand
 - Public stable tags use `vMAJOR.MINOR.PATCH`; public beta tags use `vMAJOR.MINOR.PATCH-beta.N`. Both must be reachable from `origin/main`.
 - Alpha, dev, nightly, preview, RC, and arbitrary `v*` tags are rejected by the release workflow.
 
-The public release page may contain reviewed beta and stable package releases. Each release exposes one versioned Windows executable; build manifests, checksums, and SBOM evidence stay inside the verified CI handoff. Betas are GitHub prereleases, are never Latest, and require exact-version installation. Development builds stay in Actions. Only stable releases feed the moving Quick Start and default update channel.
+The public release page may contain reviewed beta and stable package releases. A cross-platform release exposes one versioned Windows executable and one versioned universal macOS archive; build manifests, checksums, and SBOM evidence stay inside the verified CI handoff. Betas are GitHub prereleases, are never Latest, and require exact-version installation. Development builds stay in Actions. Only stable releases feed the moving Quick Start and default update channel.
 
 ## Clean source gate
 

@@ -227,13 +227,14 @@ has(setup, 'Type: files; Name: "{app}\\config.json"', "Setup uninstall must remo
 has(setup, 'RunOnceId: "StopQuotaPin"', "Setup uninstall cleanup must run once");
 has(release, ".\\scripts\\build-windows.ps1", "public release workflow must build the shared versioned executable");
 lacks(release, "QuotaPin-Setup.exe", "public release workflow must not name or upload Setup");
-has(release, "scripts/public-release.mjs prepare", "public release workflow must stage the exact single-executable policy");
+has(release, "scripts/public-release.mjs prepare", "public release workflow must stage the exact cross-platform package policy");
 has(release, ".\\scripts\\install-inno-ci.ps1", "release workflow must use the shared verified Inno Setup compiler bootstrap");
 has(innoCiInstaller, "4d11e8050b6185e0d49bd9e8cc661a7a59f44959a621d31d11033124c4e8a7b0", "CI must pin the Inno Setup compiler digest");
 has(innoCiInstaller, "Pyrsys B\\.V\\.", "CI must validate the Inno Setup publisher");
 has(installerBuilder, "ISCC.exe", "the unified build must compile the Inno Setup recipe");
 has(installerBuilder, "$env:QUOTAPIN_ISCC_PATH", "the unified build must accept the verified CI compiler path");
-has(publicRelease, 'return `QuotaPin-${normalized}.exe`', "public asset policy must publish one versioned executable");
+has(publicRelease, 'return `QuotaPin-${normalized}.exe`', "public asset policy must publish one versioned Windows executable");
+has(publicRelease, 'return `QuotaPin-macOS-${normalized}.tar.gz`', "public asset policy must publish one versioned universal macOS package");
 has(publicRelease, '"QuotaPin-release.json", "QuotaPin.spdx.json"', "candidate verification must retain internal manifest and SBOM evidence");
 lacks(publicRelease, '"QuotaPin-Windows-x64.zip"', "public asset policy must not revive the legacy ZIP");
 lacks(release, "actions/attest", "the release workflow must not add a second public attestation beside GitHub's immutable release record");

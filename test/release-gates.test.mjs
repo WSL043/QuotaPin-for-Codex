@@ -3,11 +3,12 @@ import fs from "node:fs";
 import path from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
-import { packageNameForVersion, publicReleaseAssets } from "../scripts/public-release.mjs";
+import { macPackageNameForVersion, packageNameForVersion, publicReleaseAssets } from "../scripts/public-release.mjs";
 
 const workflowsRoot = new URL("../.github/workflows/", import.meta.url);
 const VERSION = fs.readFileSync(new URL("../VERSION", import.meta.url), "utf8").trim();
 const PUBLIC_PACKAGE = packageNameForVersion(VERSION);
+const PUBLIC_MAC_PACKAGE = macPackageNameForVersion(VERSION);
 
 function workflow(name) {
   return fs.readFileSync(new URL(name, workflowsRoot), "utf8");
@@ -17,12 +18,14 @@ test("pull-request CI exercises source behavior without publishing an installer"
   const workflow = fs.readFileSync(new URL("../.github/workflows/check.yml", import.meta.url), "utf8");
   assert.match(workflow, /push:\s*\n\s+branches:\s*\n\s+- main/);
   assert.doesNotMatch(workflow, /- beta/);
-  assert.match(workflow, /- develop/);
+  assert.doesNotMatch(workflow, /- develop/);
   assert.match(workflow, /pull_request:/);
-  assert.match(workflow, /macos-developer-preview:[\s\S]*?runs-on: macos-latest/);
-  assert.match(workflow, /Verify platform-neutral quota, renderer, and Mac adapter core/);
-  assert.match(workflow, /scripts\/macos\/build-dev\.sh/);
-  assert.match(workflow, /QuotaPin-macOS-dev-\$\{\{ github\.sha \}\}/);
+  assert.match(workflow, /macos-native-lifecycle:[\s\S]*?runner: macos-15[\s\S]*?runner: macos-15-intel/);
+  assert.match(workflow, /Verify portable core and macOS adapter/);
+  assert.match(workflow, /scripts\/macos\/build\.sh/);
+  assert.match(workflow, /scripts\/macos\/test-lifecycle\.sh/);
+  assert.match(workflow, /QuotaPin-macOS-universal-\$\{\{ github\.sha \}\}/);
+  assert.match(workflow, /package-universal\.sh/);
   assert.match(workflow, /retention-days: 7/);
   for (const script of ["scripts\\install-inno-ci.ps1", "scripts\\build-windows.ps1"]) {
     assert.ok(workflow.includes(script), `check workflow does not run ${script}`);
@@ -35,10 +38,14 @@ test("pull-request CI exercises source behavior without publishing an installer"
   assert.match(workflow, /finally \{[\s\S]*?git tag --delete \$candidateTag/);
 });
 
-test("tag workflow builds and publishes only the exact versioned executable", () => {
+test("tag workflow builds and publishes only the exact cross-platform packages", () => {
   const release = workflow("release.yml");
   assert.doesNotMatch(release, /workflow_dispatch|QuotaPin-Setup/i);
   assert.match(release, /scripts\\build-windows\.ps1/);
+  assert.match(release, /scripts\/macos\/build\.sh/);
+  assert.match(release, /scripts\/macos\/test-lifecycle\.sh/);
+  assert.match(release, /scripts\/macos\/package-universal\.sh/);
+  assert.match(release, /QuotaPin-macOS-universal-\$\{\{ github\.sha \}\}/);
   assert.match(release, /scripts\\install-inno-ci\.ps1/);
   assert.match(release, /public-release\.mjs prepare[\s\S]*?--output dist\/public/);
   assert.match(release, /public-release\.mjs verify/);
@@ -119,11 +126,12 @@ test("development artifacts, beta prereleases, and stable releases have separate
   assert.doesNotMatch(release, /QuotaPin-macOS-dev/);
 });
 
-test("the public asset contract exposes one versioned executable and keeps build evidence internal", () => {
+test("the public asset contract exposes one package per platform and keeps build evidence internal", () => {
   const assets = publicReleaseAssets(VERSION);
-  assert.deepEqual(assets, [PUBLIC_PACKAGE]);
-  assert.equal(new Set(assets).size, 1);
+  assert.deepEqual(assets, [PUBLIC_PACKAGE, PUBLIC_MAC_PACKAGE]);
+  assert.equal(new Set(assets).size, 2);
   assert.match(PUBLIC_PACKAGE, new RegExp(`^QuotaPin-${VERSION.replaceAll(".", "\\.")}\\.exe$`));
+  assert.match(PUBLIC_MAC_PACKAGE, new RegExp(`^QuotaPin-macOS-${VERSION.replaceAll(".", "\\.")}\\.tar\\.gz$`));
   assert.ok(assets.every((name) => !/\.(?:zip|json|sha256)$/i.test(name)));
 });
 
@@ -158,7 +166,7 @@ test("release metadata imports the signing module from its active PowerShell hos
 
 test("platform builds retry transient upstream license downloads without changing the payload contract", () => {
   const windowsBuild = fs.readFileSync(new URL("../scripts/build-agent.ps1", import.meta.url), "utf8");
-  const macBuild = fs.readFileSync(new URL("../scripts/macos/build-dev.sh", import.meta.url), "utf8");
+  const macBuild = fs.readFileSync(new URL("../scripts/macos/build.sh", import.meta.url), "utf8");
   assert.match(windowsBuild, /foreach \(\$Attempt in 1\.\.4\)/);
   assert.match(windowsBuild, /Invoke-WebRequest[^\r\n]*-TimeoutSec 60/);
   assert.match(macBuild, /--retry 4 --retry-all-errors/);

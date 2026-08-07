@@ -16,12 +16,18 @@ export function packageNameForVersion(version) {
   return `QuotaPin-${normalized}.exe`;
 }
 
+export function macPackageNameForVersion(version) {
+  const normalized = String(version ?? "").trim();
+  if (!VERSION_PATTERN.test(normalized)) fail("Release package version is invalid.");
+  return `QuotaPin-macOS-${normalized}.tar.gz`;
+}
+
 export function publicReleaseAssets(version) {
-  return Object.freeze([packageNameForVersion(version)]);
+  return Object.freeze([packageNameForVersion(version), macPackageNameForVersion(version)]);
 }
 
 function candidateFiles(version) {
-  return Object.freeze([packageNameForVersion(version), "QuotaPin-release.json", "QuotaPin.spdx.json"]);
+  return Object.freeze([...publicReleaseAssets(version), "QuotaPin-release.json", "QuotaPin.spdx.json"]);
 }
 
 function fail(message) {
@@ -93,12 +99,16 @@ function inspectWindowsPackage(packagePath) {
 
 function verifyCandidateDirectory(directory, identity, expectedContext = "github-release-workflow") {
   const packageName = packageNameForVersion(identity.version);
+  const macPackageName = macPackageNameForVersion(identity.version);
   exactNames(directory, candidateFiles(identity.version), "Release candidate");
   const packagePath = path.join(directory, packageName);
+  const macPackagePath = path.join(directory, macPackageName);
   const manifestPath = path.join(directory, "QuotaPin-release.json");
   const sbomPath = path.join(directory, "QuotaPin.spdx.json");
   if (fs.statSync(packagePath).size <= 0 || fs.statSync(packagePath).size > 160 * 1024 * 1024) fail("QuotaPin.exe has an invalid size.");
+  if (fs.statSync(macPackagePath).size <= 0 || fs.statSync(macPackagePath).size > 160 * 1024 * 1024) fail("QuotaPin macOS package has an invalid size.");
   const packageHash = sha256File(packagePath);
+  const macPackageHash = sha256File(macPackagePath);
   const manifest = readJson(manifestPath);
   if (manifest.schemaVersion !== "quotapin-release/v1" || manifest.product !== "QuotaPin" || manifest.version !== identity.version) {
     fail("Release manifest identity is invalid.");
@@ -116,9 +126,15 @@ function verifyCandidateDirectory(directory, identity, expectedContext = "github
     fail("Release manifest trust policy is incomplete.");
   }
   const artifacts = Array.isArray(manifest.artifacts) ? manifest.artifacts : [];
-  if (artifacts.length !== 1 || artifacts[0]?.name !== packageName ||
-      artifacts[0]?.sha256 !== packageHash || Number(artifacts[0]?.bytes) !== fs.statSync(packagePath).size) {
-    fail("Release manifest does not bind the single public installer.");
+  const expectedArtifacts = new Map([
+    [packageName, { sha256: packageHash, bytes: fs.statSync(packagePath).size }],
+    [macPackageName, { sha256: macPackageHash, bytes: fs.statSync(macPackagePath).size }],
+  ]);
+  if (artifacts.length !== expectedArtifacts.size || artifacts.some((artifact) => {
+    const expected = expectedArtifacts.get(artifact?.name);
+    return !expected || artifact?.sha256 !== expected.sha256 || Number(artifact?.bytes) !== expected.bytes;
+  })) {
+    fail("Release manifest does not bind the exact cross-platform public installers.");
   }
   const sbomHash = sha256File(sbomPath);
   const sbom = readJson(sbomPath);
@@ -137,8 +153,11 @@ function verifyCandidateDirectory(directory, identity, expectedContext = "github
     commit: identity.commit,
     tag: identity.tag,
     asset: packageName,
+    assets: publicReleaseAssets(identity.version),
     bytes: fs.statSync(packagePath).size,
     sha256: packageHash,
+    macBytes: fs.statSync(macPackagePath).size,
+    macSha256: macPackageHash,
     sbomSha256: sbomHash,
   };
 }
@@ -186,17 +205,34 @@ export function verifyPublishedRelease(options) {
   const directory = normalizeDirectory(options.directory, "Published release directory");
   const packageName = packageNameForVersion(identity.version);
   exactNames(directory, publicReleaseAssets(identity.version), "Published release");
+  const suppliedDigests = typeof options.digests === "string" ? readDigestMap(options.digests) : options.digests;
+  const results = publicReleaseAssets(identity.version).map((asset) => {
+    const assetPath = path.join(directory, asset);
+    const actual = sha256File(assetPath);
+    const expected = String(suppliedDigests?.[asset] ?? "").replace(/^sha256:/, "");
+    if (!HASH_PATTERN.test(expected) || actual !== expected) fail(`Published ${asset} does not match GitHub's SHA-256 digest.`);
+    return { asset, bytes: fs.statSync(assetPath).size, sha256: actual };
+  });
   const packagePath = path.join(directory, packageName);
-  const actual = sha256File(packagePath);
-  const expected = String(options.digest ?? "").replace(/^sha256:/, "");
-  if (!HASH_PATTERN.test(expected) || actual !== expected) fail("Published QuotaPin.exe does not match GitHub's SHA-256 digest.");
   const windowsIdentity = inspectWindowsPackage(packagePath);
   if (windowsIdentity && (String(windowsIdentity.ProductVersion ?? "").trim() !== identity.version ||
       !String(windowsIdentity.FileDescription ?? "").includes(identity.repository) ||
       String(windowsIdentity.OriginalFilename ?? "").trim() !== packageName)) {
     fail(`Published ${packageName} version metadata does not match the release.`);
   }
-  return { version: identity.version, commit: identity.commit, tag: identity.tag, asset: packageName, bytes: fs.statSync(packagePath).size, sha256: actual };
+  const windows = results.find((result) => result.asset === packageName);
+  return { version: identity.version, commit: identity.commit, tag: identity.tag, asset: packageName, assets: results, bytes: windows.bytes, sha256: windows.sha256 };
+}
+
+function readDigestMap(value) {
+  try {
+    const parsed = JSON.parse(value);
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) fail("Published release digest map is invalid.");
+    return parsed;
+  } catch (error) {
+    if (error?.message === "Published release digest map is invalid.") throw error;
+    fail(`Published release digest map is invalid: ${error.message}`);
+  }
 }
 
 function parseArguments(values) {

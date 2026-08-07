@@ -6,6 +6,7 @@ import path from "node:path";
 import test from "node:test";
 import {
   OFFICIAL_REPOSITORY,
+  macPackageNameForVersion,
   packageNameForVersion,
   prepareCiCandidate,
   publicReleaseAssets,
@@ -21,7 +22,9 @@ const COMMIT = "0123456789abcdef0123456789abcdef01234567";
 const TAG = `v${VERSION}`;
 const RUN = "24680";
 const PACKAGE = packageNameForVersion(VERSION);
-const CANDIDATES = [PACKAGE, "QuotaPin-release.json", "QuotaPin.spdx.json"];
+const MAC_PACKAGE = macPackageNameForVersion(VERSION);
+const PUBLIC_ASSETS = [PACKAGE, MAC_PACKAGE];
+const CANDIDATES = [...PUBLIC_ASSETS, "QuotaPin-release.json", "QuotaPin.spdx.json"];
 
 function sha256(filePath) {
   return crypto.createHash("sha256").update(fs.readFileSync(filePath)).digest("hex");
@@ -34,8 +37,10 @@ function fixture(t) {
   const output = path.join(root, "public");
   fs.mkdirSync(source, { recursive: true });
   fs.writeFileSync(path.join(root, "VERSION"), VERSION);
-  fs.writeFileSync(path.join(source, PACKAGE), "single-package-fixture");
+  fs.writeFileSync(path.join(source, PACKAGE), "windows-package-fixture");
+  fs.writeFileSync(path.join(source, MAC_PACKAGE), "universal-macos-package-fixture");
   const packageHash = sha256(path.join(source, PACKAGE));
+  const macPackageHash = sha256(path.join(source, MAC_PACKAGE));
   const sbom = {
     spdxVersion: "SPDX-2.3",
     name: `QuotaPin-${VERSION}`,
@@ -52,7 +57,10 @@ function fixture(t) {
       exactAssetDigestRequired: true,
       userConfirmationRequired: true,
     },
-    artifacts: [{ name: PACKAGE, bytes: fs.statSync(path.join(source, PACKAGE)).size, sha256: packageHash }],
+    artifacts: [
+      { name: PACKAGE, bytes: fs.statSync(path.join(source, PACKAGE)).size, sha256: packageHash },
+      { name: MAC_PACKAGE, bytes: fs.statSync(path.join(source, MAC_PACKAGE)).size, sha256: macPackageHash },
+    ],
     sbom: { name: "QuotaPin.spdx.json", sha256: sha256(path.join(source, "QuotaPin.spdx.json")) },
   };
   fs.writeFileSync(path.join(source, "QuotaPin-release.json"), `${JSON.stringify(manifest)}\n`);
@@ -72,24 +80,24 @@ function options(paths) {
   };
 }
 
-test("single-package release preparation keeps internal evidence out of the public asset list", (t) => {
+test("cross-platform release preparation keeps internal evidence out of the public asset list", (t) => {
   const paths = fixture(t);
   const prepared = preparePublicRelease(options(paths));
   assert.deepEqual(fs.readdirSync(paths.output).sort(), [...CANDIDATES].sort());
   assert.equal(prepared.asset, PACKAGE);
-  assert.deepEqual(publicReleaseAssets(VERSION), [PACKAGE]);
+  assert.deepEqual(publicReleaseAssets(VERSION), PUBLIC_ASSETS);
   const verified = verifyPublicRelease(options(paths));
   assert.equal(verified.sha256, prepared.sha256);
 });
 
-test("single-package release verification rejects an extra candidate or a tampered executable", (t) => {
+test("cross-platform release verification rejects an extra candidate or a tampered package", (t) => {
   const paths = fixture(t);
   preparePublicRelease(options(paths));
   fs.writeFileSync(path.join(paths.output, "internal.zip"), "forbidden");
   assert.throws(() => verifyPublicRelease(options(paths)), /differs from policy/i);
   fs.rmSync(path.join(paths.output, "internal.zip"));
   fs.appendFileSync(path.join(paths.output, PACKAGE), "tampered");
-  assert.throws(() => verifyPublicRelease(options(paths)), /single public installer/i);
+  assert.throws(() => verifyPublicRelease(options(paths)), /cross-platform public installers/i);
 });
 
 test("branch CI candidates are verified without pretending to be release provenance", (t) => {
@@ -104,15 +112,17 @@ test("branch CI candidates are verified without pretending to be release provena
   assert.throws(() => verifyPublicRelease(options(paths)), /workflow provenance/i);
 });
 
-test("published release readback accepts only the versioned executable and GitHub's exact digest", (t) => {
+test("published release readback accepts only the two platform packages and GitHub's exact digests", (t) => {
   const paths = fixture(t);
   preparePublicRelease(options(paths));
   const published = path.join(paths.root, "published");
   fs.mkdirSync(published);
   fs.copyFileSync(path.join(paths.output, PACKAGE), path.join(published, PACKAGE));
-  const digest = `sha256:${sha256(path.join(published, PACKAGE))}`;
-  const result = verifyPublishedRelease({ ...options(paths), directory: published, digest });
-  assert.equal(result.sha256, digest.slice("sha256:".length));
+  fs.copyFileSync(path.join(paths.output, MAC_PACKAGE), path.join(published, MAC_PACKAGE));
+  const digests = Object.fromEntries(PUBLIC_ASSETS.map((asset) => [asset, `sha256:${sha256(path.join(published, asset))}`]));
+  const result = verifyPublishedRelease({ ...options(paths), directory: published, digests });
+  assert.equal(result.sha256, digests[PACKAGE].slice("sha256:".length));
+  assert.deepEqual(result.assets.map(({ asset }) => asset), PUBLIC_ASSETS);
   fs.writeFileSync(path.join(published, "notes.txt"), "no extra assets");
-  assert.throws(() => verifyPublishedRelease({ ...options(paths), directory: published, digest }), /differs from policy/i);
+  assert.throws(() => verifyPublishedRelease({ ...options(paths), directory: published, digests }), /differs from policy/i);
 });

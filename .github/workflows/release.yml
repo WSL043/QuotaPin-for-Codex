@@ -17,8 +17,121 @@ env:
   OFFICIAL_REPOSITORY: https://github.com/WSL043/QuotaPin-for-Codex
 
 jobs:
+  macos-native-release:
+    name: Build and test macOS release slice (${{ matrix.arch }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-15
+            arch: arm64
+          - runner: macos-15-intel
+            arch: x86_64
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 25
+    permissions:
+      contents: read
+    steps:
+      - name: Check out tagged source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.0
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          package-manager-cache: false
+
+      - name: Verify tagged source and native architecture
+        run: |
+          test "$GITHUB_REF_TYPE" = tag
+          VERSION="$(tr -d '\r\n' < VERSION)"
+          test "$GITHUB_REF_NAME" = "v$VERSION"
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          test "$(uname -m)" = "${{ matrix.arch }}"
+          test -f ".github/release-notes/$GITHUB_REF_NAME.md"
+
+      - name: Install locked build dependencies
+        run: npm ci --ignore-scripts
+
+      - name: Run portable and macOS product gates
+        run: |
+          tests=()
+          for file in test/*.test.mjs; do
+            case "$(basename "$file")" in
+              auto-attach-policy.test.mjs|bootstrap-contract.test.mjs|bootstrap-download.test.mjs|install-lifecycle-transaction.test.mjs|lifecycle-rollback.test.mjs|release-gates.test.mjs|release-trust.test.mjs|update-transaction.test.mjs|windows-powershell-contract.test.mjs) ;;
+              *) tests+=("$file") ;;
+            esac
+          done
+          node --test "${tests[@]}"
+          bash -n install-macos.sh
+          for file in scripts/macos/*.sh; do bash -n "$file"; done
+
+      - name: Build, self-check, and exercise the native lifecycle
+        run: |
+          ./scripts/macos/build.sh
+          ./scripts/macos/test-lifecycle.sh dist/macos-native
+
+      - name: Upload native release slice
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.0
+        with:
+          name: QuotaPin-macOS-release-${{ matrix.arch }}-${{ github.sha }}
+          if-no-files-found: error
+          retention-days: 2
+          path: dist/macos-native/
+
+  macos-universal-release:
+    name: Assemble universal macOS release package
+    needs: macos-native-release
+    runs-on: macos-15
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - name: Check out the same tagged source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.0
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          package-manager-cache: false
+
+      - name: Download both independently tested slices
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          pattern: QuotaPin-macOS-release-*-${{ github.sha }}
+          path: dist/thin
+
+      - name: Build and verify one universal package
+        run: |
+          npm ci --ignore-scripts
+          ARM="dist/thin/QuotaPin-macOS-release-arm64-${{ github.sha }}"
+          X64="dist/thin/QuotaPin-macOS-release-x86_64-${{ github.sha }}"
+          ./scripts/macos/package-universal.sh "$ARM" "$X64" dist/macos-universal
+          VERSION="$(tr -d '\r\n' < VERSION)"
+          test -s "dist/QuotaPin-macOS-$VERSION.tar.gz"
+          for binary in QuotaPin.Agent QuotaPin.Mac; do
+            ARCHS="$(lipo -archs "dist/macos-universal/$binary")"
+            [[ "$ARCHS" == *arm64* && "$ARCHS" == *x86_64* ]]
+          done
+
+      - name: Upload universal macOS release package
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.0
+        with:
+          name: QuotaPin-macOS-universal-${{ github.sha }}
+          if-no-files-found: error
+          retention-days: 2
+          path: dist/QuotaPin-macOS-*.tar.gz
+
   build:
-    name: Build single-package release candidate
+    name: Build cross-platform release candidate
+    needs: macos-universal-release
     runs-on: windows-latest
     timeout-minutes: 25
     permissions:
@@ -100,6 +213,12 @@ jobs:
           }
           if ($failed) { throw 'PowerShell syntax check failed.' }
 
+      - name: Download the verified universal macOS package
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: QuotaPin-macOS-universal-${{ github.sha }}
+          path: dist
+
       - name: Build self-contained Windows package
         shell: powershell
         run: .\scripts\build-windows.ps1
@@ -131,7 +250,7 @@ jobs:
           $dirty = @(& git status --porcelain=v1 --untracked-files=all)
           if ($dirty.Count) { throw "Release build mutated source: $($dirty -join ', ')" }
 
-      - name: Upload immutable single-package candidate
+      - name: Upload immutable cross-platform candidate
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.0
         with:
           name: QuotaPin-Package-${{ github.sha }}
@@ -159,7 +278,7 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
 
-      - name: Download verified single-package candidate
+      - name: Download verified cross-platform candidate
         uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
         with:
           name: QuotaPin-Package-${{ github.sha }}
@@ -175,7 +294,7 @@ jobs:
           --tag "$GITHUB_REF_NAME"
           --workflow-run-id "$GITHUB_RUN_ID"
 
-      - name: Publish only the reviewed executable
+      - name: Publish only the reviewed platform packages
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}

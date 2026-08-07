@@ -41,4 +41,4 @@ Host UI changes can invalidate an otherwise compatible release. QuotaPin fails c
 
 Development evidence is marked as development. A tagged release is added only after the same checks are repeated against its published artifacts. Windows 10 remains best-effort until a real-device report is recorded.
 
-macOS is not yet a supported platform. See [the macOS port kit](macos-port.md) for the evidence required before adding it here.
+macOS is not yet a supported platform. See [the macOS implementation and acceptance boundary](macos.md) for the evidence required before adding it here.

@@ -7,7 +7,7 @@ QuotaPin changes stay small, testable, and fail-closed. Maintainers follow the b
 - sanitized compatibility reports for a current Codex Desktop build;
 - tests for an existing formatter or configuration behavior;
 - documentation fixes and translations;
-- a real-device macOS probe following `docs/macos-port.md` and the [sanitized report form](https://github.com/WSL043/QuotaPin-for-Codex/issues/new?template=macos-compatibility.yml);
+- a real-device macOS probe following [`docs/macos.md`](docs/macos.md) and the [sanitized report form](https://github.com/WSL043/QuotaPin-for-Codex/issues/new?template=macos-compatibility.yml);
 - narrow bug fixes with before-and-after evidence.
 
 For a large feature or new platform adapter, open an issue before writing the whole patch. Early discussion avoids duplicate work and is the fastest way to reach a change that can be merged.

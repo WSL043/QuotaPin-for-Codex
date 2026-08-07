@@ -90,9 +90,9 @@ QuotaPin が読むのは、この端末の Codex が返す残り使用量だけ�
 
 更新の確認は1日最大1回。確認なしでインストールすることも、Codex を再起動することもありません。その場で安全に接続できない場合、新版は次回の通常起動から有効になります。
 
-## Mac 版は実機確認が必要です
+## macOS 版
 
-GitHub Actions では単体実行できる macOS 開発版をビルドできますが、現在の Codex、Gatekeeper、実際のアカウント欄との互換性までは証明できません。必要な実機証拠と匿名化した報告先は [macOS 移植ガイド](docs/macos-port.md)にまとめています。
+GitHub Actions では、自己完結型の macOS Universal パッケージを作成し、Apple シリコンと Intel の両 runner でインストール、更新、LaunchAgent 起動、設定保持、アンインストールまで確認します。現在の Codex のアカウント欄と Gatekeeper については、ログイン済みの実機確認がまだ必要です。実装範囲と確認項目は [macOS ガイド](docs/macos.md)を参照してください。結果は[匿名化した互換性レポート](https://github.com/WSL043/QuotaPin-for-Codex/issues/new?template=macos-compatibility.yml)から共有できます。
 
 ## アイデアとコントリビューション
 
@@ -100,10 +100,16 @@ GitHub Actions では単体実行できる macOS 開発版をビルドできま�
 
 ## アンインストール
 
-**スタート > QuotaPin > Uninstall QuotaPin** を開くか、次を実行します：
+Windows では **スタート > QuotaPin > Uninstall QuotaPin** を開くか、次を実行します：
 
 ```powershell
 & "$env:LOCALAPPDATA\QuotaPin\unins000.exe"
+```
+
+macOS：
+
+```bash
+"$HOME/Library/Application Support/QuotaPin/uninstall.sh"
 ```
 
 QuotaPin が削除するのは、自身のファイルとショートカットだけです。Codex はそのまま残ります。

@@ -160,6 +160,16 @@ The helper accepts only a fresh official root `ChatGPT.exe` launch. The launcher
 
 The moving remote bootstrap chooses GitHub's immutable latest stable release unless an exact published version is requested. It requires one asset named for that version, checks GitHub's SHA-256 digest and the executable's embedded identity, then invokes the same installer used by the guided path. Install and update preserve configuration and launch preference. Update never launches Codex; the new Agent may resume only against the exact previously verified loopback runtime, otherwise attachment is deferred to the next normal launch. Native uninstall is the explicit full-removal boundary and deletes configuration with the rest of the QuotaPin install root.
 
+## macOS lifecycle
+
+The macOS package contains two self-contained universal Mach-O executables: the shared Agent and a platform launcher. End-user machines do not need Node.js, Homebrew, `sudo`, or a modified Codex bundle. Installation is per user under `~/Library/Application Support/QuotaPin`; one LaunchAgent owns the background watcher, while the user continues to open the official Codex icon normally.
+
+The launcher accepts only a strict-valid `com.openai.codex` bundle signed with the expected OpenAI Team ID. Its App Server command must resolve inside that same bundle, and CDP listens only on an ephemeral `127.0.0.1` port. A fresh uninstrumented Codex generation receives at most one bounded handoff. The successor PID, start time, executable, source generation, renderer receipt, Agent PID, and loopback endpoint must agree. Ambiguity or failure latches the generation until Codex has been completely closed for the rearm interval, preventing restart loops.
+
+Install and update use staging plus rollback, preserve the canonical configuration and runtime receipt, and start the replacement watcher with the already-open Codex generation ignored. They do not close or relaunch Codex. If the exact previous runtime remains valid, the new Agent may recover it without a host restart; otherwise QuotaPin waits for the next normal launch. Uninstall first removes the LaunchAgent, then stops only an Agent whose PID, start time, and executable match the installed receipt before deleting the per-user root.
+
+Apple silicon and Intel slices are built and lifecycle-tested independently on their native GitHub runners. A separate macOS job combines only those tested slices with `lipo`, verifies both architectures and ad-hoc signatures, and produces one `QuotaPin-macOS-VERSION.tar.gz`. The future tagged-release manifest binds that archive and the Windows executable together; only those two platform packages are public assets, while provenance and SBOM files remain internal release evidence.
+
 ## Adapter rules
 
 1. Match host elements by geometry and semantics, never by user text.

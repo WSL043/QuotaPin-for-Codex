@@ -5,6 +5,11 @@ import path from "node:path";
 import test from "node:test";
 import { resolveCodexAppServerCommand } from "../src/agent/app-server-runtime.mjs";
 import {
+  macAutoAttachDecision,
+  macProcessIdentityKey,
+  macProcessIdentityMatches,
+} from "../src/macos/auto-attach-policy.mjs";
+import {
   codexOpenArguments,
   defaultCodexBundleCandidates,
   isPathInsideBundle,
@@ -99,12 +104,44 @@ test("App Server command trust supports only Windows executables or executable p
   }), /does not support the linux host adapter/);
 });
 
-test("macOS developer scripts remain explicit, non-persistent, and separate from GitHub Releases", () => {
-  const build = fs.readFileSync(new URL("../scripts/macos/build-dev.sh", import.meta.url), "utf8");
-  const install = fs.readFileSync(new URL("../scripts/macos/install-dev.sh", import.meta.url), "utf8");
-  const uninstall = fs.readFileSync(new URL("../scripts/macos/uninstall-dev.sh", import.meta.url), "utf8");
+test("macOS auto-attach permits one fresh handoff and then protects the successor", () => {
+  const source = { pid: 100, startedAt: "Fri Aug 7 12:00:00 2026", executablePath: "/Applications/Codex.app/Contents/MacOS/Codex" };
+  const successor = { ...source, pid: 200, startedAt: "Fri Aug 7 12:00:02 2026" };
+  assert.equal(macAutoAttachDecision({ guardState: "none", roots: [source], candidateFresh: true }), "launch-once");
+  assert.equal(macAutoAttachDecision({ guardState: "successor-observed", roots: [successor], protectedPid: 200 }), "adopt");
+  assert.equal(macAutoAttachDecision({ guardState: "successor-observed", roots: [], protectedPid: 200, idleSeconds: 29 }), "wait-idle");
+  assert.equal(macAutoAttachDecision({ guardState: "successor-observed", roots: [], protectedPid: 200, idleSeconds: 30 }), "rearm");
+  assert.equal(macAutoAttachDecision({ guardState: "degraded-latched", roots: [successor] }), "stop");
+  assert.equal(macAutoAttachDecision({ guardState: "none", roots: [source, successor], candidateFresh: true }), "ignore-ambiguous");
+  assert.equal(macProcessIdentityKey(source), `100:${source.startedAt}`);
+  assert.equal(macProcessIdentityMatches(source, source), true);
+  assert.equal(macProcessIdentityMatches(source, successor), false);
+});
+
+test("macOS production package owns a user LaunchAgent and a bounded uninstall path", () => {
+  const build = fs.readFileSync(new URL("../scripts/macos/build.sh", import.meta.url), "utf8");
+  const install = fs.readFileSync(new URL("../scripts/macos/install.sh", import.meta.url), "utf8");
+  const uninstall = fs.readFileSync(new URL("../scripts/macos/uninstall.sh", import.meta.url), "utf8");
+  const bootstrap = fs.readFileSync(new URL("../install-macos.sh", import.meta.url), "utf8");
+  const launcher = fs.readFileSync(new URL("../src/macos/launcher.mjs", import.meta.url), "utf8");
   assert.match(build, /--macho-segment-name NODE_SEA/);
   assert.match(build, /codesign --force --sign -/);
-  assert.doesNotMatch(install, /LaunchAgents|SMAppService|login item/i);
-  assert.match(uninstall, /Codex\.app was not modified/);
+  assert.match(install, /Library\/LaunchAgents/);
+  assert.match(install, /io\.github\.wsl043\.quotapin/);
+  assert.match(install, /--ignore-existing/);
+  assert.match(install, /--codex-app/);
+  assert.match(install, /plutil -extract codexApp/);
+  assert.match(install, /plutil -insert codexApp/);
+  assert.match(install, /config\.json/);
+  assert.match(uninstall, /stop-agent/);
+  assert.match(uninstall, /official Codex app was not modified/);
+  assert.match(bootstrap, /releases\/latest/);
+  assert.match(bootstrap, /releases\/tags\/v\$REQUESTED_VERSION/);
+  assert.match(bootstrap, /assets\.\$index\.digest/);
+  assert.match(bootstrap, /INSTALL_ARGUMENTS\+\=\(--codex-app/);
+  assert.match(launcher, /budget=1\/1/);
+  assert.match(launcher, /"--codex-app", bundleIdentity\.bundlePath/);
+  assert.match(launcher, /degraded-latched/);
+  assert.doesNotMatch(launcher, /SIGKILL/);
+  assert.doesNotMatch(install, /sudo|Homebrew|brew install/);
 });

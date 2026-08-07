@@ -245,7 +245,7 @@ test("the numeric value can be hidden independently from account identity", () =
   assert.equal(invisible.showDot, false);
 });
 
-test("the quota bar is an explicit schema-ten opt-in and carries the canonical percentage", () => {
+test("the quota bar is an explicit schema-ten opt-in with a bounded semantic scope", () => {
   const legacy = sanitizeConfig({
     ...DEFAULT_CONFIG,
     version: 8,
@@ -256,6 +256,16 @@ test("the quota bar is an explicit schema-ten opt-in and carries the canonical p
   const view = formatQuota(weekly, enabled, now, "en-US");
   assert.equal(view.showBar, true);
   assert.equal(view.remainingPercent, 42);
+  assert.equal(view.layout.barScope, "quota");
+  assert.equal(withProfile({ showBar: true, barScope: "row" }).profiles[0].barScope, "row");
+  assert.equal(withProfile({ showBar: true, barScope: "screen" }).profiles[0].barScope, "quota");
+  const migratedRail = sanitizeConfig({
+    ...DEFAULT_CONFIG,
+    version: 16,
+    profiles: [{ ...DEFAULT_CONFIG.profiles[0], showBar: true, barScope: undefined }],
+  });
+  assert.equal(migratedRail.profiles[0].showBar, true);
+  assert.equal(migratedRail.profiles[0].barScope, "quota");
 });
 
 test("avatar shape is bounded and older profiles migrate to the native Codex shape", () => {
@@ -286,6 +296,7 @@ test("badge size and module order are bounded per saved view", () => {
     identity: "show",
     avatarShape: "native",
     fontSize: 16,
+    barScope: "quota",
   });
   const bounded = withProfile({ fontSize: 90, moduleOrder: ["quota", "quota", "name"] }, configured);
   const profile = bounded.profiles.find((item) => item.id === bounded.activeProfile);

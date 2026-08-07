@@ -119,7 +119,7 @@ const installScript = String.raw`(() => {
   try { previous?.cleanup?.(); } catch {}
 
   const badgeId = "quotapin-inline-badge";
-  let state = { status: "loading", view: { text: "--%", parts: { value: "--%", todayTokens: "—", lifetimeTokens: "—", label: "", countdown: "--", relative: "--", seconds: "--:--:--", date: "--", reset: "--" }, runtimeWindows: [], tooltipWindows: [], renderTemplate: "{remaining}%", renderHoverTemplate: "", renderSeparator: " · ", tooltip: "QuotaPin is loading", severity: "unavailable", profileId: "glance", availableWindowCount: 0, showValue: true, showDot: false, showBar: false, remainingPercent: null, showLabel: false, showCountdown: false, showRelative: false, showSeconds: false, showDate: false, showReset: false, showTodayTokens: false, showLifetimeTokens: false, displayMode: "modules", valueColor: "muted", dotColor: "muted", identityColor: "inherit", valueColorMode: "muted", dotColorMode: "muted", identityColorMode: "inherit", effect: "none", effectTarget: "dot", effectAt: "critical", overdriveEgg: false, overdriveAlways: false, overdriveEffect: "menuFire", accountRowMode: "legacy", layout: { moduleOrder: defaultModuleOrder, layoutMode: "auto", snapThreshold: 16, snapTargets: ["edges", "center", "modules"], moduleAnchors: defaultModuleAnchors, identity: "show", avatarShape: "native", fontSize: 14 } }, preferences: null };
+  let state = { status: "loading", view: { text: "--%", parts: { value: "--%", todayTokens: "—", lifetimeTokens: "—", label: "", countdown: "--", relative: "--", seconds: "--:--:--", date: "--", reset: "--" }, runtimeWindows: [], tooltipWindows: [], renderTemplate: "{remaining}%", renderHoverTemplate: "", renderSeparator: " · ", tooltip: "QuotaPin is loading", severity: "unavailable", profileId: "glance", availableWindowCount: 0, showValue: true, showDot: false, showBar: false, barScope: "quota", remainingPercent: null, showLabel: false, showCountdown: false, showRelative: false, showSeconds: false, showDate: false, showReset: false, showTodayTokens: false, showLifetimeTokens: false, displayMode: "modules", valueColor: "muted", dotColor: "muted", identityColor: "inherit", valueColorMode: "muted", dotColorMode: "muted", identityColorMode: "inherit", effect: "none", effectTarget: "dot", effectAt: "critical", overdriveEgg: false, overdriveAlways: false, overdriveEffect: "menuFire", accountRowMode: "legacy", layout: { moduleOrder: defaultModuleOrder, layoutMode: "auto", snapThreshold: 16, snapTargets: ["edges", "center", "modules"], moduleAnchors: defaultModuleAnchors, identity: "show", avatarShape: "native", fontSize: 14, barScope: "quota" } }, preferences: null };
   const deliveryRuntime = { highestSequence: 0, accepted: 0, rejected: 0, lastReason: null, trace: [] };
   const deliverySummary = (nextState, sequence, accepted, cause) => {
     const view = nextState?.view ?? {};
@@ -550,6 +550,7 @@ const installScript = String.raw`(() => {
         identity: profile.identity,
         avatarShape: profile.avatarShape,
         fontSize: profile.fontSize,
+        barScope: profile.barScope === "row" ? "row" : "quota",
       },
     };
   }
@@ -1039,7 +1040,7 @@ const installScript = String.raw`(() => {
       ],
       layout: [
         cleanLayoutMode(layout.layoutMode), layout.identity ?? "show", layout.avatarShape ?? "native",
-        stableLayoutMetric(layout.fontSize), cleanModuleOrder(layout.moduleOrder),
+        stableLayoutMetric(layout.fontSize), layout.barScope === "row" ? "row" : "quota", cleanModuleOrder(layout.moduleOrder),
         layoutModules.map((module) => stableLayoutMetric(anchors[module])),
       ],
       typography: [badge.style.fontSize, badge.style.lineHeight, rowStyle.fontFamily, rowStyle.fontWeight, rowStyle.letterSpacing],
@@ -1084,6 +1085,7 @@ const installScript = String.raw`(() => {
       && nextSignature === lastLayoutSignature
       && committedLayoutMatches(lastLayoutPlan, row, badge)) {
       layoutRuntimeMetrics.skippedReconciliations += 1;
+      positionQuotaBar(row, badge, layout.barScope);
       return findIdentityParts(row, badge);
     }
     const identityParts = applyLayout(row, badge, layout);
@@ -1133,6 +1135,36 @@ const installScript = String.raw`(() => {
     }
   }
 
+  function positionQuotaBar(row, badge, requestedScope = "quota") {
+    if (!(row instanceof HTMLElement) || !(badge instanceof HTMLElement)) return;
+    const bar = badge.querySelector('[data-part="bar"]');
+    if (!(bar instanceof HTMLElement)) return;
+    const bounds = accountLayoutBounds(row);
+    const scope = requestedScope === "row" ? "row" : "quota";
+    let targetLeft = bounds.left;
+    let targetRight = bounds.right;
+    if (scope === "quota") {
+      const modules = findAccountModules(row, badge);
+      const quotaRects = layoutModules
+        .filter((module) => !["avatar", "name"].includes(module))
+        .map((module) => modules[module])
+        .filter((node) => node instanceof HTMLElement && getComputedStyle(node).display !== "none")
+        .map((node) => node.getBoundingClientRect())
+        .filter((rect) => rect.width > 0 && rect.height > 0);
+      if (quotaRects.length) {
+        targetLeft = Math.max(bounds.left, Math.min(...quotaRects.map((rect) => rect.left)));
+        targetRight = Math.min(bounds.right, Math.max(...quotaRects.map((rect) => rect.right)));
+      }
+    }
+    if (targetRight <= targetLeft) {
+      targetLeft = bounds.left;
+      targetRight = bounds.right;
+    }
+    bar.dataset.quotapinBarScope = scope;
+    bar.style.left = targetLeft - bounds.rowRect.left + "px";
+    bar.style.right = bounds.rowRect.right - targetRight + "px";
+  }
+
   function paintPositionedModuleLayout(row, badge, layout = {}, options = {}) {
     const modules = findAccountModules(row, badge);
     const visibleSet = new Set(visibleAccountModules(modules));
@@ -1149,7 +1181,10 @@ const installScript = String.raw`(() => {
     const visible = options.dragging === true
       ? orderedVisible
       : orderedVisible.sort((left, right) => anchors[left] - anchors[right] || moduleRank.get(left) - moduleRank.get(right));
-    if (!visible.length) return null;
+    if (!visible.length) {
+      positionQuotaBar(row, badge, layout.barScope);
+      return null;
+    }
     const bounds = options.frozenBounds ?? accountLayoutBounds(row);
     row.dataset.quotapinPositionedLayout = "true";
     if (getComputedStyle(row).position === "static") {
@@ -1231,6 +1266,7 @@ const installScript = String.raw`(() => {
       const height = measured?.height ?? node.getBoundingClientRect().height;
       node.style.top = Math.max(0, (bounds.rowRect.height - height) / 2) + "px";
     }
+    positionQuotaBar(row, badge, layout.barScope);
     return { ...solved, anchors, bounds };
   }
 

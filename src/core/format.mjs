@@ -215,6 +215,7 @@ export function formatQuota(snapshot, config, now = Date.now(), locale) {
       showValue: profile.showValue,
       showDot: profile.showDot,
       showBar: profile.showBar,
+      barScope: profile.barScope,
       remainingPercent: null,
       showLabel: false,
       showCountdown: profile.showCountdown,
@@ -247,6 +248,7 @@ export function formatQuota(snapshot, config, now = Date.now(), locale) {
         identity: profile.identity,
         avatarShape: profile.avatarShape,
         fontSize: profile.fontSize,
+        barScope: profile.barScope,
       },
     };
   }
@@ -297,6 +299,7 @@ export function formatQuota(snapshot, config, now = Date.now(), locale) {
     showValue: profile.showValue,
     showDot: profile.showDot,
     showBar: profile.showBar,
+    barScope: profile.barScope,
     remainingPercent: Math.max(0, Math.min(100, lowest)),
     showLabel: effectiveShowLabel,
     showCountdown: profile.showCountdown,
@@ -329,6 +332,7 @@ export function formatQuota(snapshot, config, now = Date.now(), locale) {
       identity: profile.identity,
       avatarShape: profile.avatarShape,
       fontSize: profile.fontSize,
+      barScope: profile.barScope,
     },
   };
 }

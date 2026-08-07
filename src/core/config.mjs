@@ -21,7 +21,8 @@ export const OVERDRIVE_EFFECTS = ["menuFire"];
 export const SUPPORTED_LOCALES = ["en", "zh-CN", "ja"];
 export const PANEL_THEMES = ["dark", "light"];
 export const ACCOUNT_ROW_MODES = ["legacy", "beta"];
-export const CURRENT_CONFIG_VERSION = 16;
+export const BAR_SCOPES = ["quota", "row"];
+export const CURRENT_CONFIG_VERSION = 17;
 
 export const DEFAULT_MODULE_ANCHORS = Object.freeze({
   avatar: 0.04,
@@ -67,6 +68,7 @@ const DEFAULT_PROFILES = [
     showValue: true,
     showDot: false,
     showBar: false,
+    barScope: "quota",
     showLabel: false,
     showCountdown: false,
     showRelative: false,
@@ -101,6 +103,7 @@ const DEFAULT_PROFILES = [
     showValue: true,
     showDot: false,
     showBar: false,
+    barScope: "quota",
     showLabel: false,
     showCountdown: true,
     showRelative: false,
@@ -135,6 +138,7 @@ const DEFAULT_PROFILES = [
     showValue: true,
     showDot: false,
     showBar: false,
+    barScope: "quota",
     showLabel: false,
     showCountdown: false,
     showRelative: false,
@@ -428,6 +432,7 @@ function sanitizeProfile(input, fallback, index, usedIds, sourceVersion) {
   const showValue = typeof source.showValue === "boolean" ? source.showValue : (base.showValue ?? true);
   const showDot = typeof source.showDot === "boolean" ? source.showDot : (base.showDot ?? true);
   const showBar = Number(sourceVersion) >= 9 && typeof source.showBar === "boolean" ? source.showBar : false;
+  const barScope = BAR_SCOPES.includes(source.barScope) ? source.barScope : (base.barScope ?? "quota");
   const display = displaySettings(source, base, sourceVersion);
   let moduleOrder = cleanModuleOrder(source.moduleOrder, base.moduleOrder, source);
   if (Number(sourceVersion) < 5 && display.displayMode === "modules" && /^\s*\{label\}/.test(display.template)) {
@@ -469,6 +474,7 @@ function sanitizeProfile(input, fallback, index, usedIds, sourceVersion) {
     showValue,
     showDot,
     showBar,
+    barScope,
     showLabel: display.showLabel,
     showCountdown: display.showCountdown,
     showRelative: display.showRelative,

@@ -559,6 +559,10 @@ test("live sidebar resizing uses a frame-coalesced layout path without full rend
   await waitFor(() => client.evaluate(`!document.querySelector('#quotapin-profile-editor')`));
   const result = await client.evaluate(`(async () => {
     const controller = window.__quotaPinController;
+    // Begin from a settled frame. The fixture's initial ResizeObserver event
+    // may otherwise be counted before its already-queued rAF callback, making
+    // this transaction appear to paint one more frame than events it owns.
+    await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
     const before = controller.inspectLayoutRuntime();
     const footer = document.querySelector('#account-footer');
     await new Promise((resolve) => {
@@ -591,8 +595,10 @@ test("live sidebar resizing uses a frame-coalesced layout path without full rend
   })()`);
   const eventDelta = result.after.resizeEvents - result.before.resizeEvents;
   const frameDelta = result.after.resizeFrames - result.before.resizeFrames;
+  const pendingFrameDebt = Math.max(0, result.before.resizeEvents - result.before.resizeFrames);
   assert.ok(eventDelta >= 10, JSON.stringify(result));
-  assert.ok(frameDelta > 0 && frameDelta <= eventDelta, JSON.stringify(result));
+  assert.ok(frameDelta > 0 && frameDelta <= eventDelta + pendingFrameDebt, JSON.stringify(result));
+  assert.ok(result.after.resizeFrames <= result.after.resizeEvents, JSON.stringify(result));
   assert.ok(result.after.renders - result.before.renders <= 1, JSON.stringify(result));
   assert.equal(result.after.integrityRepairs, result.before.integrityRepairs, JSON.stringify(result));
   assert.equal(result.contained, true, JSON.stringify(result));
@@ -1093,6 +1099,7 @@ test("the optional quota bar is saved separately and paints inside the real acco
     button.click();
     await new Promise((resolve) => setTimeout(resolve, 120));
     const afterRect = bar.getBoundingClientRect();
+    const valueRect = document.querySelector('[data-quotapin-module="value"]').getBoundingClientRect();
     const rowRect = row.getBoundingClientRect();
     return {
       before,
@@ -1101,6 +1108,8 @@ test("the optional quota bar is saved separately and paints inside the real acco
         display: getComputedStyle(bar).display,
         width: getComputedStyle(fill).width,
         contained: afterRect.left >= rowRect.left && afterRect.right <= rowRect.right && afterRect.bottom <= rowRect.bottom,
+        followsQuota: Math.abs(afterRect.left - valueRect.left) <= .5 && Math.abs(afterRect.right - valueRect.right) <= .5,
+        scope: bar.dataset.quotapinBarScope,
         row: rowRect.toJSON(),
       },
     };
@@ -1111,6 +1120,8 @@ test("the optional quota bar is saved separately and paints inside the real acco
   assert.equal(result.after.display, "block");
   assert.notEqual(result.after.width, "0px");
   assert.equal(result.after.contained, true);
+  assert.equal(result.after.followsQuota, true);
+  assert.equal(result.after.scope, "quota");
   assert.deepEqual(result.after.row, result.before.row, "the bar must not resize the account row");
 });
 
@@ -1145,17 +1156,26 @@ test("free layout keeps its physical composition during a live sidebar resize", 
     const after = centers();
     const bar = document.querySelector('#quotapin-inline-badge [data-part="bar"]');
     const barRect = bar.getBoundingClientRect();
+    const dateRect = node('date').getBoundingClientRect();
+    const resetRect = node('reset').getBoundingClientRect();
     const rowRect = row.getBoundingClientRect();
     return {
       drift: Object.fromEntries(ids.map((id) => [id, Math.abs(after[id] - before[id])])),
       transitionDurations: ids.map((id) => getComputedStyle(node(id)).transitionDuration),
       barInsets: { left: barRect.left - rowRect.left, right: rowRect.right - barRect.right },
+      quotaRail: {
+        left: Math.abs(barRect.left - Math.min(dateRect.left, resetRect.left)),
+        right: Math.abs(barRect.right - Math.max(dateRect.right, resetRect.right)),
+        scope: bar.dataset.quotapinBarScope,
+      },
     };
   })()`);
   assert.ok(Object.values(result.drift).every((value) => value <= 1), JSON.stringify(result.drift));
   assert.deepEqual(new Set(result.transitionDurations), new Set(["0s"]));
-  assert.ok(Math.abs(result.barInsets.left - 8) <= 0.5, JSON.stringify(result.barInsets));
-  assert.ok(Math.abs(result.barInsets.right - 8) <= 0.5, JSON.stringify(result.barInsets));
+  assert.ok(result.barInsets.left > 8, JSON.stringify(result.barInsets));
+  assert.ok(result.quotaRail.left <= .5, JSON.stringify(result.quotaRail));
+  assert.ok(result.quotaRail.right <= .5, JSON.stringify(result.quotaRail));
+  assert.equal(result.quotaRail.scope, "quota");
 });
 
 test("high-frequency stale client states cannot flash disabled modules", { skip: !canRun }, async () => {

@@ -35,7 +35,7 @@ The active tab owns its content scrolling. Opening a long list does not create a
 | `date` | `Aug 9` | Localized reset calendar date. |
 | `reset` | `Sun 02:15 AM` | Localized reset weekday and time. |
 
-Quick shows each module as it looks now instead of asking you to decode setting names. Pressed means visible. The palette groups identity, quota, status, usage, and time; the status dot and quota bar share one status row. In Code, avatar and name are represented by `identity`; the ten inline quota modules use separate `show*` flags. The optional quota bar is a full-row overlay controlled by `showBar`; it is not part of horizontal `moduleOrder`.
+Quick shows each module as it looks now instead of asking you to decode setting names. Pressed means visible. The palette groups identity, quota, status, usage, and time; the status dot and quota bar share one status row. In Code, avatar and name are represented by `identity`; the ten inline quota modules use separate `show*` flags. The optional quota bar is controlled by `showBar` and follows the visible quota cluster by default; it is not part of horizontal `moduleOrder` and cannot push another module.
 
 The two token counters are optional and start off. Today's counter reads only numeric `token_count` fields from local Codex session logs; it never reads message bodies and refreshes from newly appended events. It therefore describes this computer, and two computers can show different Today values. Fork replays and repeated cumulative snapshots are deduplicated. The compact module stays clean; if bounded startup backfill cannot prove full-day coverage, the localized hover copy identifies the exact value as "at least" rather than presenting a lower bound as exact. Total uses Codex's account profile summary and is account-wide; that summary may settle later than the local counter. Neither value is written into the QuotaPin configuration or log, and an unavailable source stays `—` rather than becoming zero.
 
@@ -73,13 +73,13 @@ Three editable views ship as starting points:
 
 Duplicate and rename a useful view instead of rebuilding it. Up to eight views are retained and at least one always remains. Date and precise-seconds combinations can be built directly in Quick or Code.
 
-## Configuration JSON (schema 16)
+## Configuration JSON (schema 17)
 
 A compact valid document looks like this:
 
 ```json
 {
-  "version": 16,
+  "version": 17,
   "locale": "en",
   "panelTheme": "dark",
   "accountRowMode": "legacy",
@@ -95,6 +95,7 @@ A compact valid document looks like this:
     "showValue": true,
     "showDot": false,
     "showBar": false,
+    "barScope": "quota",
     "showLabel": false,
     "showCountdown": false,
     "showRelative": false,
@@ -152,7 +153,8 @@ A compact valid document looks like this:
 | `separator` | string, max 8 chars | Joins multiple quota periods in template mode; it does not draw a separate visual module. |
 | `displayMode` | `modules`, `template` | Independent modules or one Code-defined value. |
 | `showValue`, `showDot`, `showTodayTokens`, `showLifetimeTokens`, `showLabel`, `showCountdown`, `showRelative`, `showSeconds`, `showDate`, `showReset` | boolean | Independent inline module visibility. The token counters are optional; `countdown` is compact and universal; `relative` uses localized words. |
-| `showBar` | boolean | Optional full-width quota line at the bottom of the account row; it uses the current percentage and value color without entering horizontal layout. |
+| `showBar` | boolean | Optional quota line at the bottom of the account row; it uses the current percentage and value color without entering horizontal layout. |
+| `barScope` | `quota` \| `row` | `quota` follows the first and last visible quota module so the line reads as part of that group. `row` restores the former full-row rail. This advanced setting is available in Code. |
 | `moduleOrder` | one permutation of all twelve module ids | Fallback order when two modules are saved at the same horizontal point. |
 | `layoutMode` | `auto`, `free` | Stable semantic docking or exact normalized coordinates. Quick uses `auto`; `free` is an expert Code option. |
 | `snapThreshold` | integer `0`–`48` | Magnetic distance in pixels for `auto`; `0` requires an exact target hit. |

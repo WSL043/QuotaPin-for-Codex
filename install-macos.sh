@@ -39,7 +39,7 @@ write_update_result() {
   local status="$1"
   local temporary="$UPDATE_RESULT.$$.tmp"
   mkdir -p "$(dirname "$UPDATE_RESULT")"
-  plutil -create json "$temporary"
+  plutil -create xml1 "$temporary"
   plutil -insert schema -integer 1 "$temporary"
   plutil -insert status -string "$status" "$temporary"
   plutil -insert version -string "$VERSION" "$temporary"
@@ -47,6 +47,7 @@ write_update_result() {
     plutil -insert fromVersion -string "$FROM_VERSION" "$temporary"
   fi
   plutil -insert writtenAt -string "$(date -u '+%Y-%m-%dT%H:%M:%SZ')" "$temporary"
+  plutil -convert json "$temporary"
   chmod 600 "$temporary"
   mv "$temporary" "$UPDATE_RESULT"
 }

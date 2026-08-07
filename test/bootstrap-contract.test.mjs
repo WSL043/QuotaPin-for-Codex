@@ -17,6 +17,7 @@ test("the moving bootstrap defaults to immutable stable and accepts an explicit 
   assert.match(source, /Receive-QuotaPinBootstrapFile/);
   assert.match(source, /Write-Host "Downloading \$DisplayName\$SizeText/);
   assert.match(source, /OriginalFilename\)\.Trim\(\) -cne \$PackageName/);
+  assert.match(source, /ConvertTo-QuotaPinWindowsFileVersion \$SelectedVersion/);
   assert.match(source, /\$Process\.WaitForExit\(\)/);
   assert.doesNotMatch(source, /Start-Process -FilePath \$PackagePath[^\r\n]*-Wait/);
   assert.match(source, /--continue-at -/);
@@ -52,6 +53,7 @@ test("the updater installs the shared package, defers attachment, and never laun
   assert.match(update, /'\/COMMANDINSTALL=1'/);
   assert.match(update, /'\/NORESTART'/);
   assert.match(update, /\$Process\.WaitForExit\(\)/);
+  assert.match(update, /ConvertTo-QuotaPinWindowsFileVersion \$Version/);
   assert.doesNotMatch(update, /Start-Process -FilePath \$PackagePath[^\r\n]*-Wait/);
   assert.match(update, /Attachment will retry on the next Codex launch/);
   assert.doesNotMatch(update, /Start-Process[^\r\n]*(?:ChatGPT|Codex\.exe|launch\.ps1)/i);

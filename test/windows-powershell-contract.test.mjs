@@ -152,6 +152,7 @@ test("command updater contract keeps exact platform-package trust, cleanup, and 
   assert.match(updater, /\$Release\.immutable -ne \$true/);
   assert.match(updater, /\$AssetDigest -notmatch '\^sha256:/);
   assert.match(updater, /OriginalFilename\)\.Trim\(\) -cne \$PackageName/);
+  assert.match(updater, /ConvertTo-QuotaPinWindowsFileVersion \$Version/);
   assert.match(updater, /Start-Process -FilePath \$PackagePath[\s\S]*'\/COMMANDINSTALL=1'/);
   assert.match(updater, /\$Process\.WaitForExit\(\)/);
   assert.doesNotMatch(updater, /Start-Process -FilePath \$PackagePath[^\r\n]*-Wait/);

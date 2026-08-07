@@ -267,7 +267,7 @@ namespace QuotaPin.Tray
             var info = FileVersionInfo.GetVersionInfo(path);
             var productVersion = (info.ProductVersion ?? "").Trim();
             var description = info.FileDescription ?? "";
-            if (!string.Equals(productVersion, expectedVersion, StringComparison.Ordinal) ||
+            if (!string.Equals(productVersion, WindowsFileVersion(expectedVersion), StringComparison.Ordinal) ||
                 description.IndexOf(RepositoryUrl, StringComparison.Ordinal) < 0 ||
                 !string.Equals((info.OriginalFilename ?? "").Trim(), PackageName(expectedVersion), StringComparison.Ordinal))
                 throw new SecurityException("The downloaded installer identity does not match the release.");
@@ -277,6 +277,13 @@ namespace QuotaPin.Tray
         {
             SemanticVersion.Parse(version);
             return "QuotaPin-" + version + ".exe";
+        }
+
+        private static string WindowsFileVersion(string version)
+        {
+            var match = Regex.Match(version ?? "", "\\A(\\d+\\.\\d+\\.\\d+)(?:-(?:alpha|beta)\\.(\\d+))?\\z", RegexOptions.CultureInvariant);
+            if (!match.Success) throw new FormatException("Version cannot be represented as a Windows file version.");
+            return match.Groups[1].Value + "." + (match.Groups[2].Success ? match.Groups[2].Value : "0");
         }
 
         private static string StringValue(Dictionary<string, object> source, string key)

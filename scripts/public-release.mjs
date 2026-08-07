@@ -26,6 +26,12 @@ export function publicReleaseAssets(version) {
   return Object.freeze([packageNameForVersion(version), macPackageNameForVersion(version)]);
 }
 
+export function windowsFileVersionForVersion(version) {
+  const match = /^(\d+\.\d+\.\d+)(?:-(?:alpha|beta)\.(\d+))?$/.exec(String(version ?? "").trim());
+  if (!match) fail("Release version cannot be represented as a Windows file version.");
+  return `${match[1]}.${match[2] ?? "0"}`;
+}
+
 function candidateFiles(version) {
   return Object.freeze([...publicReleaseAssets(version), "QuotaPin-release.json", "QuotaPin.spdx.json"]);
 }
@@ -143,7 +149,7 @@ function verifyCandidateDirectory(directory, identity, expectedContext = "github
     fail("Release SBOM identity is invalid.");
   }
   const windowsIdentity = inspectWindowsPackage(packagePath);
-  if (windowsIdentity && (String(windowsIdentity.ProductVersion ?? "").trim() !== identity.version ||
+  if (windowsIdentity && (String(windowsIdentity.ProductVersion ?? "").trim() !== windowsFileVersionForVersion(identity.version) ||
       !String(windowsIdentity.FileDescription ?? "").includes(identity.repository) ||
       String(windowsIdentity.OriginalFilename ?? "").trim() !== packageName)) {
     fail(`${packageName} version metadata does not match the release.`);
@@ -215,7 +221,7 @@ export function verifyPublishedRelease(options) {
   });
   const packagePath = path.join(directory, packageName);
   const windowsIdentity = inspectWindowsPackage(packagePath);
-  if (windowsIdentity && (String(windowsIdentity.ProductVersion ?? "").trim() !== identity.version ||
+  if (windowsIdentity && (String(windowsIdentity.ProductVersion ?? "").trim() !== windowsFileVersionForVersion(identity.version) ||
       !String(windowsIdentity.FileDescription ?? "").includes(identity.repository) ||
       String(windowsIdentity.OriginalFilename ?? "").trim() !== packageName)) {
     fail(`Published ${packageName} version metadata does not match the release.`);

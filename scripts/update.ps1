@@ -10,6 +10,13 @@ $OfficialRepository = 'https://github.com/WSL043/QuotaPin-for-Codex'
 $VersionPattern = '^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$'
 if ($Version -notmatch $VersionPattern) { throw 'QuotaPin update version is invalid.' }
 
+function ConvertTo-QuotaPinWindowsFileVersion([string]$SemanticVersion) {
+    $Match = [regex]::Match($SemanticVersion, '^(\d+\.\d+\.\d+)(?:-(?:alpha|beta)\.(\d+))?$')
+    if (-not $Match.Success) { throw 'QuotaPin version cannot be represented as a Windows file version.' }
+    $Revision = if ($Match.Groups[2].Success) { $Match.Groups[2].Value } else { '0' }
+    return '{0}.{1}' -f $Match.Groups[1].Value, $Revision
+}
+
 function Compare-QuotaPinVersion([string]$Left, [string]$Right) {
     $Pattern = '^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?$'
     $L = [regex]::Match($Left, $Pattern)
@@ -185,7 +192,8 @@ try {
     $ActualDigest = 'sha256:' + (Get-FileHash -Algorithm SHA256 -LiteralPath $PackagePath).Hash.ToLowerInvariant()
     if ($ActualDigest -cne $AssetDigest) { throw 'The downloaded QuotaPin installer failed SHA-256 verification.' }
     $VersionInfo = (Get-Item -LiteralPath $PackagePath).VersionInfo
-    if (([string]$VersionInfo.ProductVersion).Trim() -cne $Version -or
+    $ExpectedPackageVersion = ConvertTo-QuotaPinWindowsFileVersion $Version
+    if (([string]$VersionInfo.ProductVersion).Trim() -cne $ExpectedPackageVersion -or
         ([string]$VersionInfo.FileDescription).IndexOf($OfficialRepository, [StringComparison]::Ordinal) -lt 0 -or
         ([string]$VersionInfo.OriginalFilename).Trim() -cne $PackageName) {
         throw 'The downloaded QuotaPin installer identity does not match the selected release.'

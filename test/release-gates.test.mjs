@@ -196,10 +196,14 @@ test("release identity checks normalize padded Windows version resources", () =>
   const verifier = fs.readFileSync(new URL("../scripts/public-release.mjs", import.meta.url), "utf8");
   assert.match(verifier, /String\(windowsIdentity\.ProductVersion \?\? ""\)\.trim\(\)/);
   assert.match(verifier, /String\(windowsIdentity\.OriginalFilename \?\? ""\)\.trim\(\)/);
+  assert.match(verifier, /windowsFileVersionForVersion\(identity\.version\)/);
 
   const bootstrap = fs.readFileSync(new URL("../install.ps1", import.meta.url), "utf8");
   const commandUpdater = fs.readFileSync(new URL("../scripts/update.ps1", import.meta.url), "utf8");
   const trayUpdater = fs.readFileSync(new URL("../src/tray/Updater.cs", import.meta.url), "utf8");
+  assert.match(bootstrap, /ConvertTo-QuotaPinWindowsFileVersion \$SelectedVersion/);
+  assert.match(commandUpdater, /ConvertTo-QuotaPinWindowsFileVersion \$Version/);
+  assert.match(trayUpdater, /WindowsFileVersion\(expectedVersion\)/);
   assert.match(bootstrap, /PackageVersionInfo\.OriginalFilename\)\.Trim\(\)/);
   assert.match(commandUpdater, /VersionInfo\.OriginalFilename\)\.Trim\(\)/);
   assert.match(trayUpdater, /OriginalFilename \?\? ""\)\.Trim\(\)/);

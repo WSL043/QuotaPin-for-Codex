@@ -14,6 +14,7 @@ import {
   verifyCiCandidate,
   verifyPublicRelease,
   verifyPublishedRelease,
+  windowsFileVersionForVersion,
 } from "../scripts/public-release.mjs";
 
 process.env.QUOTAPIN_TEST_SKIP_PE_IDENTITY = "1";
@@ -25,6 +26,13 @@ const PACKAGE = packageNameForVersion(VERSION);
 const MAC_PACKAGE = macPackageNameForVersion(VERSION);
 const PUBLIC_ASSETS = [PACKAGE, MAC_PACKAGE];
 const CANDIDATES = [...PUBLIC_ASSETS, "QuotaPin-release.json", "QuotaPin.spdx.json"];
+
+test("semantic release versions map to exact numeric Windows file versions", () => {
+  assert.equal(windowsFileVersionForVersion("1.1.0"), "1.1.0.0");
+  assert.equal(windowsFileVersionForVersion("1.1.0-beta.7"), "1.1.0.7");
+  assert.equal(windowsFileVersionForVersion("1.1.0-alpha.3"), "1.1.0.3");
+  assert.throws(() => windowsFileVersionForVersion("1.1.0-preview.1"), /cannot be represented/i);
+});
 
 function sha256(filePath) {
   return crypto.createHash("sha256").update(fs.readFileSync(filePath)).digest("hex");

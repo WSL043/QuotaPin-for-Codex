@@ -8,6 +8,13 @@ $RequestedVersion = $Version.Trim()
 if ($RequestedVersion -and $RequestedVersion -notmatch $VersionPattern) {
     throw 'QuotaPin version is invalid.'
 }
+
+function ConvertTo-QuotaPinWindowsFileVersion([string]$SemanticVersion) {
+    $Match = [regex]::Match($SemanticVersion, '^(\d+\.\d+\.\d+)(?:-(?:alpha|beta)\.(\d+))?$')
+    if (-not $Match.Success) { throw 'QuotaPin version cannot be represented as a Windows file version.' }
+    $Revision = if ($Match.Groups[2].Success) { $Match.Groups[2].Value } else { '0' }
+    return '{0}.{1}' -f $Match.Groups[1].Value, $Revision
+}
 $ReleaseApiUrl = if ($RequestedVersion) {
     "https://api.github.com/repos/WSL043/QuotaPin-for-Codex/releases/tags/v$RequestedVersion"
 }
@@ -162,7 +169,8 @@ try {
         $PackageVersionInfo = (Get-Item -LiteralPath $PackagePath).VersionInfo
         $PackageVersion = ([string]$PackageVersionInfo.ProductVersion).Trim()
         $PackageDescription = [string]$PackageVersionInfo.FileDescription
-        if ($PackageVersion -cne $SelectedVersion -or $PackageDescription.IndexOf($OfficialRepository, [StringComparison]::Ordinal) -lt 0 -or
+        $ExpectedPackageVersion = ConvertTo-QuotaPinWindowsFileVersion $SelectedVersion
+        if ($PackageVersion -cne $ExpectedPackageVersion -or $PackageDescription.IndexOf($OfficialRepository, [StringComparison]::Ordinal) -lt 0 -or
             ([string]$PackageVersionInfo.OriginalFilename).Trim() -cne $PackageName) {
             throw 'The downloaded QuotaPin installer identity does not match the selected release.'
         }

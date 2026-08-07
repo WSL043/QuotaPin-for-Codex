@@ -315,10 +315,6 @@ const installScript = String.raw`(() => {
     const binding = accountChromeBinding;
     accountChromeBinding = null;
     if (!binding) return;
-    for (const [node, snapshot] of [[binding.row, binding.rowStyle], [binding.surface, binding.surfaceStyle], [binding.help, binding.helpStyle]]) {
-      if (!(node instanceof HTMLElement) || !snapshot) continue;
-      for (const [property, value] of Object.entries(snapshot)) node.style[property] = value;
-    }
     if (binding.row instanceof HTMLElement) delete binding.row.dataset.quotapinAccountRowMode;
     if (binding.surface instanceof HTMLElement) delete binding.surface.dataset.quotapinGestureSurface;
     if (binding.help instanceof HTMLElement) delete binding.help.dataset.quotapinSuppressedHelp;
@@ -333,7 +329,7 @@ const installScript = String.raw`(() => {
       && activeBinding.surface === surface
       && activeBinding.help instanceof HTMLElement
       && activeBinding.help.isConnected
-      && activeBinding.help.style.display === "none") {
+      && activeBinding.help.dataset.quotapinSuppressedHelp === "true") {
       const replacementHelp = findAccountHelpControl(row, surface);
       if (!replacementHelp || replacementHelp === activeBinding.help) return;
     }
@@ -343,28 +339,10 @@ const installScript = String.raw`(() => {
       row.dataset.quotapinAccountRowMode = "legacy";
       return;
     }
-    if (accountChromeBinding?.row === row && accountChromeBinding.surface === surface && accountChromeBinding.help === help
-      && help.style.display === "none") return;
     restoreAccountChrome();
-    const rowStyle = Object.fromEntries(["right", "width", "maxWidth", "flex", "minHeight"].map((property) => [property, row.style[property]]));
-    const surfaceStyle = { cursor: surface.style.cursor };
-    const helpStyle = { display: help.style.display, pointerEvents: help.style.pointerEvents };
-    accountChromeBinding = { row, surface, help, rowStyle, surfaceStyle, helpStyle };
-    help.style.display = "none";
-    help.style.pointerEvents = "none";
+    accountChromeBinding = { row, surface, help };
     help.dataset.quotapinSuppressedHelp = "true";
-    const position = getComputedStyle(row).position;
-    if (position === "absolute" || position === "fixed") {
-      row.style.right = "8px";
-      row.style.width = "auto";
-    } else {
-      row.style.flex = "1 1 auto";
-      row.style.width = "auto";
-    }
-    row.style.maxWidth = "none";
-    row.style.minHeight = "32px";
     row.dataset.quotapinAccountRowMode = "beta";
-    surface.style.cursor = "pointer";
     surface.dataset.quotapinGestureSurface = "true";
   }
 
@@ -3992,6 +3970,7 @@ const installScript = String.raw`(() => {
     const style = document.createElement("style");
     style.id = "quotapin-animation-style";
     style.textContent = "#quotapin-profile-editor :focus-visible{outline:2px solid var(--quotapin-panel-accent,#6ee7b7)!important;outline-offset:2px}@keyframes quotapin-pulse{0%,100%{opacity:1;filter:brightness(1)}50%{opacity:.42;filter:brightness(1.35)}}@keyframes quotapin-blink{0%,49%{opacity:1}50%,100%{opacity:.16}}@keyframes quotapin-rainbow-value{0%,100%{color:#ff5f6d;text-shadow:0 0 5px #ff5f6d44}16%{color:#ffb86c;text-shadow:0 0 5px #ffb86c44}33%{color:#f1fa8c;text-shadow:0 0 5px #f1fa8c44}50%{color:#50fa7b;text-shadow:0 0 5px #50fa7b44}66%{color:#8be9fd;text-shadow:0 0 5px #8be9fd44}83%{color:#bd93f9;text-shadow:0 0 5px #bd93f944}}@keyframes quotapin-rainbow-dot{0%,100%{background-color:#ff5f6d;box-shadow:0 0 5px #ff5f6d88}16%{background-color:#ffb86c;box-shadow:0 0 5px #ffb86c88}33%{background-color:#f1fa8c;box-shadow:0 0 5px #f1fa8c88}50%{background-color:#50fa7b;box-shadow:0 0 5px #50fa7b88}66%{background-color:#8be9fd;box-shadow:0 0 5px #8be9fd88}83%{background-color:#bd93f9;box-shadow:0 0 5px #bd93f988}}";
+    style.textContent += '[data-quotapin-suppressed-help="true"]{display:none!important;pointer-events:none!important}[data-quotapin-account-row-mode="beta"]{right:8px!important;width:auto!important;max-width:none!important;min-height:32px!important;flex:1 1 auto!important}[data-quotapin-gesture-surface="true"]{cursor:pointer!important}';
     document.head.appendChild(style);
   }
   function isEditableTarget(target) {

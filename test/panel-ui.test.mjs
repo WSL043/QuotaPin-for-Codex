@@ -481,7 +481,7 @@ test("Legacy and Beta switch one reversible account-row and gesture contract", {
   await openPanel();
   await client.evaluate(`document.querySelector('[data-editor-mode="advanced"]').click()`);
   await client.evaluate(`document.querySelector('[data-config-key="accountRowMode"] [data-quick-value="beta"]').click()`);
-  await waitFor(() => client.evaluate(`document.querySelector('#native-help').style.display === 'none'`));
+  await waitFor(() => client.evaluate(`getComputedStyle(document.querySelector('#native-help')).display === 'none'`));
   const betaGeometry = await client.evaluate(`(() => {
     const row=document.querySelector('#account').getBoundingClientRect();
     const footer=document.querySelector('#account-footer').getBoundingClientRect();
@@ -493,23 +493,32 @@ test("Legacy and Beta switch one reversible account-row and gesture contract", {
 
   const betaStableBefore = await client.evaluate(`(() => {
     const row=document.querySelector('#account').getBoundingClientRect();
-    return {left:row.left,right:row.right,width:row.width};
+    return {left:row.left,right:row.right,width:row.width,reconciliations:window.__quotaPinController.inspectLayoutRuntime().reconciliations};
   })()`);
   for (let index = 0; index < 6; index += 1) {
+    await client.evaluate(`(() => {
+      const row=document.querySelector('#account');
+      const help=document.querySelector('#native-help');
+      for (const property of ['right','width','maxWidth','minHeight','flex']) row.style[property]='';
+      help.style.display='';help.style.pointerEvents='';
+    })()`);
     await client.evaluate(`window.__fixtureSetParts({ remaining: ${41 - index} })`);
     await new Promise((resolve) => setTimeout(resolve, 20));
   }
   const betaStableAfter = await client.evaluate(`(() => {
     const row=document.querySelector('#account').getBoundingClientRect();
     const help=document.querySelector('#native-help');
-    return {left:row.left,right:row.right,width:row.width,helpDisplay:help.style.display,mode:document.querySelector('#account').dataset.quotapinAccountRowMode,surface:document.querySelector('#account-footer').dataset.quotapinGestureSurface};
+    return {left:row.left,right:row.right,width:row.width,reconciliations:window.__quotaPinController.inspectLayoutRuntime().reconciliations,helpDisplay:getComputedStyle(help).display,helpInlineDisplay:help.style.display,rowInlineRight:document.querySelector('#account').style.right,mode:document.querySelector('#account').dataset.quotapinAccountRowMode,surface:document.querySelector('#account-footer').dataset.quotapinGestureSurface};
   })()`);
-  assert.deepEqual(betaStableAfter, {
+  assert.deepEqual({ ...betaStableAfter, reconciliations: betaStableBefore.reconciliations }, {
     ...betaStableBefore,
     helpDisplay: "none",
+    helpInlineDisplay: "",
+    rowInlineRight: "",
     mode: "beta",
     surface: "true",
-  }, "routine quota renders must not restore and reapply the Beta account chrome");
+  }, "Beta must remain stable without fighting host-owned inline styles");
+  assert.ok(betaStableAfter.reconciliations - betaStableBefore.reconciliations <= 1, JSON.stringify({ betaStableBefore, betaStableAfter }));
 
   await client.evaluate(`[...document.querySelectorAll('#quotapin-profile-editor button')].find(button=>button.textContent==='Done').click()`);
   await waitFor(() => client.evaluate(`!document.querySelector('#quotapin-profile-editor')`));
@@ -532,7 +541,7 @@ test("Legacy and Beta switch one reversible account-row and gesture contract", {
 
   await client.evaluate(`document.querySelector('[data-editor-mode="advanced"]').click()`);
   await client.evaluate(`document.querySelector('[data-config-key="accountRowMode"] [data-quick-value="legacy"]').click()`);
-  await waitFor(() => client.evaluate(`document.querySelector('#native-help').style.display !== 'none'`));
+  await waitFor(() => client.evaluate(`getComputedStyle(document.querySelector('#native-help')).display !== 'none'`));
   const legacyGeometry = await client.evaluate(`(() => {const row=document.querySelector('#account').getBoundingClientRect();return {right:row.right,mode:document.querySelector('#account').dataset.quotapinAccountRowMode,surface:document.querySelector('#account-footer').dataset.quotapinGestureSurface??null};})()`);
   assert.equal(legacyGeometry.mode, "legacy");
   assert.equal(legacyGeometry.surface, null);

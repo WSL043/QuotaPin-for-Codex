@@ -1,6 +1,7 @@
 {
-  "version": 15,
+  "version": 16,
   "panelTheme": "dark",
+  "accountRowMode": "legacy",
   "locale": "en",
   "activeProfile": "glance",
   "profiles": [

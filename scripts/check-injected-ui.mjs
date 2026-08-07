@@ -24,8 +24,9 @@ if (!renderer.includes('querySelectorAll("*")')) {
 if (renderer.includes('querySelectorAll("span").find((node) => String(node.className).includes("ModelPickerTriggerInlineFastIcon"))')) {
   throw new Error("Fast-mode detection must not assume the live glyph is a span");
 }
-if (!renderer.includes("accountRow?.contains(target)")) {
-  throw new Error("Pointer interception must remain scoped to the Codex account row");
+if (!renderer.includes('accountRowMode() === "beta" ? findAccountSurface(accountRow) : accountRow')
+  || !renderer.includes('return candidates.length === 1 ? candidates[0] : null')) {
+  throw new Error("Pointer interception must remain scoped to one proven account button or Beta footer");
 }
 if (!renderer.includes("input,textarea,select,[contenteditable]")) {
   throw new Error("Hidden keyboard handling must ignore editable task controls");

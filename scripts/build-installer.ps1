@@ -4,6 +4,9 @@ $ErrorActionPreference = 'Stop'
 $RepositoryRoot = Split-Path -Parent $PSScriptRoot
 $OutputRoot = Join-Path $RepositoryRoot 'dist'
 $Version = (Get-Content -Raw -LiteralPath (Join-Path $RepositoryRoot 'VERSION')).Trim()
+$VersionMatch = [regex]::Match($Version, '^(\d+\.\d+\.\d+)(?:-(?:alpha|beta)\.(\d+))?$')
+if (-not $VersionMatch.Success) { throw "Unsupported installer version: $Version" }
+$FileVersion = '{0}.{1}' -f $VersionMatch.Groups[1].Value, $(if ($VersionMatch.Groups[2].Success) { $VersionMatch.Groups[2].Value } else { '0' })
 $PackageName = "QuotaPin-$Version.exe"
 
 if (-not $IsccPath) {
@@ -25,12 +28,12 @@ foreach ($Required in @('QuotaPin.Agent.exe', 'QuotaPin.Tray.exe', 'THIRD_PARTY_
 & (Join-Path $PSScriptRoot 'build-release-metadata.ps1') -Phase Stamp
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
-& $IsccPath "/DMyAppVersion=$Version" (Join-Path $RepositoryRoot 'installer\QuotaPin.iss')
+& $IsccPath "/DMyAppVersion=$Version" "/DMyFileVersion=$FileVersion" (Join-Path $RepositoryRoot 'installer\QuotaPin.iss')
 if ($LASTEXITCODE -ne 0) { throw "Inno Setup failed with exit code $LASTEXITCODE" }
 
 $SetupPath = Join-Path $OutputRoot $PackageName
 $ProductVersion = ([string](Get-Item -LiteralPath $SetupPath).VersionInfo.ProductVersion).Trim()
-if ($ProductVersion -ne $Version) { throw "Setup version mismatch. Expected $Version; found $ProductVersion" }
+if ($ProductVersion -ne $FileVersion) { throw "Setup file version mismatch. Expected $FileVersion; found $ProductVersion" }
 
 function Get-Sha256([string]$Path) {
     $Stream = [IO.File]::OpenRead($Path)

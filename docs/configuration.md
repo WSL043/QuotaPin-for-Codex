@@ -7,7 +7,7 @@ The fresh-install default is deliberately small: Codex keeps its native avatar a
 ## The editor has three jobs
 
 - **Quick** is the direct-manipulation surface. Choose a returned usage window, toggle modules, and drag visible modules. Drops stay exact unless they enter a small alignment zone near an edge, the center line, or another module.
-- **Customize** changes the view name, avatar shape, quota text size, colors, warning levels, and attention behavior. The live account row stays draggable here.
+- **Customize** changes the account-row mode, view name, avatar shape, quota text size, colors, warning levels, and attention behavior. The live account row stays draggable here.
 - **Code** exposes the complete public configuration, including custom hover templates, and accepts validated JSON.
 
 All three surfaces edit the same settings. A change appears immediately, but `Saved` is shown only after it has really reached the configuration file. If one save fails or times out, only that unconfirmed change is undone. JSON typed in Code does nothing until **Apply JSON** is pressed. Code can format a valid draft, discard it without touching saved settings, and reports the exact `line:column` for syntax errors. If the saved canonical form differs from the submitted document, the editor reloads that form and lists the adjusted paths instead of silently hiding the change.
@@ -73,15 +73,16 @@ Three editable views ship as starting points:
 
 Duplicate and rename a useful view instead of rebuilding it. Up to eight views are retained and at least one always remains. Date and precise-seconds combinations can be built directly in Quick or Code.
 
-## Configuration JSON (schema 15)
+## Configuration JSON (schema 16)
 
 A compact valid document looks like this:
 
 ```json
 {
-  "version": 15,
+  "version": 16,
   "locale": "en",
   "panelTheme": "dark",
+  "accountRowMode": "legacy",
   "activeProfile": "glance",
   "profiles": [{
     "id": "glance",
@@ -169,6 +170,15 @@ A compact valid document looks like this:
 
 `critical` cannot be higher than `warning`. With the defaults, 10% or less is critical, 30% or less is warning, and anything above that is normal. Values outside 0–100 are corrected when the file is loaded.
 
+### Account-row mode
+
+`accountRowMode` is global and accepts `legacy` or `beta`.
+
+- `legacy` preserves the native Help button and limits short/hold recognition to the Codex account button.
+- `beta` hides that Help button, gives the account content the freed width, and recognizes the same short/hold gesture across the complete bottom account frame. A short press still opens only the native Codex menu; a 480 ms hold opens only QuotaPin.
+
+Beta activates only when QuotaPin finds one unambiguous account row, one bounded footer, and one adjacent Help control. If that structure cannot be proven, it keeps the Legacy chrome and hit area.
+
 ### Quota periods
 
 **Usage window** chooses one or more periods from the ordinary Codex quota returned by the desktop app, and the optional `label` module can identify them. `availableWindowCount` reports how many ordinary periods arrived before that choice. Separately metered model-specific buckets are intentionally ignored so they cannot replace or move the primary quota row during background refreshes.
@@ -227,13 +237,13 @@ Only compatible, immutable releases with an exact public package set are eligibl
 The remote bootstrap without `-Version` resolves GitHub's immutable latest stable release. Supplying an exact published stable version permits a repair or compatible rollback. Reinstalling the same version follows the same transactional replacement path and does not reset configuration.
 
 ```powershell
-& ([scriptblock]::Create((irm https://raw.githubusercontent.com/WSL043/QuotaPin-for-Codex/main/install.ps1))) -Version '1.0.4'
+& ([scriptblock]::Create((irm https://raw.githubusercontent.com/WSL043/QuotaPin-for-Codex/main/install.ps1))) -Version '1.1.0-beta.1'
 ```
 
 On macOS, the equivalent exact-version boundary is:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/WSL043/QuotaPin-for-Codex/main/install-macos.sh | bash -s -- --version 1.0.4
+curl -fsSL https://raw.githubusercontent.com/WSL043/QuotaPin-for-Codex/main/install-macos.sh | bash -s -- --version 1.1.0-beta.1
 ```
 
 Older entries are user-selected recovery versions, not a transactional rollback guarantee. If an older Agent encounters a configuration from a newer schema, it opens that configuration read-only instead of overwriting it. Published update behavior is counted as supported only after the corresponding path appears in [observed compatibility](compatibility.md).

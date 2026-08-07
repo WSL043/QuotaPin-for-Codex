@@ -92,6 +92,7 @@ test("Preview Lab normalizes untrusted controls before they reach the production
     frame: "wide",
     context: "focus",
     appearance: "dark",
+    rowMode: "legacy",
     modules: ["value", "seconds"],
     order: "native",
     frozen: false,
@@ -117,6 +118,10 @@ test("Preview Lab controls the real formatter instead of a parallel mock", () =>
   const bar = buildPreviewScenario({ preset: "default", remaining: 24, modules: "value,bar" }, previewNow);
   assert.equal(bar.view.showBar, true);
   assert.equal(bar.view.remainingPercent, 24);
+
+  const beta = buildPreviewScenario({ rowMode: "beta" }, previewNow);
+  assert.equal(beta.config.accountRowMode, "beta");
+  assert.equal(beta.view.accountRowMode, "beta");
 });
 
 test("Preview Lab is same-origin, renderer-backed, and has no remote asset dependency", async () => {

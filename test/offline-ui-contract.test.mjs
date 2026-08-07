@@ -24,7 +24,9 @@ test("host discovery and event interception remain fail closed", () => {
   assert.match(renderer, /isAccountRowGeometry\(rect, viewport\)/);
   assert.match(renderer, /const knownHost = node === observedAccountRow \|\| Boolean\(currentBadge && node\.contains\(currentBadge\)\)/);
   assert.doesNotMatch(renderer, /rect\.right < 340/);
-  assert.match(renderer, /accountRow\?\.contains\(target\)/);
+  assert.match(renderer, /accountRowMode\(\) === "beta" \? findAccountSurface\(accountRow\) : accountRow/);
+  assert.match(renderer, /return candidates\.length === 1 \? candidates\[0\] : null/);
+  assert.match(renderer, /mode !== "beta" \|\| !\(surface instanceof HTMLElement\) \|\| !\(help instanceof HTMLElement\)/);
   assert.match(renderer, /input,textarea,select,\[contenteditable\]/);
   assert.match(renderer, /restoreIdentity\(findAccountRow\(\) \?\? document\.body\)/);
   assert.match(renderer, /querySelectorAll\("link\[href\]"\)/);

@@ -148,15 +148,20 @@ test("the public asset contract exposes one package per platform and keeps build
   assert.ok(assets.every((name) => !/\.(?:zip|json|sha256)$/i.test(name)));
 });
 
-test("the public stable release has reviewed platform-package notes and stable install paths", () => {
+test("the public release has reviewed platform-package notes and channel-correct install paths", () => {
   const notes = fs.readFileSync(new URL(`../.github/release-notes/v${VERSION}.md`, import.meta.url), "utf8");
+  const beta = VERSION.includes("-");
   assert.match(notes, /QuotaPin/i);
   assert.match(notes, new RegExp(`QuotaPin-${VERSION.replaceAll(".", "\\.")}\\.exe`));
   assert.match(notes, new RegExp(`QuotaPin-macOS-${VERSION.replaceAll(".", "\\.")}\\.dmg`));
   assert.match(notes, /Windows 10 version 2004/i);
   assert.match(notes, /WSL043\/QuotaPin-for-Codex\/main\/install\.ps1/);
   assert.match(notes, /WSL043\/QuotaPin-for-Codex\/main\/install-macos\.sh/);
-  assert.doesNotMatch(notes, /\s-Version\s/);
+  if (beta) {
+    assert.ok(notes.includes(`-Version '${VERSION}'`));
+    assert.ok(notes.includes(`--version ${VERSION}`));
+    assert.match(notes, /prerelease|Beta/i);
+  } else assert.doesNotMatch(notes, /\s-Version\s/);
   assert.doesNotMatch(notes, /WSL043\/QuotaPin\/main\/install\.ps1/);
   assert.doesNotMatch(notes, /roadmap|changelog|internal history/i);
 });
@@ -241,8 +246,8 @@ test("official builds keep canonical free-source and support anchors discoverabl
     `AppPublisherURL=${canonical}`,
     `AppSupportURL=${support}`,
     `VersionInfoDescription=QuotaPin | ${canonical}`,
-    `VersionInfoProductVersion={#MyAppVersion}`,
-    `VersionInfoVersion={#MyAppVersion}.0`,
+    `VersionInfoProductVersion={#MyFileVersion}`,
+    `VersionInfoVersion={#MyFileVersion}`,
     `ValueName: "OfficialSource"; ValueData: "${canonical}"`,
     `ValueName: "OfficialSupport"; ValueData: "${support}"`,
     'Source: "..\\dist\\OFFICIAL_SOURCE.txt"',

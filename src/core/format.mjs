@@ -237,6 +237,7 @@ export function formatQuota(snapshot, config, now = Date.now(), locale) {
       overdriveEgg: config.experiments?.overdriveEgg === true,
       overdriveAlways: config.experiments?.overdriveAlways === true,
       overdriveEffect: config.experiments?.overdriveEffect ?? "menuFire",
+      accountRowMode: config.accountRowMode ?? "legacy",
       layout: {
         moduleOrder: profile.moduleOrder,
         layoutMode: profile.layoutMode,
@@ -318,6 +319,7 @@ export function formatQuota(snapshot, config, now = Date.now(), locale) {
     overdriveEgg: config.experiments?.overdriveEgg === true,
     overdriveAlways: config.experiments?.overdriveAlways === true,
     overdriveEffect: config.experiments?.overdriveEffect ?? "menuFire",
+    accountRowMode: config.accountRowMode ?? "legacy",
     layout: {
       moduleOrder: profile.moduleOrder,
       layoutMode: profile.layoutMode,

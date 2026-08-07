@@ -392,6 +392,15 @@ test("panel appearance is explicit and independent from host or system appearanc
   assert.equal(sanitizeConfig({ ...base, panelTheme: "light" }).panelTheme, "light");
 });
 
+test("account-row beta mode is explicit, global, and falls back safely", () => {
+  const base = sanitizeConfig();
+  assert.equal(base.accountRowMode, "legacy");
+  const beta = applyConfigAction(base, { type: "updateAccountRowMode", mode: "beta" });
+  assert.equal(beta.accountRowMode, "beta");
+  assert.equal(formatQuota(weekly, beta, now, "en-US").accountRowMode, "beta");
+  assert.equal(applyConfigAction(beta, { type: "updateAccountRowMode", mode: "future" }).accountRowMode, "legacy");
+});
+
 test("retired quota-fire settings migrate to the sidebar fire", () => {
   for (const overdriveEffect of ["quotaFire", "random", "menuFire", "unknown"]) {
     const migrated = sanitizeConfig({

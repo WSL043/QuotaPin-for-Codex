@@ -275,7 +275,8 @@ has(agentBuilder, "--agent-version", "agent build must self-check the produced e
 has(windowsBuilder, "build-installer.ps1", "the Windows build must include the versioned installer");
 has(windowsBuilder, "[switch]$ReleaseManifest", "local Windows builds must make cross-platform release metadata explicit");
 has(release, ".\\scripts\\build-windows.ps1 -ReleaseManifest", "public releases must bind Windows and macOS package metadata together");
-has(installerBuilder, 'ProductVersion -ne $Version', "the installer build must reject a version mismatch");
+has(installerBuilder, 'ProductVersion -ne $FileVersion', "the installer build must reject a Windows file-version mismatch");
+has(installerBuilder, '"/DMyFileVersion=$FileVersion"', "prerelease SemVer must map to a numeric Windows file version");
 has(codexHelpers, "Get-AuthenticodeSignature", "app-managed Codex command must be signature-checked");
 has(codexHelpers, "Modules\\Microsoft.PowerShell.Security\\Microsoft.PowerShell.Security.psd1", "runtime must load the signature module from PSHOME");
 has(prerequisites, "Modules\\Microsoft.PowerShell.Security\\Microsoft.PowerShell.Security.psd1", "Setup must load the signature module from PSHOME");

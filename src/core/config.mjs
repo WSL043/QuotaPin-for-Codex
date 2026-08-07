@@ -20,7 +20,8 @@ export const EFFECT_LEVELS = ["always", "warning", "critical"];
 export const OVERDRIVE_EFFECTS = ["menuFire"];
 export const SUPPORTED_LOCALES = ["en", "zh-CN", "ja"];
 export const PANEL_THEMES = ["dark", "light"];
-export const CURRENT_CONFIG_VERSION = 15;
+export const ACCOUNT_ROW_MODES = ["legacy", "beta"];
+export const CURRENT_CONFIG_VERSION = 16;
 
 export const DEFAULT_MODULE_ANCHORS = Object.freeze({
   avatar: 0.04,
@@ -163,6 +164,7 @@ export const DEFAULT_CONFIG = Object.freeze({
   version: CURRENT_CONFIG_VERSION,
   locale: "en",
   panelTheme: "dark",
+  accountRowMode: "legacy",
   activeProfile: "glance",
   profiles: DEFAULT_PROFILES,
   thresholds: {
@@ -518,6 +520,7 @@ export function sanitizeConfig(input = {}) {
     version: CURRENT_CONFIG_VERSION,
     locale: SUPPORTED_LOCALES.includes(input?.locale) ? input.locale : DEFAULT_CONFIG.locale,
     panelTheme: PANEL_THEMES.includes(input?.panelTheme) ? input.panelTheme : DEFAULT_CONFIG.panelTheme,
+    accountRowMode: ACCOUNT_ROW_MODES.includes(input?.accountRowMode) ? input.accountRowMode : DEFAULT_CONFIG.accountRowMode,
     activeProfile,
     profiles,
     thresholds: { warning, critical },
@@ -552,6 +555,9 @@ export function applyConfigAction(config, action = {}) {
   }
   if (action.type === "updatePanelTheme") {
     return sanitizeConfig({ ...current, panelTheme: action.theme });
+  }
+  if (action.type === "updateAccountRowMode") {
+    return sanitizeConfig({ ...current, accountRowMode: action.mode });
   }
   if (action.type === "updateProfile") {
     const patch = action.patch && typeof action.patch === "object" ? { ...action.patch } : {};

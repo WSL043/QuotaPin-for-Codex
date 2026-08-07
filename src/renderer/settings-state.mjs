@@ -12,6 +12,10 @@ export function createSettingsStateToolkit() {
       current.locale = action.locale;
       return current;
     }
+    if (action.type === "updateAccountRowMode") {
+      current.accountRowMode = action.mode;
+      return current;
+    }
     if (action.type === "updateProfile") {
       current.profiles = (current.profiles ?? []).map((profile) =>
         profile.id === action.id ? { ...profile, ...(clone(action.patch) ?? {}), id: profile.id } : profile

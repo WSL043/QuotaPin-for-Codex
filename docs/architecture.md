@@ -33,7 +33,7 @@ The model contains only observed sources and windows. `rateLimitsByLimitId` beco
 
 ### `DisplayPreferences`
 
-Configuration selects the active saved view, returned-window selection, module or template display, hover content, layout, avatar mask, colors, thresholds, attention behavior, and UI locale.
+Configuration selects the global account-row mode, active saved view, returned-window selection, module or template display, hover content, layout, avatar mask, colors, thresholds, attention behavior, and UI locale.
 
 Layout stores one permutation of:
 
@@ -123,7 +123,7 @@ The token counters deliberately use two sources with different freshness. `today
 
 ## Gesture boundary
 
-The renderer owns gesture isolation across the complete Codex account row. Pointer-down is captured before the host sees it. A short release is replayed to the native account trigger; a hold opens QuotaPin; movement cancels the hold. Pressing the row again closes the open panel. The invisible row-level target remains available even when all QuotaPin modules are hidden.
+The renderer owns gesture isolation at the Codex account boundary. Legacy scopes that boundary to the native account button. Beta first proves one bounded footer and one adjacent Help control, hides that control reversibly, expands the account button into the freed width, and scopes the same classifier to the complete footer. Pointer-down is captured before the host sees it. A short release is replayed to the native account trigger; a hold opens QuotaPin; movement cancels the hold. Pressing the row again closes the open panel. The invisible target remains available even when all QuotaPin modules are hidden. Ambiguous host chrome always falls back to Legacy.
 
 ## Layout boundary
 

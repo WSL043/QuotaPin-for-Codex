@@ -41,6 +41,7 @@ const previewLocales = new Set(["en", "zh-CN", "ja"]);
 const previewFrames = new Set(["wide", "compact"]);
 const previewContexts = new Set(["focus", "full"]);
 const previewAppearances = new Set(["dark", "light"]);
+const previewRowModes = new Set(["legacy", "beta"]);
 const previewPresets = new Set(["default", "countdown", "signal", "date", "critical"]);
 const previewModules = ["value", "dot", "bar", "countdown", "relative", "seconds", "date", "reset"];
 const previewOrders = new Set(["native", "quota-first", "identity-last"]);
@@ -66,6 +67,8 @@ export function normalizePreviewOptions(source = {}) {
   const context = previewContexts.has(requestedContext) ? requestedContext : "focus";
   const requestedAppearance = String(readOption(source, "appearance") ?? "dark");
   const appearance = previewAppearances.has(requestedAppearance) ? requestedAppearance : "dark";
+  const requestedRowMode = String(readOption(source, "rowMode") ?? "legacy");
+  const rowMode = previewRowModes.has(requestedRowMode) ? requestedRowMode : "legacy";
   const rawModules = readOption(source, "modules");
   const modules = rawModules === null || rawModules === undefined || rawModules === ""
     ? null
@@ -73,7 +76,7 @@ export function normalizePreviewOptions(source = {}) {
   const requestedOrder = String(readOption(source, "order") ?? "native");
   const order = previewOrders.has(requestedOrder) ? requestedOrder : "native";
   const frozen = String(readOption(source, "frozen") ?? "") === "1";
-  return { preset, remaining, locale, frame, context, appearance, modules, order, frozen };
+  return { preset, remaining, locale, frame, context, appearance, rowMode, modules, order, frozen };
 }
 
 function localeTag(locale) {
@@ -126,6 +129,7 @@ export function buildPreviewScenario(source = {}, now = Date.now()) {
   const config = sanitizeConfig(clone(DEFAULT_CONFIG));
   const profile = config.profiles.find((item) => item.id === config.activeProfile) ?? config.profiles[0];
   config.locale = options.locale;
+  config.accountRowMode = options.rowMode;
   config.profiles = [profile];
   config.activeProfile = profile.id;
   Object.assign(profile, {
@@ -223,6 +227,7 @@ function previewQuery(options) {
     remaining: String(options.remaining),
     locale: options.locale,
     appearance: options.appearance,
+    rowMode: options.rowMode,
     order: options.order,
   });
   if (options.modules) query.set("modules", options.modules.join(","));

@@ -51,6 +51,10 @@ const fixtureView = formatQuota(normalizeRateLimits({
 }), fixturePreferences, fixtureNow, "en-US");
 
 const fixtureScript = `(() => {
+  window.__fixtureNativeMenuDown = 0;
+  document.addEventListener("pointerdown", (event) => {
+    if (event.target?.id === "account") window.__fixtureNativeMenuDown += 1;
+  });
   const params = new URLSearchParams(location.search);
   const preferences = ${JSON.stringify(fixturePreferences)};
   const view = ${JSON.stringify(fixtureView)};
@@ -78,6 +82,7 @@ const fixtureScript = `(() => {
     for (const key of ["displayMode", "showValue", "showDot", "showBar", "showLabel", "showCountdown", "showRelative", "showSeconds", "showDate", "showReset", "showTodayTokens", "showLifetimeTokens", "effect", "effectTarget", "effectAt"]) view[key] = profile[key];
     view.profileId = profile.id;
     view.profileName = profile.name;
+    view.accountRowMode = preferences.accountRowMode;
     view.layout = { moduleOrder: [...profile.moduleOrder], layoutMode: profile.layoutMode, snapThreshold: profile.snapThreshold, snapTargets: [...profile.snapTargets], moduleAnchors: { ...profile.moduleAnchors }, identity: profile.identity, avatarShape: profile.avatarShape, fontSize: profile.fontSize };
   }
   function publish(extra = {}) {
@@ -87,6 +92,7 @@ const fixtureScript = `(() => {
     if (action.type === "updateProfile") preferences.profiles = preferences.profiles.map((profile) => profile.id === action.id ? { ...profile, ...action.patch, id: profile.id } : profile);
     else if (action.type === "updateLocale") preferences.locale = action.locale;
     else if (action.type === "updatePanelTheme") preferences.panelTheme = action.theme;
+    else if (action.type === "updateAccountRowMode") preferences.accountRowMode = action.mode;
     else if (action.type === "updateThresholds") Object.assign(preferences.thresholds, action.patch);
     else if (action.type === "updatePalette") Object.assign(preferences.palette, action.patch);
     else if (action.type === "updateExperiments") Object.assign(preferences.experiments, action.patch);
@@ -124,9 +130,11 @@ const fixtureScript = `(() => {
 const html = `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width"><style>
 html,body{height:100%;margin:0;background:#050505;color:#eee;font:14px system-ui,sans-serif;overflow:hidden}
 #sidebar{position:fixed;inset:0 auto 0 0;width:260px;background:#050505}
-#account{position:fixed;left:8px;bottom:8px;width:232px;height:40px;display:flex;align-items:center;gap:8px;padding:0 8px;border:0;border-radius:8px;background:#111;color:#ddd;text-align:left}
+#account-footer{position:fixed;left:0;bottom:0;width:260px;height:56px}
+#account{position:absolute;left:8px;bottom:8px;width:212px;height:40px;display:flex;align-items:center;gap:8px;padding:0 8px;border:0;border-radius:8px;background:#111;color:#ddd;text-align:left}
 #account img{width:18px;height:18px;border-radius:50%;object-fit:cover}.name{min-width:0;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-</style></head><body><aside id="sidebar"><button id="account" aria-haspopup="menu"><img src="/avatar.png" alt=""><span class="name">Aster</span></button></aside><script src="/renderer.js"></script><script src="/fixture.js"></script></body></html>`;
+#native-help{position:absolute;right:8px;bottom:12px;width:32px;height:32px;border:0;background:transparent;color:#888}
+</style></head><body><aside id="sidebar"><div id="account-footer"><button id="account" aria-haspopup="menu"><img src="/avatar.png" alt=""><span class="name">Aster</span></button><button id="native-help" aria-label="Help">?</button></div></aside><script src="/renderer.js"></script><script src="/fixture.js"></script></body></html>`;
 const avatar = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=", "base64");
 
 class CdpClient {
@@ -465,6 +473,70 @@ test("programmatic panel focus never paints a transient outer outline", { skip: 
   assert.notEqual(result.initial.panelBoxShadow, "none", JSON.stringify(result));
   assert.equal(result.initial.rowBoxShadow, nativeRowBoxShadow, "opening Quick must not draw a transient outline around the whole account row");
   assert.equal(result.advanced.rowBoxShadow, result.initial.rowBoxShadow, "switching between layout tabs must not introduce a whole-row editing outline");
+});
+
+test("Legacy and Beta switch one reversible account-row and gesture contract", { skip: !canRun }, async () => {
+  await client.call("Emulation.setDeviceMetricsOverride", { width: 800, height: 600, deviceScaleFactor: 1, mobile: false });
+  await navigate("en");
+  await openPanel();
+  await client.evaluate(`document.querySelector('[data-editor-mode="advanced"]').click()`);
+  await client.evaluate(`document.querySelector('[data-config-key="accountRowMode"] [data-quick-value="beta"]').click()`);
+  await waitFor(() => client.evaluate(`document.querySelector('#native-help').style.display === 'none'`));
+  const betaGeometry = await client.evaluate(`(() => {
+    const row=document.querySelector('#account').getBoundingClientRect();
+    const footer=document.querySelector('#account-footer').getBoundingClientRect();
+    return {rowRight:row.right,footerRight:footer.right,mode:document.querySelector('#account').dataset.quotapinAccountRowMode,surface:document.querySelector('#account-footer').dataset.quotapinGestureSurface};
+  })()`);
+  assert.equal(betaGeometry.mode, "beta");
+  assert.equal(betaGeometry.surface, "true");
+  assert.ok(Math.abs(betaGeometry.footerRight - betaGeometry.rowRight - 8) <= .5, JSON.stringify(betaGeometry));
+
+  const betaStableBefore = await client.evaluate(`(() => {
+    const row=document.querySelector('#account').getBoundingClientRect();
+    return {left:row.left,right:row.right,width:row.width};
+  })()`);
+  for (let index = 0; index < 6; index += 1) {
+    await client.evaluate(`window.__fixtureSetParts({ remaining: ${41 - index} })`);
+    await new Promise((resolve) => setTimeout(resolve, 20));
+  }
+  const betaStableAfter = await client.evaluate(`(() => {
+    const row=document.querySelector('#account').getBoundingClientRect();
+    const help=document.querySelector('#native-help');
+    return {left:row.left,right:row.right,width:row.width,helpDisplay:help.style.display,mode:document.querySelector('#account').dataset.quotapinAccountRowMode,surface:document.querySelector('#account-footer').dataset.quotapinGestureSurface};
+  })()`);
+  assert.deepEqual(betaStableAfter, {
+    ...betaStableBefore,
+    helpDisplay: "none",
+    mode: "beta",
+    surface: "true",
+  }, "routine quota renders must not restore and reapply the Beta account chrome");
+
+  await client.evaluate(`[...document.querySelectorAll('#quotapin-profile-editor button')].find(button=>button.textContent==='Done').click()`);
+  await waitFor(() => client.evaluate(`!document.querySelector('#quotapin-profile-editor')`));
+  await client.evaluate(`(() => {
+    const footer=document.querySelector('#account-footer');
+    const fire=(type,id)=>footer.dispatchEvent(new PointerEvent(type,{bubbles:true,cancelable:true,button:0,buttons:type==='pointerup'?0:1,pointerId:id,pointerType:'mouse',isPrimary:true,clientX:258,clientY:590}));
+    fire('pointerdown',81);fire('pointerup',81);
+  })()`);
+  await new Promise((resolve) => setTimeout(resolve, 80));
+  const shortResult = await client.evaluate(`({count:window.__fixtureNativeMenuDown,gesture:document.querySelector('#quotapin-inline-badge')?.dataset.quotapinGesture??null,error:document.querySelector('#quotapin-inline-badge')?.dataset.quotapinGestureError??null})`);
+  assert.equal(shortResult.count, 1, JSON.stringify(shortResult));
+
+  await client.evaluate(`(() => {
+    const footer=document.querySelector('#account-footer');
+    footer.dispatchEvent(new PointerEvent('pointerdown',{bubbles:true,cancelable:true,button:0,buttons:1,pointerId:82,pointerType:'mouse',isPrimary:true,clientX:258,clientY:590}));
+  })()`);
+  await waitFor(() => client.evaluate(`Boolean(document.querySelector('#quotapin-profile-editor'))`), 1200);
+  assert.equal(await client.evaluate(`window.__fixtureNativeMenuDown`), 1, "a long hold must not replay the Codex short press");
+  await client.evaluate(`document.querySelector('#account-footer').dispatchEvent(new PointerEvent('pointerup',{bubbles:true,cancelable:true,button:0,buttons:0,pointerId:82,pointerType:'mouse',isPrimary:true,clientX:258,clientY:590}))`);
+
+  await client.evaluate(`document.querySelector('[data-editor-mode="advanced"]').click()`);
+  await client.evaluate(`document.querySelector('[data-config-key="accountRowMode"] [data-quick-value="legacy"]').click()`);
+  await waitFor(() => client.evaluate(`document.querySelector('#native-help').style.display !== 'none'`));
+  const legacyGeometry = await client.evaluate(`(() => {const row=document.querySelector('#account').getBoundingClientRect();return {right:row.right,mode:document.querySelector('#account').dataset.quotapinAccountRowMode,surface:document.querySelector('#account-footer').dataset.quotapinGestureSurface??null};})()`);
+  assert.equal(legacyGeometry.mode, "legacy");
+  assert.equal(legacyGeometry.surface, null);
+  assert.ok(Math.abs(legacyGeometry.right - 220) <= .5, JSON.stringify(legacyGeometry));
 });
 
 test("the hidden idea route appears only after discovery and opens the public feature form", { skip: !canRun }, async () => {

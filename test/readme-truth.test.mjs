@@ -4,6 +4,9 @@ import fs from "node:fs";
 
 const root = new URL("../", import.meta.url);
 const version = fs.readFileSync(new URL("VERSION", root), "utf8").trim();
+const stableVersion = version.includes("-")
+  ? read("README.md").match(/Latest stable:\s*v([0-9]+\.[0-9]+\.[0-9]+)/i)?.[1]
+  : version;
 
 function read(relativePath) {
   return fs.readFileSync(new URL(relativePath, root), "utf8");
@@ -26,7 +29,7 @@ test("localized READMEs keep one product hero and current interaction truth", ()
     const text = read(readme);
     assert.equal(text.split(product).length - 1, 1, `${readme} must have one product hero`);
     assert.ok(text.indexOf(product) < text.search(/^## /m), `${readme} must show the product before onboarding`);
-    assert.ok(text.includes(version), `${readme} must state the current stable version`);
+    assert.ok(stableVersion && text.includes(stableVersion), `${readme} must state the current stable version`);
     assert.match(text, /Windows 11/i, `${readme} must expose platform status near the top`);
     assert.match(text, /macOS/i, `${readme} must expose the provisional Mac boundary near the top`);
     assert.match(text, new RegExp(states.replaceAll(".", "\\.")));

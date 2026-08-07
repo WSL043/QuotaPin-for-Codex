@@ -1,6 +1,9 @@
 #ifndef MyAppVersion
   #define MyAppVersion "0.0.0-dev"
 #endif
+#ifndef MyFileVersion
+  #define MyFileVersion "0.0.0.0"
+#endif
 
 [Setup]
 AppId={{D3C316B5-8F18-45DF-98BD-2C9F579D9E24}
@@ -35,8 +38,8 @@ VersionInfoCopyright=Copyright (c) 2026 WSL043
 VersionInfoDescription=QuotaPin | https://github.com/WSL043/QuotaPin-for-Codex
 VersionInfoOriginalFileName=QuotaPin-{#MyAppVersion}.exe
 VersionInfoProductName=QuotaPin
-VersionInfoProductVersion={#MyAppVersion}
-VersionInfoVersion={#MyAppVersion}.0
+VersionInfoProductVersion={#MyFileVersion}
+VersionInfoVersion={#MyFileVersion}
 
 [Languages]
 Name: "en"; MessagesFile: "compiler:Default.isl"

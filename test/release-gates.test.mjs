@@ -144,12 +144,14 @@ test("the public asset contract exposes one package per platform and keeps build
   assert.ok(assets.every((name) => !/\.(?:zip|json|sha256)$/i.test(name)));
 });
 
-test("the public stable release has reviewed single-executable notes and a stable install path", () => {
+test("the public stable release has reviewed platform-package notes and stable install paths", () => {
   const notes = fs.readFileSync(new URL(`../.github/release-notes/v${VERSION}.md`, import.meta.url), "utf8");
   assert.match(notes, /QuotaPin/i);
   assert.match(notes, new RegExp(`QuotaPin-${VERSION.replaceAll(".", "\\.")}\\.exe`));
+  assert.match(notes, new RegExp(`QuotaPin-macOS-${VERSION.replaceAll(".", "\\.")}\\.dmg`));
   assert.match(notes, /Windows 10 version 2004/i);
   assert.match(notes, /WSL043\/QuotaPin-for-Codex\/main\/install\.ps1/);
+  assert.match(notes, /WSL043\/QuotaPin-for-Codex\/main\/install-macos\.sh/);
   assert.doesNotMatch(notes, /\s-Version\s/);
   assert.doesNotMatch(notes, /WSL043\/QuotaPin\/main\/install\.ps1/);
   assert.doesNotMatch(notes, /roadmap|changelog|internal history/i);

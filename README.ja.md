@@ -11,21 +11,28 @@
 
 <p align="center">
   <img alt="Windows 11 で確認済み" src="https://img.shields.io/badge/Windows_11-確認済み-111827?style=flat-square">
+  <img alt="macOS CI 検証済み" src="https://img.shields.io/badge/macOS-CI_検証済み-111827?style=flat-square">
   <img alt="データはローカルのみ" src="https://img.shields.io/badge/データ-ローカルのみ-10b981?style=flat-square">
   <img alt="MIT ライセンス" src="https://img.shields.io/badge/ライセンス-MIT-6366f1?style=flat-square">
 </p>
 
 ## クイックスタート
 
-Windows PowerShell を開き、次の1行を貼り付けます：
+**Windows — PowerShell**
 
 ```powershell
 irm https://raw.githubusercontent.com/WSL043/QuotaPin-for-Codex/main/install.ps1 | iex
 ```
 
-このコマンドは最新の安定版をインストールします。あとは、いつものアイコンから Codex を起動します。すでに動いている Codex は終了せず、QuotaPin は次回の通常起動を待ちます。過去版、プレリリース、ロールバックを指定する場合は、[設定ガイド](docs/configuration.md#updates-and-recovery-versions)の完全なコマンドを使用します。
+**macOS — ターミナル**
 
-通常のインストーラーなら、[最新の安定版](https://github.com/WSL043/QuotaPin-for-Codex/releases/latest)を開き、そこにある唯一の `.exe` をダウンロードしてダブルクリックします。
+```bash
+curl -fsSL https://raw.githubusercontent.com/WSL043/QuotaPin-for-Codex/main/install-macos.sh | bash
+```
+
+どちらも最新の安定版をインストールします。あとは、いつものアイコンから Codex を起動します。すでに動いている Codex は終了せず、QuotaPin は次回の通常起動を待ちます。過去版、プレリリース、ロールバックを指定する場合は、[設定ガイド](docs/configuration.md#updates-and-recovery-versions)の完全なコマンドを使用します。
+
+通常のインストーラーなら、[最新の安定版](https://github.com/WSL043/QuotaPin-for-Codex/releases/latest)を開きます。Windows はバージョン付きの `.exe` を実行。macOS は Universal `.dmg` を開き、**QuotaPin Installer** をダブルクリックします。
 
 <p align="center">
   <img src="assets/screenshots/product-ja.png" width="960" alt="アカウントメニューを開かず、Codex のアカウント欄に残り1パーセントを表示する QuotaPin">
@@ -92,7 +99,7 @@ QuotaPin が読むのは、この端末の Codex が返す残り使用量だけ�
 
 ## macOS 版
 
-GitHub Actions では、自己完結型の macOS Universal パッケージを作成し、Apple シリコンと Intel の両 runner でインストール、更新、LaunchAgent 起動、設定保持、アンインストールまで確認します。現在の Codex のアカウント欄と Gatekeeper については、ログイン済みの実機確認がまだ必要です。実装範囲と確認項目は [macOS ガイド](docs/macos.md)を参照してください。結果は[匿名化した互換性レポート](https://github.com/WSL043/QuotaPin-for-Codex/issues/new?template=macos-compatibility.yml)から共有できます。
+Universal DMG には Apple シリコン版と Intel 版が含まれ、ユーザー単位でインストールされます。`sudo`、Homebrew、別途ランタイムは不要です。GitHub Actions では macOS 15 と macOS 26 のネイティブ runner を使い、最終 DMG のインストール、更新、LaunchAgent 起動、設定保持、アンインストールまで確認します。現在の Codex のアカウント欄と Gatekeeper については、ログイン済みの実機確認がまだ必要です。実装範囲と確認項目は [macOS ガイド](docs/macos.md)を参照してください。結果は[匿名化した互換性レポート](https://github.com/WSL043/QuotaPin-for-Codex/issues/new?template=macos-compatibility.yml)から共有できます。
 
 ## アイデアとコントリビューション
 

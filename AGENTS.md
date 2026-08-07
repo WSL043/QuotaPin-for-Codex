@@ -23,10 +23,10 @@ irm https://raw.githubusercontent.com/WSL043/QuotaPin-for-Codex/main/install.ps1
 The moving bootstrap selects only GitHub's immutable latest stable release. Exact-version repair and historical rollback retain the same `-Version` boundary:
 
 ```powershell
-& ([scriptblock]::Create((irm https://raw.githubusercontent.com/WSL043/QuotaPin-for-Codex/main/install.ps1))) -Version '1.0.2'
+& ([scriptblock]::Create((irm https://raw.githubusercontent.com/WSL043/QuotaPin-for-Codex/main/install.ps1))) -Version '1.0.3'
 ```
 
-Both installations are per-user and preserve `%LOCALAPPDATA%\QuotaPin\config.json`. Public GitHub Releases are command-only: beta releases are explicit prereleases and never Latest; stable releases alone feed the moving channel. Keep the official Codex icon as the normal launch path. Do not offer unpublished packaging experiments as installation choices.
+Both installations are per-user and preserve `%LOCALAPPDATA%\QuotaPin\config.json`. Public GitHub Releases expose only the reviewed platform installers: beta releases are explicit prereleases and never Latest; stable releases alone feed the moving channel. Keep the official Codex icon as the normal launch path. Do not offer unpublished packaging experiments as installation choices.
 
 The macOS source and package lifecycle is:
 
@@ -36,7 +36,7 @@ npm ci
 ./scripts/macos/test-lifecycle.sh dist/macos-native
 ```
 
-`install-macos.sh` is the stable/default remote bootstrap once an owner-approved release contains `QuotaPin-macOS-VERSION.dmg`. It verifies the immutable GitHub release and asset digest, mounts the image read-only, and runs the same payload as `QuotaPin Installer.app`. The installed universal package needs neither Node.js nor Homebrew, owns one user LaunchAgent, preserves `config.json` on update, and never interrupts a Codex session that was already open during installation.
+`install-macos.sh` is the stable/default remote bootstrap for releases containing `QuotaPin-macOS-VERSION.dmg`. It verifies the immutable GitHub release and asset digest, mounts the image read-only, and runs the same payload as `QuotaPin Installer.app`. The installed universal package needs neither Node.js nor Homebrew, owns one user LaunchAgent, preserves `config.json` on update, and never interrupts a Codex session that was already open during installation.
 
 Before reporting success, verify all of the following:
 

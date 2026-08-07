@@ -1,6 +1,6 @@
 # QuotaPin for macOS
 
-QuotaPin now has a production-shaped macOS command installation. The runtime is self-contained, per user, and does not modify the official Codex application. A GitHub Actions candidate is not yet a real-device compatibility claim: the account-row adapter still needs evidence from a signed-in Mac before macOS can be listed as supported.
+QuotaPin 1.0.3 introduces a public macOS delivery path. The runtime is self-contained, per user, and does not modify the official Codex application. GitHub Actions validates the package lifecycle on native Apple silicon and Intel runners; the account-row adapter and Gatekeeper behavior still need evidence from a signed-in Mac before macOS can be listed as fully supported.
 
 ## What is implemented
 
@@ -30,7 +30,7 @@ npm ci
 
 GitHub Actions runs that lifecycle independently on Apple silicon and Intel runners: build, signature check, install, LaunchAgent start, same-version update, rollback, configuration preservation, and uninstall. A second job combines the two verified slices into `QuotaPin-macOS-VERSION.dmg`, containing a double-clickable `QuotaPin Installer.app`. GitHub validates the artifact digest when the image moves between jobs, then fresh macOS 15 and macOS 26 runners on both architectures independently mount and exercise that exact final image again.
 
-Development candidates are short-lived Actions artifacts. They are not GitHub Releases and do not enter the stable update channel. The stable remote bootstrap is already implemented in `install-macos.sh`; it accepts only an immutable published release, verifies GitHub's SHA-256 digest, mounts the image read-only, validates the app bundle, and runs its embedded installer payload. It becomes a normal Quick Start only after an owner-approved stable release contains the matching macOS image.
+Development candidates are short-lived Actions artifacts. They are not GitHub Releases and do not enter the stable update channel. The stable remote bootstrap in `install-macos.sh` accepts only an immutable published release, verifies GitHub's SHA-256 digest, mounts the image read-only, validates the app bundle, and runs its embedded installer payload.
 
 The three delivery paths are intentionally one implementation:
 
@@ -42,7 +42,7 @@ curl -fsSL https://raw.githubusercontent.com/WSL043/QuotaPin-for-Codex/main/inst
 "$HOME/Library/Application Support/QuotaPin/uninstall.sh"
 ```
 
-People who do not use Terminal download `QuotaPin-macOS-VERSION.dmg` and open `QuotaPin Installer.app`. Both paths install the same digest-bound payload. The current `v1.0.2` release remains Windows-only; these Mac entry points become public only when a reviewed later release contains the DMG.
+People who do not use Terminal download `QuotaPin-macOS-VERSION.dmg`, open the read-only image, and double-click `QuotaPin Installer.app`. Both paths install the same digest-bound payload. The DMG is ad-hoc signed rather than Developer ID notarized; CI therefore proves package integrity and lifecycle behavior, not the exact Gatekeeper prompt on a downloaded real-device copy.
 
 ## Real-Mac acceptance still required
 

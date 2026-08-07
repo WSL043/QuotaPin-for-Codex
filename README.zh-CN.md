@@ -11,21 +11,28 @@
 
 <p align="center">
   <img alt="Windows 11 已验证" src="https://img.shields.io/badge/Windows_11-已验证-111827?style=flat-square">
+  <img alt="macOS 已通过 CI 验证" src="https://img.shields.io/badge/macOS-CI_已验证-111827?style=flat-square">
   <img alt="数据只在本机" src="https://img.shields.io/badge/数据-只在本机-10b981?style=flat-square">
   <img alt="MIT 许可证" src="https://img.shields.io/badge/许可证-MIT-6366f1?style=flat-square">
 </p>
 
 ## 快速开始
 
-打开 Windows PowerShell，粘贴：
+**Windows — PowerShell**
 
 ```powershell
 irm https://raw.githubusercontent.com/WSL043/QuotaPin-for-Codex/main/install.ps1 | iex
 ```
 
-这条命令默认安装最新稳定版。然后照常打开 Codex；若 Codex 已经在运行，这条命令不会打断它，QuotaPin 会在下次正常启动时接入。需要指定旧版、预发布版或执行回退时，请使用[配置文档](docs/configuration.md#updates-and-recovery-versions)里的完整命令。
+**macOS — 终端**
 
-更习惯双击安装？打开[最新稳定版](https://github.com/WSL043/QuotaPin-for-Codex/releases/latest)，下载其中唯一的 `.exe` 后双击即可。
+```bash
+curl -fsSL https://raw.githubusercontent.com/WSL043/QuotaPin-for-Codex/main/install-macos.sh | bash
+```
+
+两条命令都默认安装最新稳定版。然后照常打开 Codex；若 Codex 已经在运行，安装不会打断它，QuotaPin 会在下次正常启动时接入。需要指定旧版、预发布版或执行回退时，请使用[配置文档](docs/configuration.md#updates-and-recovery-versions)里的完整命令。
+
+更习惯双击安装？打开[最新稳定版](https://github.com/WSL043/QuotaPin-for-Codex/releases/latest)。Windows 运行带版本号的 `.exe`；macOS 打开通用 `.dmg`，再双击 **QuotaPin Installer**。
 
 <p align="center">
   <img src="assets/screenshots/product-zh-CN.png" width="960" alt="账户菜单未打开时，QuotaPin 已在 Codex 账户栏显示百分之一剩余额度">
@@ -92,7 +99,7 @@ QuotaPin 一天最多检查一次更新，未经确认不会安装，也不会�
 
 ## macOS 版
 
-GitHub Actions 会构建一个自包含的 macOS 通用包，并分别在 Apple 芯片与 Intel runner 上跑完安装、更新、LaunchAgent 自启动、配置保留和卸载。当前 Codex 的真实账户栏与 Gatekeeper 表现仍需登录状态的 Mac 验收。实现边界和验收项目见 [macOS 说明](docs/macos.md)，也可以提交[脱敏兼容性报告](https://github.com/WSL043/QuotaPin-for-Codex/issues/new?template=macos-compatibility.yml)。
+通用 DMG 同时包含 Apple 芯片与 Intel 版本，按用户安装，不需要 `sudo`、Homebrew 或另装运行环境。GitHub Actions 已在 macOS 15 与 macOS 26 的原生 runner 上对最终镜像跑完安装、更新、LaunchAgent 启动、配置保留和卸载。当前 Codex 的真实账户栏与 Gatekeeper 表现仍需登录状态的 Mac 验收。实现边界和验收项目见 [macOS 说明](docs/macos.md)，也可以提交[脱敏兼容性报告](https://github.com/WSL043/QuotaPin-for-Codex/issues/new?template=macos-compatibility.yml)。
 
 ## 想法与贡献
 

@@ -11,21 +11,28 @@
 
 <p align="center">
   <img alt="Windows 11 verified" src="https://img.shields.io/badge/Windows_11-verified-111827?style=flat-square">
+  <img alt="macOS CI validated" src="https://img.shields.io/badge/macOS-CI_validated-111827?style=flat-square">
   <img alt="Local only and zero telemetry" src="https://img.shields.io/badge/data-local_only-10b981?style=flat-square">
   <img alt="MIT license" src="https://img.shields.io/badge/license-MIT-6366f1?style=flat-square">
 </p>
 
 ## Quick Start
 
-Open Windows PowerShell and paste:
+**Windows — PowerShell**
 
 ```powershell
 irm https://raw.githubusercontent.com/WSL043/QuotaPin-for-Codex/main/install.ps1 | iex
 ```
 
-This command installs the latest stable version. Launch Codex from its usual icon. If Codex is already running, the command leaves it alone and QuotaPin joins the next normal launch. Deliberate version selection and rollback use the explicit command in [configuration](docs/configuration.md#updates-and-recovery-versions).
+**macOS — Terminal**
 
-Prefer a normal installer? [Open the latest stable release](https://github.com/WSL043/QuotaPin-for-Codex/releases/latest), download its single `.exe`, and double-click it.
+```bash
+curl -fsSL https://raw.githubusercontent.com/WSL043/QuotaPin-for-Codex/main/install-macos.sh | bash
+```
+
+Both commands install the latest stable version. Launch Codex from its usual icon. If Codex is already running, installation leaves it alone and QuotaPin joins the next normal launch. Deliberate version selection and rollback use the explicit commands in [configuration](docs/configuration.md#updates-and-recovery-versions).
+
+Prefer a normal installer? [Open the latest stable release](https://github.com/WSL043/QuotaPin-for-Codex/releases/latest). On Windows, run the versioned `.exe`. On macOS, open the universal `.dmg`, then double-click **QuotaPin Installer**.
 
 <p align="center">
   <img src="assets/screenshots/product-en.png" width="960" alt="QuotaPin showing one percent remaining in the closed Codex account row">
@@ -90,9 +97,9 @@ Details: [configuration](docs/configuration.md) · [security](SECURITY.md) · [p
 
 QuotaPin checks for updates at most once a day and never installs one without confirmation. It never restarts Codex; when safe in-place reattachment is unavailable, the new version waits for the next normal launch.
 
-## macOS build
+## macOS
 
-GitHub Actions builds one self-contained universal macOS package and exercises install, update, LaunchAgent startup, configuration preservation, and uninstall on both Apple silicon and Intel runners. A signed-in Mac is still required to verify the current Codex account row and Gatekeeper behavior. See the [macOS implementation and acceptance boundary](docs/macos.md), or send a sanitized [compatibility report](https://github.com/WSL043/QuotaPin-for-Codex/issues/new?template=macos-compatibility.yml).
+The universal DMG includes Apple silicon and Intel builds and installs per user without `sudo`, Homebrew, or a separate runtime. GitHub Actions exercises the exact final image on native runners under macOS 15 and macOS 26. A signed-in Mac is still required to verify the current Codex account row and Gatekeeper behavior outside CI. See the [macOS implementation and acceptance boundary](docs/macos.md), or send a sanitized [compatibility report](https://github.com/WSL043/QuotaPin-for-Codex/issues/new?template=macos-compatibility.yml).
 
 ## Ideas & contributions
 

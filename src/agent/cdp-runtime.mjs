@@ -245,7 +245,7 @@ export class CdpTargetRuntime {
   }
 }
 
-export async function runRendererControl(options) {
+export async function runRendererCleanup(options) {
   const list = await fetchCdpTargets(options.port, options.fetchImpl ?? globalThis.fetch);
   const mainTargets = selectMainTargets(list, options.mainTargetUrl ?? DEFAULT_MAIN_TARGET_URL);
   if (!mainTargets.length) return false;
@@ -255,10 +255,9 @@ export async function runRendererControl(options) {
     const session = createSession(target.webSocketDebuggerUrl, target.id);
     try {
       await session.send("Runtime.enable");
-      const expression = options.mode === "cleanup"
-        ? "window.__quotaPinController?.cleanup?.(); true"
-        : "Boolean(window.__quotaPinController?.openEditor?.()) || Boolean(window.__quotaPinController)";
-      await session.send("Runtime.evaluate", { expression });
+      await session.send("Runtime.evaluate", {
+        expression: "window.__quotaPinController?.cleanup?.(); true",
+      });
       succeeded = true;
     } finally {
       session.close();

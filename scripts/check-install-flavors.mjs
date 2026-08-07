@@ -30,7 +30,6 @@ const installerBuilder = read("scripts/build-installer.ps1");
 const innoCiInstaller = read("scripts/install-inno-ci.ps1");
 const codexHelpers = read("src/codex-command.ps1");
 const prerequisites = read("scripts/check-prerequisites.ps1");
-const openSettings = read("src/open-settings.ps1");
 const firstRun = read("src/first-run.ps1");
 const ui = read("src/ui.ps1");
 const verifierSafety = read("scripts/verify-safety.mjs");
@@ -41,6 +40,11 @@ const readmes = [read("README.md"), read("README.zh-CN.md"), read("README.ja.md"
 const compatibility = read("docs/compatibility.md");
 const publicDocs = [...readmes, compatibility, read("docs/configuration.md"), read("docs/architecture.md")].join("\n");
 
+assert.equal(
+  fs.existsSync(path.join(root, "src/open-settings.ps1")),
+  false,
+  "the retired external settings bridge must stay deleted",
+);
 assert.equal(packageJson.version, version, "package.json and VERSION must agree");
 has(injector, `const VERSION = "${version}"`, "injector version must match VERSION");
 const versionMatch = /^(\d+\.\d+\.\d+)(?:-(?:alpha|beta)\.(\d+))?$/.exec(version);
@@ -78,7 +82,6 @@ has(bootstrap, "$Process.WaitForExit()", "remote install must wait only for the 
 lacks(bootstrap, "Start-Process -FilePath $PackagePath -ArgumentList $Arguments -Wait", "remote install must not wait forever on the persistent watcher descendant");
 lacks(sourceInstaller, "Get-CimInstance", "normal command installation must not depend on CIM process discovery");
 lacks(sourceUninstaller, "Get-CimInstance", "normal command uninstall must not depend on CIM process discovery");
-lacks(openSettings, "Get-CimInstance", "settings discovery must use owned runtime state rather than CIM");
 lacks(autoAttach, "Get-CimInstance", "normal automatic attachment must not depend on CIM");
 has(sourceUninstaller, "& $StopScript", "command uninstall must use the shared verified cleanup path");
 matches(
@@ -171,7 +174,7 @@ lacks(sourceInstaller, "prepare-runtime.ps1", "source install must not download 
 lacks(sourceInstaller, "node.exe", "source install must not require or install Node.js");
 lacks(sourceInstaller, "Start-Process -FilePath $Tray", "source install must not start a tray companion");
 lacks(sourceInstaller, "CurrentVersion\\Run", "source install must not register the setup tray Run entry");
-lacks(sourceInstaller, "open-settings", "source install must not copy setup-only tray controls");
+lacks(sourceInstaller, "open-settings", "source install must not revive the retired settings bridge");
 has(commandUpdater, "--continue-at -", "command update downloads must resume after a slow-link interruption");
 has(commandUpdater, '$PackageName = "QuotaPin-$Version.exe"', "command updates must bind the public executable name to the requested version");
 has(commandUpdater, "$MacPackageName", "command updates must recognize the companion macOS package");
@@ -215,12 +218,12 @@ has(setup, 'Source: "..\\dist\\QuotaPin.Tray.exe"', "Setup must include the tray
 has(setup, 'Source: "..\\dist\\QuotaPin.Agent.exe"', "Setup must include the self-contained agent");
 has(setup, 'Source: "..\\dist\\THIRD_PARTY_NOTICES.txt"', "Setup must include third-party notices");
 has(setup, 'Source: "..\\LICENSE"', "Setup must include the QuotaPin license");
-has(setup, 'Source: "..\\src\\open-settings.ps1"', "Setup must include its settings bridge");
 has(setup, 'Source: "..\\src\\ui.ps1"', "Setup must include localized lifecycle UI");
 has(setup, 'Source: "..\\src\\codex-process.ps1"', "Setup launcher must include verified process identity helpers");
 has(setup, 'Name: "ja"; MessagesFile: "compiler:Languages\\Japanese.isl"', "Setup must follow the Japanese Windows locale without adding a language step");
 has(setup, "ShowLanguageDialog=no", "Setup language detection must not add another novice-facing step");
-has(setup, 'Filename: "{sys}\\WindowsPowerShell\\v1.0\\powershell.exe"; Parameters: "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File ""{app}\\src\\open-settings.ps1"""', "Start-menu settings must call the settings bridge rather than a second tray instance");
+lacks(setup, "open-settings.ps1", "Setup must not package the retired settings bridge");
+lacks(setup, "Open QuotaPin settings", "Setup must not add a second settings entry to the Start menu");
 lacks(setup, 'Source: "..\\dist\\runtime', "Setup must not carry a private Node runtime tree");
 has(setup, 'ValueName: "QuotaPin"', "Setup must register the tray startup entry");
 has(setup, "ExistingSetupInstall", "Setup upgrades must detect an existing installer build");
@@ -275,10 +278,10 @@ lacks(codexHelpers, "'.cmd'", "Codex command selection must not accept command s
 lacks(codexHelpers, "'.bat'", "Codex command selection must not accept batch shims");
 lacks(codexHelpers, "'.ps1'", "Codex command selection must not accept PowerShell shims");
 has(appServerRuntime, 'toLowerCase() !== ".exe"', "the Agent must reject non-executable Codex command shims");
-has(openSettings, "launch.ps1", "settings must be able to launch the normal QuotaPin path when Codex is closed");
-has(openSettings, "--open-settings", "settings must open the in-app panel after attachment");
-has(openSettings, "if ($LauncherExitCode -eq 2)", "choosing Later must be detected explicitly");
-has(openSettings, "$Cancelled = $true", "choosing Later must not produce a second false error");
+lacks(tray, "OpenSettings", "the tray must not control the Codex renderer through a second settings path");
+lacks(tray, "settingsItem", "the tray menu must not expose a duplicate settings command");
+lacks(injector, "--open-settings", "the Agent must not retain the retired external settings-control mode");
+lacks(ui, "ConnectingTitle", "the lifecycle UI must not retain the retired settings-bridge dialog");
 has(ui, "Restart Codex now", "the lifecycle prompt must name the disruptive action explicitly");
 has(ui, "Codex を今すぐ再起動", "the lifecycle prompt must follow the Japanese Windows locale");
 has(ui, "MessageBoxDefaultButton]::Button2", "the destructive restart confirmation must default to No");

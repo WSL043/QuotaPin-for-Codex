@@ -141,7 +141,7 @@ An acknowledgement advances `committed` and replays any newer pending actions. A
 
 ## Windows lifecycle
 
-The versioned Windows executable owns both supported installation experiences. PowerShell Quick Start runs it in quiet command mode, which installs a self-contained `QuotaPin.Agent.exe` plus Windows PowerShell 5.1 lifecycle scripts under `%LOCALAPPDATA%\QuotaPin` and starts only the per-user attachment watcher. Double-clicking the same file installs the tray companion instead. Both modes register the same native Apps uninstall entry; neither needs a service, administrator token, system-wide registry entry, or modified Codex package.
+The versioned Windows executable owns both supported installation experiences. PowerShell Quick Start runs it in quiet command mode, which installs a self-contained `QuotaPin.Agent.exe` plus Windows PowerShell 5.1 lifecycle scripts under `%LOCALAPPDATA%\QuotaPin` and starts only the per-user attachment watcher. Double-clicking the same file installs the tray companion instead. The tray owns lifecycle status, startup, updates, project access, uninstall, and exit; it does not open or control the settings renderer. Settings have one entry point: hold the account row inside Codex. Both install modes register the same native Apps uninstall entry; neither needs a service, administrator token, system-wide registry entry, or modified Codex package.
 
 The helper accepts only a fresh official root `ChatGPT.exe` launch. The launcher validates the app-managed Codex executable, binds CDP to loopback on a fresh ephemeral port, and starts the Agent. An already instrumented, stale, child, or ambiguous process is ignored. The command installation has no tray UI.
 

@@ -2,7 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
 import { AppServerRuntime, resolveCodexAppServerCommand } from "./agent/app-server-runtime.mjs";
-import { CdpTargetRuntime, runRendererControl as runCdpRendererControl } from "./agent/cdp-runtime.mjs";
+import { CdpTargetRuntime, runRendererCleanup } from "./agent/cdp-runtime.mjs";
 import { ConfigRuntime } from "./agent/config-runtime.mjs";
 import { UpdateRuntime } from "./agent/update-runtime.mjs";
 import { createLifecycleStateWriter } from "./agent/lifecycle-state.mjs";
@@ -30,7 +30,6 @@ const selfTest = process.argv.includes("--self-test");
 const rendererSelfTest = process.argv.includes("--renderer-self-test");
 const smokeTest = process.argv.includes("--smoke-test");
 const cleanupMode = process.argv.includes("--cleanup");
-const openSettingsMode = process.argv.includes("--open-settings");
 const port = Number(portIndex >= 0 ? process.argv[portIndex + 1] : NaN);
 const generationIndex = process.argv.indexOf("--attach-generation");
 const attachGeneration = generationIndex >= 0 ? String(process.argv[generationIndex + 1] ?? "") : "";
@@ -4263,12 +4262,11 @@ process.on("SIGINT", () => { stop(); process.exit(0); });
 process.on("SIGTERM", () => { stop(); process.exit(0); });
 
 async function main() {
-  if (cleanupMode || openSettingsMode) {
+  if (cleanupMode) {
     try {
-      const ok = await runCdpRendererControl({
+      const ok = await runRendererCleanup({
         port,
         mainTargetUrl: MAIN_TARGET_URL,
-        mode: cleanupMode ? "cleanup" : "open-settings",
       });
       process.exit(ok ? 0 : 1);
     } catch (error) {

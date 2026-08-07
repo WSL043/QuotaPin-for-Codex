@@ -57,7 +57,6 @@ namespace QuotaPin.Tray
         private readonly string powerShellPath;
         private readonly NotifyIcon trayIcon;
         private readonly ToolStripMenuItem statusItem;
-        private readonly ToolStripMenuItem settingsItem;
         private readonly ToolStripMenuItem startupItem;
         private readonly ToolStripMenuItem updateItem;
         private readonly System.Windows.Forms.Timer stateTimer;
@@ -130,15 +129,11 @@ namespace QuotaPin.Tray
             trayIcon.Icon = Icon.ExtractAssociatedIcon(Application.ExecutablePath);
             trayIcon.Text = "QuotaPin";
             trayIcon.Visible = true;
-            trayIcon.DoubleClick += delegate { OpenSettings(); };
 
             var menu = new ContextMenuStrip();
             menu.Opening += delegate { UpdateRuntimeState(); };
             statusItem = new ToolStripMenuItem();
             statusItem.Enabled = false;
-            settingsItem = new ToolStripMenuItem(UiText("Open settings in Codex", "在 Codex 中打开设置", "Codex で設定を開く"));
-            settingsItem.Font = new Font(settingsItem.Font, FontStyle.Bold);
-            settingsItem.Click += delegate { OpenSettings(); };
             startupItem = new ToolStripMenuItem(UiText("Start with Windows", "开机自动启动", "Windows と一緒に起動"));
             startupItem.CheckOnClick = true;
             startupItem.Checked = IsStartupEnabled();
@@ -159,7 +154,6 @@ namespace QuotaPin.Tray
             var exit = new ToolStripMenuItem(UiText("Exit QuotaPin", "退出 QuotaPin", "QuotaPin を終了"));
             exit.Click += delegate { ExitQuotaPin(); };
             menu.Items.Add(statusItem);
-            menu.Items.Add(settingsItem);
             menu.Items.Add(new ToolStripSeparator());
             menu.Items.Add(startupItem);
             menu.Items.Add(updateItem);
@@ -638,9 +632,6 @@ namespace QuotaPin.Tray
                 statusItem.Text = UiText("Ready - waiting for Codex", "已就绪 - 等待 Codex", "準備完了 - Codex を待機中") + "  ·  " + currentVersion;
                 trayIcon.Text = "QuotaPin - " + UiText("Ready", "已就绪", "準備完了");
             }
-            settingsItem.Text = active
-                ? UiText("Open settings in Codex", "在 Codex 中打开设置", "Codex で設定を開く")
-                : UiText("Enable and open in Codex...", "启用并在 Codex 中打开…", "有効化して Codex で開く…");
         }
 
         private void CheckForUpdates(bool manual)
@@ -767,16 +758,6 @@ namespace QuotaPin.Tray
                 File.AppendAllText(logPath, DateTimeOffset.Now.ToString("o", CultureInfo.InvariantCulture) + " " + message + Environment.NewLine);
             }
             catch { }
-        }
-
-        private void OpenSettings()
-        {
-            var script = Path.Combine(installRoot, @"src\open-settings.ps1");
-            if (!File.Exists(script)) return;
-            var start = new ProcessStartInfo(powerShellPath, "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File \"" + script + "\"");
-            start.UseShellExecute = false;
-            start.CreateNoWindow = true;
-            Process.Start(start);
         }
 
         private static void OpenOfficialProject()

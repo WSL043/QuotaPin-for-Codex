@@ -59,7 +59,6 @@ Source: "..\src\auto-attach-policy.ps1"; DestDir: "{app}\src"; Flags: ignorevers
 Source: "..\src\codex-process.ps1"; DestDir: "{app}\src"; Flags: ignoreversion
 Source: "..\src\runtime-trust.ps1"; DestDir: "{app}\src"; Flags: ignoreversion
 Source: "..\src\codex-command.ps1"; DestDir: "{app}\src"; Flags: ignoreversion
-Source: "..\src\open-settings.ps1"; DestDir: "{app}\src"; Flags: ignoreversion
 Source: "..\src\first-run.ps1"; DestDir: "{app}\src"; Flags: ignoreversion
 Source: "..\src\ui.ps1"; DestDir: "{app}\src"; Flags: ignoreversion
 Source: "..\src\lifecycle.ps1"; DestDir: "{app}\src"; Flags: ignoreversion
@@ -80,7 +79,6 @@ Root: HKCU; Subkey: "Software\QuotaPin"; ValueType: string; ValueName: "Official
 Root: HKCU; Subkey: "Software\QuotaPin"; ValueType: string; ValueName: "OfficialSupport"; ValueData: "https://github.com/WSL043/QuotaPin-for-Codex/issues"; Flags: uninsdeletevalue uninsdeletekeyifempty
 
 [Icons]
-Name: "{userprograms}\QuotaPin\Open QuotaPin settings in Codex"; Filename: "{sys}\WindowsPowerShell\v1.0\powershell.exe"; Parameters: "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File ""{app}\src\open-settings.ps1"""; WorkingDir: "{app}"; IconFilename: "{app}\QuotaPin.Tray.exe"; Comment: "Open QuotaPin settings inside Codex"
 Name: "{userprograms}\QuotaPin\Official project (free source)"; Filename: "https://github.com/WSL043/QuotaPin-for-Codex"; Comment: "Official free and open-source QuotaPin project"
 Name: "{userprograms}\QuotaPin\Uninstall QuotaPin"; Filename: "{uninstallexe}"
 

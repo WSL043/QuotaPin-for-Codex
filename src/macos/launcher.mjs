@@ -17,7 +17,7 @@ import {
   validateOfficialCodexIdentity,
 } from "./launcher-runtime.mjs";
 
-const VERSION = "1.0.3";
+const VERSION = "1.0.4";
 const SOURCE_REPOSITORY = "https://github.com/WSL043/QuotaPin-for-Codex";
 const BUILD_COMMIT = "__QUOTAPIN_BUILD_COMMIT__";
 const POLL_MS = 1_000;

@@ -291,7 +291,7 @@ jobs:
 
       - name: Build self-contained Windows package
         shell: powershell
-        run: .\scripts\build-windows.ps1
+        run: .\scripts\build-windows.ps1 -ReleaseManifest
 
       - name: Prepare exact public asset set
         shell: powershell

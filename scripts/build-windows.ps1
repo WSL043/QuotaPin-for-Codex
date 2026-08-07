@@ -1,3 +1,7 @@
+param(
+    [switch]$ReleaseManifest
+)
+
 $ErrorActionPreference = 'Stop'
 
 & (Join-Path $PSScriptRoot 'test-updater.ps1')
@@ -8,5 +12,7 @@ if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 & (Join-Path $PSScriptRoot 'build-installer.ps1')
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-& (Join-Path $PSScriptRoot 'build-release-metadata.ps1') -Phase Manifest
-if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+if ($ReleaseManifest) {
+    & (Join-Path $PSScriptRoot 'build-release-metadata.ps1') -Phase Manifest
+    if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+}

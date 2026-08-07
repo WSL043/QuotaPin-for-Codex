@@ -22,7 +22,7 @@
   <img src="assets/screenshots/product-zh-CN.png" width="960" alt="账户菜单未打开时，QuotaPin 已在 Codex 账户栏显示百分之一剩余额度">
 </p>
 
-**最新稳定版：v1.0.3。** Windows 已实测；macOS 安装包已通过 CI，仍等待登录状态的 Mac 实机验收。
+**最新稳定版：v1.0.4。** Windows 已实测；macOS 安装包已通过 CI，仍等待登录状态的 Mac 实机验收。
 
 | 平台 | 当前状态 |
 |---|---|
@@ -52,14 +52,14 @@ curl -fsSL https://raw.githubusercontent.com/WSL043/QuotaPin-for-Codex/main/inst
 两种方式使用的是同一份平台安装包。PowerShell 采用安静的 watcher 模式，不显示托盘图标；Windows EXE 的引导安装会启用托盘伴侣。引导脚本只解析不可变的 GitHub Release，核对 GitHub SHA-256 摘要与安装包身份，再按当前用户安装，不需要提权。详见[安全说明](SECURITY.md)。
 
 <details>
-<summary>把引导脚本本身也固定到 v1.0.3</summary>
+<summary>把引导脚本本身也固定到 v1.0.4</summary>
 
 ```powershell
-irm https://raw.githubusercontent.com/WSL043/QuotaPin-for-Codex/v1.0.3/install.ps1 | iex
+irm https://raw.githubusercontent.com/WSL043/QuotaPin-for-Codex/v1.0.4/install.ps1 | iex
 ```
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/WSL043/QuotaPin-for-Codex/v1.0.3/install-macos.sh | bash
+curl -fsSL https://raw.githubusercontent.com/WSL043/QuotaPin-for-Codex/v1.0.4/install-macos.sh | bash
 ```
 
 </details>

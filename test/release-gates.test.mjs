@@ -35,6 +35,7 @@ test("pull-request CI exercises source behavior without publishing an installer"
   for (const script of ["scripts\\install-inno-ci.ps1", "scripts\\build-windows.ps1"]) {
     assert.ok(workflow.includes(script), `check workflow does not run ${script}`);
   }
+  assert.match(workflow, /build-windows\.ps1 -ReleaseManifest/);
   assert.doesNotMatch(workflow, /choco install innosetup/i);
   assert.match(workflow, /public-release\.mjs prepare-ci/);
   assert.match(workflow, /public-release\.mjs verify-ci/);
@@ -47,6 +48,7 @@ test("tag workflow builds and publishes only the exact cross-platform packages",
   const release = workflow("release.yml");
   assert.doesNotMatch(release, /workflow_dispatch|QuotaPin-Setup/i);
   assert.match(release, /scripts\\build-windows\.ps1/);
+  assert.match(release, /scripts\\build-windows\.ps1 -ReleaseManifest/);
   assert.match(release, /scripts\/macos\/build\.sh/);
   assert.match(release, /scripts\/macos\/test-lifecycle\.sh/);
   assert.match(release, /scripts\/macos\/package-universal\.sh/);

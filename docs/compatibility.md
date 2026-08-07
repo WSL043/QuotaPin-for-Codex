@@ -2,15 +2,17 @@
 
 | QuotaPin | Codex Desktop | Platform | Status |
 |---|---|---|---|
-| 1.0.3 | CI package lifecycle | Windows 11 runner; macOS 15/26 native arm64 and x86_64 runners | 🧪 CI validated; real-Mac acceptance pending |
-| 1.0.2 | 26.803.5235.0 x64 | Windows 11 10.0.26200 | ✅ Verified |
+| 1.0.4 | CI package lifecycle; 26.803.5235.0 x64 | Windows 11; macOS 15/26 native arm64 and x86_64 runners | ✅ Current stable; real-Mac acceptance pending |
+| 1.0.3 | CI package lifecycle | Windows 11 runner; macOS 15/26 native arm64 and x86_64 runners | Withdrawn; release transition was incompatible |
+| 1.0.2 | 26.803.5235.0 x64 | Windows 11 10.0.26200 | Withdrawn; updater required one-asset releases |
 
 The one-line command accepts x64 Windows 10 version 2004 (build 19041) and later. Current end-to-end evidence is from Windows 11, so Windows 10 remains best-effort until a real-device report is recorded. Windows ARM64 is not supported.
 
 ## Published artifact evidence
 
-- **1.0.3:** the cross-platform release gate builds one Windows EXE and one universal macOS DMG, then exercises the exact final DMG under macOS 15 and macOS 26 on native arm64 and x86_64 runners before publishing. Real signed-in Codex account-row and Gatekeeper acceptance on Mac remains pending.
-- **1.0.2:** the immutable release contains `QuotaPin-1.0.2.exe` (23,439,621 bytes; SHA-256 `329bbd698ca8a4207151c431004e8d481ccb133cc00da6d64a35463748f377ab`). Both the public one-line command and an independent EXE download completed install and uninstall acceptance. Command mode used one hidden watcher and no tray; guided mode used one tray and no watcher. Both removals cleared QuotaPin-owned files, startup entries, the Apps entry, and processes while the Codex root PID and start time remained unchanged.
+- **1.0.4:** the release gate builds `QuotaPin-1.0.4.exe` and `QuotaPin-macOS-1.0.4.dmg`, then validates the exact platform packages before publication. It is the clean stable baseline; withdrawn earlier releases are not part of its supported update matrix.
+- **1.0.3:** cross-platform package CI passed, but the two-asset publication exposed an incompatibility in the 1.0.2 updater and was withdrawn from public downloads.
+- **1.0.2:** Windows install and uninstall acceptance passed, but its exact-one-asset update filter could not cross into the first multi-platform release. It was withdrawn when 1.0.4 became the new clean baseline.
 
 ## Automated evidence
 
@@ -47,4 +49,4 @@ Host UI changes can invalidate an otherwise compatible release. QuotaPin fails c
 
 Development evidence is marked as development. A tagged release is added only after the same checks are repeated against its published artifacts. Windows 10 remains best-effort until a real-device report is recorded.
 
-macOS packages are publicly available from 1.0.3, with CI-validated lifecycle support. Real signed-in Codex and Gatekeeper acceptance remains provisional; see [the macOS implementation and acceptance boundary](macos.md).
+The macOS package is CI-validated and included in 1.0.4. Real signed-in Codex and Gatekeeper acceptance remains provisional; see [the macOS implementation and acceptance boundary](macos.md).

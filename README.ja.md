@@ -22,7 +22,7 @@
   <img src="assets/screenshots/product-ja.png" width="960" alt="アカウントメニューを開かず、Codex のアカウント欄に残り1パーセントを表示する QuotaPin">
 </p>
 
-**最新安定版：v1.0.3。** Windows は実機確認済み。macOS パッケージは CI 検証済みで、サインイン済み実機での受け入れ確認を待っています。
+**最新安定版：v1.0.4。** Windows は実機確認済み。macOS パッケージは CI 検証済みで、サインイン済み実機での受け入れ確認を待っています。
 
 | プラットフォーム | 現在の状態 |
 |---|---|
@@ -52,14 +52,14 @@ curl -fsSL https://raw.githubusercontent.com/WSL043/QuotaPin-for-Codex/main/inst
 どちらも同じプラットフォーム用パッケージを使います。PowerShell はトレイアイコンのない静かな watcher 構成、Windows EXE の案内付きセットアップはトレイ機能を有効にします。ブートストラップは変更不能な GitHub Release を解決し、GitHub の SHA-256 ダイジェストとパッケージ識別情報を確認してから、管理者権限なしでユーザー単位にインストールします。詳しくは[セキュリティ](SECURITY.md)をご覧ください。
 
 <details>
-<summary>ブートストラップ自体も v1.0.3 に固定する</summary>
+<summary>ブートストラップ自体も v1.0.4 に固定する</summary>
 
 ```powershell
-irm https://raw.githubusercontent.com/WSL043/QuotaPin-for-Codex/v1.0.3/install.ps1 | iex
+irm https://raw.githubusercontent.com/WSL043/QuotaPin-for-Codex/v1.0.4/install.ps1 | iex
 ```
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/WSL043/QuotaPin-for-Codex/v1.0.3/install-macos.sh | bash
+curl -fsSL https://raw.githubusercontent.com/WSL043/QuotaPin-for-Codex/v1.0.4/install-macos.sh | bash
 ```
 
 </details>

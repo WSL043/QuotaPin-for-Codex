@@ -211,7 +211,7 @@ jobs:
           path: dist
       - name: Build and self-check the complete Windows package
         shell: powershell
-        run: .\scripts\build-windows.ps1
+        run: .\scripts\build-windows.ps1 -ReleaseManifest
       - name: Verify the cross-platform public candidate
         shell: powershell
         run: |

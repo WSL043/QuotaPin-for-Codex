@@ -22,7 +22,7 @@
   <img src="assets/screenshots/product-en.png" width="960" alt="QuotaPin showing one percent remaining in the closed Codex account row">
 </p>
 
-**Latest stable: v1.0.3.** Windows is verified; the macOS package is CI-validated and awaiting signed-in real-Mac acceptance.
+**Latest stable: v1.0.4.** Windows is verified; the macOS package is CI-validated and awaiting signed-in real-Mac acceptance.
 
 | Platform | Status |
 |---|---|
@@ -52,14 +52,14 @@ Prefer a normal installer? [Open the latest stable release](https://github.com/W
 Both methods use the same platform package. PowerShell installs the quiet watcher without a tray icon; the guided Windows EXE adds the tray companion. The bootstraps resolve an immutable GitHub Release, verify its GitHub SHA-256 digest and package identity, then install per user without elevation. See [Security](SECURITY.md).
 
 <details>
-<summary>Pin the bootstrap itself to v1.0.3</summary>
+<summary>Pin the bootstrap itself to v1.0.4</summary>
 
 ```powershell
-irm https://raw.githubusercontent.com/WSL043/QuotaPin-for-Codex/v1.0.3/install.ps1 | iex
+irm https://raw.githubusercontent.com/WSL043/QuotaPin-for-Codex/v1.0.4/install.ps1 | iex
 ```
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/WSL043/QuotaPin-for-Codex/v1.0.3/install-macos.sh | bash
+curl -fsSL https://raw.githubusercontent.com/WSL043/QuotaPin-for-Codex/v1.0.4/install-macos.sh | bash
 ```
 
 </details>

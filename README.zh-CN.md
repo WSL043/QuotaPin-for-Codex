@@ -1,8 +1,8 @@
 <h1 align="center">QuotaPin for Codex</h1>
 
 <p align="center">
-  <strong>不用打开菜单，直接看 Codex 剩余额度。</strong><br>
-  QuotaPin 把百分比放进原本的账户栏。
+  <strong>不用打开菜单，也能随时看到 Codex 剩余额度。</strong><br>
+  一个本地运行、开源的 Codex 桌面端伴侣，把剩余用量和重置信息直接放进原本的账户栏。
 </p>
 
 <p align="center">
@@ -19,19 +19,55 @@
 </p>
 
 <p align="center">
-  <img src="assets/screenshots/product-zh-CN.png" width="960" alt="账户菜单未打开时，QuotaPin 已在 Codex 账户栏显示百分之一剩余额度">
+  <img src="assets/screenshots/product-zh-CN.png" width="960" alt="QuotaPin 在 Codex 账户栏里直接显示剩余用量">
 </p>
 
-**最新稳定版：v1.1.0。** Windows 已实测；macOS 安装包已通过 CI，仍等待登录状态的 Mac 实机验收。
+<p align="center">
+  <a href="https://github.com/WSL043/QuotaPin-for-Codex/releases/latest"><strong>下载最新稳定版</strong></a>
+  · <a href="SECURITY.md">安全</a>
+  · <a href="PRIVACY.md">隐私</a>
+  · <a href="docs/architecture.md">架构</a>
+  · <a href="docs/configuration.md">配置</a>
+</p>
+
+> [!IMPORTANT]
+> QuotaPin 是非官方社区项目，与 OpenAI 没有隶属、认可或支持关系。
+
+## 为什么做 QuotaPin
+
+Codex 本来就知道你的使用额度。麻烦的是，每次想看还剩多少，都得先打开账户菜单。
+
+QuotaPin 做的事情很简单：把真正有用的信息留在账户栏里。看额度从一次操作，变成扫一眼。
+
+- **默认就够用。** 刚安装时只多一个剩余百分比，不把界面塞满。
+- **不抢原来的交互。** 短按账户栏照常打开 Codex 菜单，长按才打开 QuotaPin。
+- **需要时再折腾。** 重置时间、倒计时、状态颜色、Token 统计和布局都可以自己组合。
+- **本地优先。** 不做产品遥测，不维护账户数据库，也不修改官方 Codex 安装包。
+- **宁可不显示，也不猜。** 无法唯一确认账户栏时，QuotaPin 会保持隐藏。
+
+## 平台状态
 
 | 平台 | 当前状态 |
 |---|---|
-| Windows 11 x64 | ✅ 稳定 / 已验证 |
+| Windows 11 x64 | ✅ 稳定 / 已在登录状态实机验证 |
 | Windows 10 x64（2004+） | ⚠️ 尽力兼容 |
-| Windows ARM64 | ❌ 不支持 |
-| macOS Apple 芯片 / Intel | 🧪 已公开安装包 / CI 已验证 |
+| Windows ARM64 | ❌ 暂不支持 |
+| macOS Apple 芯片 / Intel | 🧪 已公开安装包 / CI 已验证；仍等待登录状态 Mac 实机验收 |
 
-## 快速开始
+## 安装
+
+### 推荐：普通安装器
+
+打开 **[最新稳定版 Release](https://github.com/WSL043/QuotaPin-for-Codex/releases/latest)**。
+
+- **Windows：** 运行带版本号的 `.exe`。
+- **macOS：** 打开通用 `.dmg`，再双击 **QuotaPin Installer**。
+
+安装只作用于当前用户。Windows 不需要管理员权限；macOS 不需要 `sudo`、Homebrew 或额外运行环境。安装和更新都不会关闭或重启正在运行的 Codex；当前进程无法安全接入时，QuotaPin 会等到下次正常启动。
+
+### 一条命令安装
+
+如果更习惯命令行，引导脚本本身也是公开的，可以先看再运行：[`install.ps1`](install.ps1) · [`install-macos.sh`](install-macos.sh)。
 
 **Windows — PowerShell**
 
@@ -45,104 +81,116 @@ irm https://raw.githubusercontent.com/WSL043/QuotaPin-for-Codex/main/install.ps1
 curl -fsSL https://raw.githubusercontent.com/WSL043/QuotaPin-for-Codex/main/install-macos.sh | bash
 ```
 
-两条命令都默认安装最新稳定版。然后照常打开 Codex；若 Codex 已经在运行，安装不会打断它，QuotaPin 会在下次正常启动时接入。需要指定旧版、预发布版或执行回退时，请使用[配置文档](docs/configuration.md#updates-and-recovery-versions)里的完整命令。
+引导脚本会解析已经发布且不可变的 GitHub Release，校验 GitHub SHA-256 摘要与安装包身份，再为当前用户安装对应平台包。如果你的威胁模型要求“引导脚本本身”也不可变，请把 raw URL 从 `main` 固定到明确的 Release tag。指定版本和回退示例见[配置文档](docs/configuration.md#updates-and-recovery-versions)。
 
-更习惯双击安装？打开[最新稳定版](https://github.com/WSL043/QuotaPin-for-Codex/releases/latest)。Windows 运行带版本号的 `.exe`；macOS 打开通用 `.dmg`，再双击 **QuotaPin Installer**。
-
-两种方式使用的是同一份平台安装包。PowerShell 采用安静的 watcher 模式，不显示托盘图标；Windows EXE 的引导安装会启用托盘伴侣。引导脚本只解析不可变的 GitHub Release，核对 GitHub SHA-256 摘要与安装包身份，再按当前用户安装，不需要提权。详见[安全说明](SECURITY.md)。
+Windows 下，两种安装方式使用的是同一份平台包。命令行安装采用没有托盘图标的安静 watcher；带界面的 EXE 安装器会启用托盘伴侣。
 
 <details>
-<summary>把引导脚本本身也固定到 v1.1.0</summary>
-
-```powershell
-irm https://raw.githubusercontent.com/WSL043/QuotaPin-for-Codex/v1.1.0/install.ps1 | iex
-```
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/WSL043/QuotaPin-for-Codex/v1.1.0/install-macos.sh | bash
-```
-
-</details>
-
-> [!IMPORTANT]
-> QuotaPin 是非官方社区项目，与 OpenAI 没有隶属、认可或支持关系。
-
-## 少点一次，少断一次思路
-
-短按账户栏，照常打开 Codex 账户菜单；长按同一行，打开 QuotaPin。再次按下或点面板外即可关闭。原有帮助按钮、头像和用户名都保留。
-
-<details>
-<summary>运行要求与首次启动</summary>
-
-- **已经验证：** x64 Windows 11，并已登录 Codex Desktop。
-- **尽力兼容：** x64 Windows 10 版本 2004（内部版本 19041）或更新版本。暂不支持 Windows ARM64。
-- **权限：** 只安装给当前用户，不需要管理员权限。
-- **正在运行的任务：** 安装和更新都不会关闭或重启 Codex；当前进程无法安全接入时，就等下次正常启动。
-
-已经拉取仓库时，可用下面的命令安装；`Restricted` 执行策略也能运行：
+<summary>已经拉取仓库时，在 Windows 本地安装</summary>
 
 ```powershell
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\install.ps1
 ```
 
-重新安装或更新会保留视图和偏好。指定版本、回退及配置恢复见[配置说明](docs/configuration.md)。
+即使常规 PowerShell 执行策略为 `Restricted`，也可以使用这条命令。
 
 </details>
 
-## 默认克制，想折腾也有地方
+## 平时只看一眼，想看多少细节都可以
 
-刚安装好时，Codex 原生头像和用户名保持不变，只多一个剩余百分比。
+默认状态保留 Codex 原来的头像和账户名，只增加剩余百分比。
 
 <p align="center">
-  <img src="assets/screenshots/states-zh-CN.png" width="900" alt="QuotaPin 的正常、提醒和危险三档颜色，以及可选额度线">
-  <br><sub>默认在 30% 进入提醒、10% 进入危险；阈值可以修改。</sub>
+  <img src="assets/screenshots/states-zh-CN.png" width="900" alt="QuotaPin 的正常、提醒和危险三档状态，以及可选额度线">
+  <br><sub>默认 30% 进入提醒、10% 进入危险；两个阈值都可以修改。</sub>
 </p>
 
 <p align="center">
-  <img src="assets/screenshots/examples-zh-CN.png" width="900" alt="QuotaPin 的六种真实组合，包括倒计时、只看状态和调整身份位置">
+  <img src="assets/screenshots/examples-zh-CN.png" width="900" alt="QuotaPin 的六种显示组合，包括倒计时、仅状态和身份位置调整">
 </p>
 
-百分比、状态圆点、额度线、剩余时间、秒级倒计时、重置日期和重置时间都能单独开关和排序。可选的 Token 模块还能显示这台电脑今天的用量，以及账户累计用量；悬浮信息会给出完整数值，并明确标出“今天”只统计本机。紧凑时间（`4d 8h`）是三种界面语言都能用的通用模块，中文时间（`4天8小时`）则是另一块独立模块。
+下面这些模块都可以单独显示、隐藏和排序：
+
+- 剩余百分比；
+- 状态圆点和额度线；
+- 剩余时间和秒级倒计时；
+- 重置日期和重置时间；
+- 这台电脑今天的 Token 总量；
+- 已结算的账户累计 Token 总量。
+
+紧凑时间（`4d 8h`）三种界面语言通用；另一套文字模块会跟随当前语言显示为 `4 days 8 hours`、`4天8小时` 或 `4日8時間`。悬浮信息会显示精确数值，并在需要时明确标注“仅统计本机”。
+
+常用组合可以保存成命名视图，不用每次重新排。
+
+## 不替换 Codex 原来的账户菜单
+
+短按账户栏，一切和原来的 Codex 一样；长按同一行才会打开 QuotaPin。再次按下或点击面板外即可关闭。原有帮助按钮、头像、账户名和账户菜单都保留。
 
 <p align="center">
-  <img src="assets/screenshots/drag-layout.gif" width="405" alt="把 QuotaPin 模块拖到左侧、右侧和中间时，旁边模块自动让位">
-  <br><sub>拖到左侧、右侧或中间，旁边的模块会自己让位。</sub>
+  <img src="assets/screenshots/drag-layout.gif" width="405" alt="拖动 QuotaPin 模块到左侧、右侧和中间时，旁边模块自动让位">
+  <br><sub>拖到左侧、右侧或中间，旁边的项目会自动让位。</sub>
 </p>
 
-- **快速：** 选择额度周期，决定显示什么、放在哪里。
-- **自定义：** 调整颜色、阈值、悬浮内容、头像形状、面板明暗和动态效果。
-- **代码：** 提供完整且经过校验的配置接口；玩乱了可以重置。
+- **快速：** 选择额度周期、显示模块和排列方式。
+- **自定义：** 调整颜色、阈值、悬浮内容、头像形状、明暗和动态效果。
+- **代码：** 暴露经过校验的完整配置面；折腾乱了也可以重置。
 
-常用搭配可以保存成命名视图，随时切换。
+## 本地运行，但把 CDP 风险边界说清楚
 
-## 只看额度，不看你的任务
+QuotaPin 通过 Chromium DevTools Protocol（CDP）接入 Codex Desktop，CDP 端点绑定在 `127.0.0.1` 的随机端口上。
 
-QuotaPin 只从本机 Codex 读取剩余额度，不读取任务内容、提示词、Cookie 或账户身份，也不上传使用数据。只有唯一账户栏能够被明确识别时才会显示；位置不确定就保持隐藏。官方 Codex 安装包从不被修改。
+**CDP 本身是一个权限很高的渲染器控制接口。** 连接到它的软件理论上能够检查或修改渲染内容，所以这是真实存在的信任边界，不应该用一句“本地运行”就糊弄过去。如果你的威胁模型不能接受这一点，就不要运行 QuotaPin。
 
-详细说明：[配置](docs/configuration.md) · [安全](SECURITY.md) · [隐私](PRIVACY.md) · [架构](docs/architecture.md) · [实测兼容性](docs/compatibility.md)
+当前实现通过下面这些措施缩小暴露面：
 
-QuotaPin 一天最多检查一次更新，未经确认不会安装，也不会重启 Codex。无法安全原位接入时，新版本会等到下次正常启动再生效。
+- CDP 只绑定回环地址，每次启动使用新的临时端口；
+- 只连接精确匹配的 Codex 主页面 URL；
+- 限额 App Server 保持在 `stdio`；
+- Windows 下只有 Authenticode 签名能够确认发布者为 OpenAI 的 Codex 命令才会被接受；
+- 不记录 Token、Cookie、提示词或页面内容；
+- 不发送 QuotaPin 产品遥测；
+- 从不修改官方 Codex 安装包；
+- Codex 端点关闭后，Agent 随之结束。
 
-## macOS 版
+QuotaPin 不声称能够防御已经以同一系统用户身份运行的恶意软件。完整威胁模型、Release 完整性校验、SBOM / artifact attestation 和漏洞报告流程都写在 **[SECURITY.md](SECURITY.md)**；数据处理单独写在 **[PRIVACY.md](PRIVACY.md)**。
 
-通用 DMG 同时包含 Apple 芯片与 Intel 版本，按用户安装，不需要 `sudo`、Homebrew 或另装运行环境。GitHub Actions 已在 macOS 15 与 macOS 26 的原生 runner 上对最终镜像跑完安装、更新、LaunchAgent 启动、配置保留和卸载。当前 Codex 的真实账户栏与 Gatekeeper 表现仍需登录状态的 Mac 验收。实现边界和验收项目见 [macOS 说明](docs/macos.md)，也可以提交[脱敏兼容性报告](https://github.com/WSL043/QuotaPin-for-Codex/issues/new?template=macos-compatibility.yml)。
+## 更新与兼容性
 
-## 想法与贡献
+QuotaPin 每天最多检查一次更新，未经确认不会安装，也不会重启 Codex。重新安装或更新会保留已经保存的视图和偏好。
 
-先[搜索已有想法](https://github.com/WSL043/QuotaPin-for-Codex/issues?q=is%3Aissue+is%3Aopen+label%3Aenhancement+sort%3Areactions-%2B1-desc)，用 👍 投票；没有相同提议时，再[提交新想法](https://github.com/WSL043/QuotaPin-for-Codex/issues/new?template=feature.yml)。提交代码前请先看 [CONTRIBUTING.md](CONTRIBUTING.md)。
+Codex 的界面本身会继续变化。QuotaPin 在无法明确识别账户栏时会拒绝渲染，而不是猜位置硬塞进去。当前实测兼容性和恢复方案见[兼容性](docs/compatibility.md)与[配置](docs/configuration.md)。
+
+## macOS 当前状态
+
+通用 DMG 同时包含 Apple 芯片与 Intel 构建。GitHub Actions 已在 macOS 15 与 macOS 26 的原生 runner 上对最终镜像执行安装、更新、LaunchAgent 启动、配置保留和卸载测试。
+
+CI 仍然无法替代两件事：当前 Codex 在登录状态下的真实账户栏，以及用户 Mac 上真实的 Gatekeeper 行为。这一步实机验收还没有完成。详细边界见 [macOS 说明](docs/macos.md)，也欢迎提交[脱敏兼容性报告](https://github.com/WSL043/QuotaPin-for-Codex/issues/new?template=macos-compatibility.yml)。
+
+## 想法、问题与贡献
+
+- 遇到 Bug：提交 Issue，并尽量附上复现步骤和环境信息。
+- 有想法：先[搜索已有需求](https://github.com/WSL043/QuotaPin-for-Codex/issues?q=is%3Aissue+is%3Aopen+label%3Aenhancement+sort%3Areactions-%2B1-desc)，相同需求用 👍 投票；没有再[提交新功能建议](https://github.com/WSL043/QuotaPin-for-Codex/issues/new?template=feature.yml)。
+- 想提交代码：先看 [CONTRIBUTING.md](CONTRIBUTING.md)。
+- 安全问题：请按 [SECURITY.md](SECURITY.md) 使用 GitHub 的私密漏洞报告流程。
 
 ## 卸载
 
-Windows 可以打开 **开始菜单 > QuotaPin > Uninstall QuotaPin**，或者运行：
+**Windows**
+
+打开 **开始菜单 > QuotaPin > Uninstall QuotaPin**，或者运行：
 
 ```powershell
 & "$env:LOCALAPPDATA\QuotaPin\unins000.exe"
 ```
 
-macOS：
+**macOS**
 
 ```bash
 "$HOME/Library/Application Support/QuotaPin/uninstall.sh"
 ```
 
-QuotaPin 只移除自己的文件和快捷方式，Codex 不受影响。
+QuotaPin 只移除自己的文件和快捷方式，不会动 Codex。
+
+## 许可证
+
+QuotaPin 使用 [MIT License](LICENSE) 开源。

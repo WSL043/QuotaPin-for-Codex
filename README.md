@@ -1,8 +1,8 @@
 <h1 align="center">QuotaPin for Codex</h1>
 
 <p align="center">
-  <strong>See your Codex quota before opening the menu.</strong><br>
-  QuotaPin adds the remaining percentage to the native account row.
+  <strong>Your Codex quota, visible before you open the menu.</strong><br>
+  A local, open-source companion that adds remaining usage and reset information to the existing Codex account row.
 </p>
 
 <p align="center">
@@ -19,19 +19,55 @@
 </p>
 
 <p align="center">
-  <img src="assets/screenshots/product-en.png" width="960" alt="QuotaPin showing one percent remaining in the closed Codex account row">
+  <img src="assets/screenshots/product-en.png" width="960" alt="QuotaPin showing remaining Codex usage directly in the closed account row">
 </p>
 
-**Latest stable: v1.1.0.** Windows is verified; the macOS package is CI-validated and awaiting signed-in real-Mac acceptance.
+<p align="center">
+  <a href="https://github.com/WSL043/QuotaPin-for-Codex/releases/latest"><strong>Download the latest release</strong></a>
+  · <a href="SECURITY.md">Security</a>
+  · <a href="PRIVACY.md">Privacy</a>
+  · <a href="docs/architecture.md">Architecture</a>
+  · <a href="docs/configuration.md">Configuration</a>
+</p>
+
+> [!IMPORTANT]
+> QuotaPin is an unofficial community project. It is not affiliated with, endorsed by, or supported by OpenAI.
+
+## Why QuotaPin
+
+Codex already knows your usage limit. The annoying part is having to open the account menu whenever you want to check it.
+
+QuotaPin keeps the useful part visible in the account row, so checking quota becomes a glance instead of an interruption.
+
+- **Glanceable by default.** A fresh install adds only the remaining percentage.
+- **Native-feeling interaction.** Short-click the row for the normal Codex menu; hold it for QuotaPin.
+- **Configurable when you want it.** Add reset time, countdowns, status colors, token totals, and custom layouts.
+- **Local-first.** No product telemetry, no account database, and no patching of the official Codex package.
+- **Fail closed.** If QuotaPin cannot identify one unambiguous account row, it renders nothing rather than guessing.
+
+## Platform status
 
 | Platform | Status |
 |---|---|
-| Windows 11 x64 | ✅ Stable / verified |
+| Windows 11 x64 | ✅ Stable / verified on a signed-in machine |
 | Windows 10 x64 (2004+) | ⚠️ Best effort |
 | Windows ARM64 | ❌ Not supported |
-| macOS Apple silicon / Intel | 🧪 Public package / CI validated |
+| macOS Apple silicon / Intel | 🧪 Public package / CI validated; signed-in real-Mac acceptance still pending |
 
-## Quick Start
+## Install
+
+### Recommended: normal installer
+
+Open the **[latest stable release](https://github.com/WSL043/QuotaPin-for-Codex/releases/latest)**.
+
+- **Windows:** run the versioned `.exe` installer.
+- **macOS:** open the universal `.dmg`, then double-click **QuotaPin Installer**.
+
+Installation is per-user. Windows does not require elevation; macOS does not require `sudo`, Homebrew, or a separate runtime. Installing or updating never closes or restarts a running Codex session. If QuotaPin cannot attach safely, it waits for the next normal Codex launch.
+
+### Command-line install
+
+If you prefer a one-command bootstrap, the scripts are public and can be inspected first: [`install.ps1`](install.ps1) · [`install-macos.sh`](install-macos.sh).
 
 **Windows — PowerShell**
 
@@ -45,104 +81,116 @@ irm https://raw.githubusercontent.com/WSL043/QuotaPin-for-Codex/main/install.ps1
 curl -fsSL https://raw.githubusercontent.com/WSL043/QuotaPin-for-Codex/main/install-macos.sh | bash
 ```
 
-Both commands install the latest stable version. Launch Codex from its usual icon. If Codex is already running, installation leaves it alone and QuotaPin joins the next normal launch. Deliberate version selection and rollback use the explicit commands in [configuration](docs/configuration.md#updates-and-recovery-versions).
+The bootstrap resolves a published immutable GitHub Release, verifies the GitHub SHA-256 digest and package identity, then installs the platform package for the current user. If your threat model requires the bootstrap itself to be immutable too, pin its raw URL to an exact release tag instead of `main`. Version selection and rollback examples are in [configuration](docs/configuration.md#updates-and-recovery-versions).
 
-Prefer a normal installer? [Open the latest stable release](https://github.com/WSL043/QuotaPin-for-Codex/releases/latest). On Windows, run the versioned `.exe`. On macOS, open the universal `.dmg`, then double-click **QuotaPin Installer**.
-
-Both methods use the same platform package. PowerShell installs the quiet watcher without a tray icon; the guided Windows EXE adds the tray companion. The bootstraps resolve an immutable GitHub Release, verify its GitHub SHA-256 digest and package identity, then install per user without elevation. See [Security](SECURITY.md).
+On Windows, the command install uses the quiet watcher without a tray icon. The guided EXE installer enables the tray companion. Both use the same platform package.
 
 <details>
-<summary>Pin the bootstrap itself to v1.1.0</summary>
-
-```powershell
-irm https://raw.githubusercontent.com/WSL043/QuotaPin-for-Codex/v1.1.0/install.ps1 | iex
-```
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/WSL043/QuotaPin-for-Codex/v1.1.0/install-macos.sh | bash
-```
-
-</details>
-
-> [!IMPORTANT]
-> QuotaPin is an unofficial community project. It is not affiliated with, endorsed by, or supported by OpenAI.
-
-## One less click, one less interruption
-
-Short-click the account row for the normal Codex account menu. Hold the same row for QuotaPin. Press it again—or click outside—to close the open panel. The native help button, avatar, and account name remain in place.
-
-<details>
-<summary>Requirements and first launch</summary>
-
-- **Verified:** x64 Windows 11 with a signed-in Codex Desktop installation.
-- **Best effort:** x64 Windows 10 version 2004 (build 19041) or later. Windows ARM64 is not supported yet.
-- **Permissions:** per-user installation; no administrator prompt.
-- **Running work:** installation and updates never close or relaunch Codex. If the current process cannot be attached safely, QuotaPin waits for the next normal launch.
-
-Installing from a clone also works under a restrictive PowerShell policy:
+<summary>Installing from an existing clone on Windows</summary>
 
 ```powershell
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\install.ps1
 ```
 
-Reinstalling or updating keeps your views and preferences. Version selection, rollback, and configuration recovery are covered in [configuration](docs/configuration.md).
+This also works when the normal PowerShell execution policy is `Restricted`.
 
 </details>
 
-## Quiet by default, flexible when asked
+## One glance, as much detail as you want
 
-A fresh install keeps the native Codex avatar and account name, then adds only the remaining percentage.
+The default keeps the original Codex avatar and account name and adds only the remaining percentage.
 
 <p align="center">
-  <img src="assets/screenshots/states-en.png" width="900" alt="Normal, warning, and critical quota colors with the optional quota line">
-  <br><sub>The default thresholds are 30% for warning and 10% for critical; both are editable.</sub>
+  <img src="assets/screenshots/states-en.png" width="900" alt="Normal, warning, and critical QuotaPin states with the optional quota line">
+  <br><sub>Default thresholds are 30% for warning and 10% for critical; both are editable.</sub>
 </p>
 
 <p align="center">
-  <img src="assets/screenshots/examples-en.png" width="900" alt="Six production-rendered QuotaPin arrangements including countdowns, status-only, and reordered identity">
+  <img src="assets/screenshots/examples-en.png" width="900" alt="Six QuotaPin arrangements including countdowns, status-only, and reordered identity">
 </p>
 
-Percentage, status dot, quota line, time left, second-by-second countdown, reset date, and reset time can each be shown, hidden, and reordered. Optional token modules show today's total from this device and the settled account lifetime total; the hover gives their exact values and makes the device-local scope explicit. Compact time (`4d 8h`) is the universal shorthand, while a separate worded module follows the selected language (`4 days 8 hours`, `4天8小时`, or `4日8時間`).
+You can independently show, hide, and reorder:
 
-<p align="center">
-  <img src="assets/screenshots/drag-layout.gif" width="405" alt="Dragging a QuotaPin module to the left, right, and center while neighboring modules make room">
-  <br><sub>Drag left, right, or to the center; the row makes room as you go.</sub>
-</p>
+- remaining percentage;
+- status dot and quota line;
+- time left and second-by-second countdown;
+- reset date and reset time;
+- today's token total from this device;
+- settled account lifetime token total.
 
-- **Quick** chooses the usage window, what is visible, and where it sits.
-- **Customize** handles colors, thresholds, hover text, avatar shape, appearance, and motion.
-- **Code** exposes the validated configuration surface, with reset available if an experiment goes sideways.
+Compact time (`4d 8h`) works in every UI language. A separate worded module follows the selected language (`4 days 8 hours`, `4天8小时`, or `4日8時間`). Hover details expose exact values and make device-local scope explicit where it matters.
 
 Save useful combinations as named views and switch between them without rebuilding the row.
 
-## Reads the quota, not your work
+## Open QuotaPin without replacing the Codex menu
 
-QuotaPin reads remaining usage from Codex on your machine. It does not read task content, prompts, cookies, or account identity, and it sends no product telemetry. If it cannot identify one unambiguous account row, it renders nothing. The official Codex package is never patched.
+Short-click the account row and Codex behaves normally. Hold the same row to open QuotaPin. Press it again—or click outside—to close the open panel. The native help button, avatar, account name, and normal account menu stay in place.
 
-Details: [configuration](docs/configuration.md) · [security](SECURITY.md) · [privacy](PRIVACY.md) · [architecture](docs/architecture.md) · [observed compatibility](docs/compatibility.md)
+<p align="center">
+  <img src="assets/screenshots/drag-layout.gif" width="405" alt="Dragging a QuotaPin module to the left, right, and center while neighboring modules make room">
+  <br><sub>Drag modules left, right, or into the center; neighboring items make room as you move.</sub>
+</p>
 
-QuotaPin checks for updates at most once a day and never installs one without confirmation. It never restarts Codex; when safe in-place reattachment is unavailable, the new version waits for the next normal launch.
+- **Quick** chooses the usage window, visible modules, and layout.
+- **Customize** controls colors, thresholds, hover text, avatar shape, appearance, and motion.
+- **Code** exposes the validated configuration surface, with reset available if an experiment goes sideways.
 
-## macOS
+## Local by design — with an explicit CDP boundary
 
-The universal DMG includes Apple silicon and Intel builds and installs per user without `sudo`, Homebrew, or a separate runtime. GitHub Actions exercises the exact final image on native runners under macOS 15 and macOS 26. A signed-in Mac is still required to verify the current Codex account row and Gatekeeper behavior outside CI. See the [macOS implementation and acceptance boundary](docs/macos.md), or send a sanitized [compatibility report](https://github.com/WSL043/QuotaPin-for-Codex/issues/new?template=macos-compatibility.yml).
+QuotaPin integrates with Codex Desktop through a Chromium DevTools Protocol (CDP) endpoint bound to a random port on `127.0.0.1`.
 
-## Ideas & contributions
+**CDP is a powerful renderer-control interface.** Software attached through it can inspect or modify renderer content, so this is a real trust boundary, not something QuotaPin tries to hand-wave away. If that boundary is outside your threat model, do not run QuotaPin.
 
-[Search existing ideas](https://github.com/WSL043/QuotaPin-for-Codex/issues?q=is%3Aissue+is%3Aopen+label%3Aenhancement+sort%3Areactions-%2B1-desc), vote with 👍, or [submit a new one](https://github.com/WSL043/QuotaPin-for-Codex/issues/new?template=feature.yml). See [CONTRIBUTING.md](CONTRIBUTING.md) before sending code.
+The implementation reduces exposure by:
+
+- binding CDP to loopback only and choosing a new ephemeral port per launch;
+- attaching only to the exact Codex main-page URL;
+- keeping the rate-limit App Server on `stdio`;
+- accepting the app-managed Codex command on Windows only when its Authenticode signature identifies OpenAI;
+- not logging tokens, cookies, prompts, or page content;
+- sending no QuotaPin product telemetry;
+- never patching the official Codex package;
+- terminating the Agent after the Codex endpoint closes.
+
+QuotaPin does not claim to defend against malware already running as the same OS user. The full threat model, release integrity checks, SBOM/attestation details, and reporting process are documented in **[SECURITY.md](SECURITY.md)**. Data handling is documented separately in **[PRIVACY.md](PRIVACY.md)**.
+
+## Updates and compatibility
+
+QuotaPin checks for updates at most once a day and never installs one without confirmation. It never restarts Codex. Reinstalling or updating keeps your saved views and preferences.
+
+Codex can change its UI over time. QuotaPin deliberately refuses to render when it cannot identify the account row unambiguously. Observed compatibility and recovery options are documented in [compatibility](docs/compatibility.md) and [configuration](docs/configuration.md).
+
+## macOS status
+
+The universal DMG contains Apple silicon and Intel builds. GitHub Actions exercises the final image on native runners under macOS 15 and macOS 26, including install, update, LaunchAgent startup, configuration preservation, and uninstall paths.
+
+What CI cannot prove is the current signed-in Codex account row and real Gatekeeper behavior on a user's Mac. That acceptance step is still open. See [the macOS implementation and acceptance boundary](docs/macos.md), or send a sanitized [compatibility report](https://github.com/WSL043/QuotaPin-for-Codex/issues/new?template=macos-compatibility.yml).
+
+## Ideas, bugs, and contributions
+
+- Found a bug? Open an issue with reproduction steps and environment details.
+- Have an idea? [Search existing requests](https://github.com/WSL043/QuotaPin-for-Codex/issues?q=is%3Aissue+is%3Aopen+label%3Aenhancement+sort%3Areactions-%2B1-desc), vote with 👍, or [submit a feature request](https://github.com/WSL043/QuotaPin-for-Codex/issues/new?template=feature.yml).
+- Want to send code? Read [CONTRIBUTING.md](CONTRIBUTING.md) first.
+- Security issue? Use GitHub's private vulnerability reporting flow described in [SECURITY.md](SECURITY.md).
 
 ## Uninstall
 
-On Windows, use **Start > QuotaPin > Uninstall QuotaPin**, or run:
+**Windows**
+
+Use **Start > QuotaPin > Uninstall QuotaPin**, or run:
 
 ```powershell
 & "$env:LOCALAPPDATA\QuotaPin\unins000.exe"
 ```
 
-On macOS:
+**macOS**
 
 ```bash
 "$HOME/Library/Application Support/QuotaPin/uninstall.sh"
 ```
 
 QuotaPin removes its own files and shortcuts. Codex stays untouched.
+
+## License
+
+QuotaPin is released under the [MIT License](LICENSE).

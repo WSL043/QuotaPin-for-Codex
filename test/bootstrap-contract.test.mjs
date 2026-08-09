@@ -50,11 +50,15 @@ test("the updater installs the shared package, defers attachment, and never laun
   const update = read("scripts/update.ps1");
   const trust = read("src/runtime-trust.ps1");
   assert.match(update, /\$PackageName = "QuotaPin-\$Version\.exe"/);
-  assert.match(update, /'\/COMMANDINSTALL=1'/);
+  assert.match(update, /if \(\$InstallOwner -eq 'command'\) \{ \$InstallerArguments \+= '\/COMMANDINSTALL=1' \}/);
+  assert.match(update, /'\/DEFERHANDOFF=1'/);
   assert.match(update, /'\/NORESTART'/);
-  assert.match(update, /\$Process\.WaitForExit\(\)/);
+  assert.match(update, /\$Process\.WaitForExit\(5 \* 60 \* 1000\)/);
+  assert.match(update, /Stop-Process -Id \$Process\.Id -Force/);
+  assert.match(update, /\.Length -ne \$ExpectedBytes/);
   assert.match(update, /ConvertTo-QuotaPinWindowsFileVersion \$Version/);
   assert.doesNotMatch(update, /Start-Process -FilePath \$PackagePath[^\r\n]*-Wait/);
+  assert.match(update, /Resume-QuotaPinTrustedRuntime/);
   assert.match(update, /Attachment will retry on the next Codex launch/);
   assert.doesNotMatch(update, /Start-Process[^\r\n]*(?:ChatGPT|Codex\.exe|launch\.ps1)/i);
   assert.match(trust, /Start-Process -FilePath \$ResolvedAgentPath/);

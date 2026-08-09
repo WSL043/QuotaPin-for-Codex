@@ -2,7 +2,8 @@
 
 | QuotaPin | Codex Desktop | Platform | Status |
 |---|---|---|---|
-| 1.1.0 | 26.803.5235.0 x64; production DOM fixture and package gates | Windows 11; macOS 15/26 native arm64 and x86_64 runners | ✅ Current stable; real-Mac acceptance pending |
+| 1.1.1 | 26.803.5235.0 x64; production DOM fixture and package gates | Windows 11; macOS 15/26 native arm64 and x86_64 runners | ✅ Current stable; real-Mac acceptance pending |
+| 1.1.0 | 26.803.5235.0 x64; production DOM fixture and package gates | Windows 11; macOS 15/26 native arm64 and x86_64 runners | Previous stable |
 | 1.0.4 | CI package lifecycle; 26.803.5235.0 x64 | Windows 11; macOS 15/26 native arm64 and x86_64 runners | Previous stable |
 | 1.0.3 | CI package lifecycle | Windows 11 runner; macOS 15/26 native arm64 and x86_64 runners | Withdrawn; release transition was incompatible |
 | 1.0.2 | 26.803.5235.0 x64 | Windows 11 10.0.26200 | Withdrawn; updater required one-asset releases |
@@ -11,6 +12,7 @@ The one-line command accepts x64 Windows 10 version 2004 (build 19041) and later
 
 ## Published artifact evidence
 
+- **1.1.1:** same-target CDP disconnect and silent App Server timeout fixtures verify that stale sessions are retired rather than left in the live-session map. The Windows update contract preserves setup/command ownership, suppresses duplicate handoffs, resumes partial downloads, validates exact release identity, and publishes phase-tagged terminal receipts. An isolated production-renderer pass covered the visible update entry, inline confirmation, stale-check copy, and download/reconnection states without changing panel height. A setup-owned Windows 11 in-place update and same-version repair both kept the exact Codex root process, configuration hash, tray ownership, and uninstall registration; each returned to `quota-ready` with one Agent and one tray process, and the final package persisted a one-time completion acknowledgement. A separate command-owned update and repair stayed command-owned with one verified watcher, one Agent, no tray, no stale attach guard, and the same Codex process and configuration; restoring the guided setup returned to one Agent and one tray without restarting Codex. Tagged package evidence is added only after the public release gate passes.
 - **1.1.0:** the optional Legacy/Beta account-row modes, reversible Help suppression, freed-width layout, semantic quota-rail alignment, full-footer short/hold classification, and fail-closed fallback are covered by the isolated production renderer. On Codex Desktop 26.803.5235.0, a 20-second manual resize pass produced 457 width events and 457 position-only frames, one unrelated full state render, zero integrity repairs, zero module overlaps, and zero unexpected modules. A supported setup-owned local acceptance preserved the running Codex root and user configuration, installed matching Agent payloads, reached `quota-ready`, and produced no Agent stderr. The real panel measured 376 by 480 pixels with one visible tab panel, no outer focus outline, and no live-module overlap; 386 samples over 12 seconds observed one stable module geometry and one stable panel geometry.
 - **1.0.4:** the release gate built `QuotaPin-1.0.4.exe` and `QuotaPin-macOS-1.0.4.dmg`, then validated the exact platform packages before publication. It remains the previous clean stable baseline.
 - **1.0.3:** cross-platform package CI passed, but the two-asset publication exposed an incompatibility in the 1.0.2 updater and was withdrawn from public downloads.
@@ -51,4 +53,4 @@ Host UI changes can invalidate an otherwise compatible release. QuotaPin fails c
 
 Development evidence is marked as development. A tagged release is added only after the same checks are repeated against its published artifacts. Windows 10 remains best-effort until a real-device report is recorded.
 
-The macOS package is CI-validated and included in 1.1.0. Real signed-in Codex and Gatekeeper acceptance remains provisional; see [the macOS implementation and acceptance boundary](macos.md).
+The macOS package is CI-validated and included in 1.1.1. Real signed-in Codex and Gatekeeper acceptance remains provisional; see [the macOS implementation and acceptance boundary](macos.md).

@@ -7,6 +7,12 @@ const VERSION_PATTERN = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-([0-9A-Za-
 const CLOCK_SKEW_MS = 5 * 60 * 1000;
 const INSTALL_MONITOR_TIMEOUT_MS = 12 * 60 * 1000;
 const UPDATE_RESULT_STATUSES = new Set(["started", "succeeded", "degraded", "failed", "rolled-back", "rollback-failed"]);
+const UPDATE_RESULT_PHASES = new Set(["preparing", "downloading", "verifying", "installing", "reconnecting", "complete"]);
+const TERMINAL_UPDATE_RESULT_STATUSES = new Set(["succeeded", "degraded", "failed", "rolled-back", "rollback-failed"]);
+const DEFAULT_UPDATE_CACHE_MS = 6 * 60 * 60 * 1000;
+const DEFAULT_ERROR_RETRY_BASE_MS = 15 * 60 * 1000;
+const DEFAULT_ERROR_RETRY_MAX_MS = 6 * 60 * 60 * 1000;
+const DEFAULT_POST_INSTALL_CHECK_MS = 60 * 1000;
 const OFFICIAL_REPOSITORY = "https://github.com/WSL043/QuotaPin-for-Codex";
 export const MINIMUM_SAFE_VERSION = "0.3.0-alpha.25";
 
@@ -138,12 +144,18 @@ export class UpdateRuntime {
     this.clearTimeoutImpl = options.clearTimeoutImpl ?? clearTimeout;
     this.onChange = options.onChange ?? (() => {});
     this.log = options.log ?? (() => {});
-    this.cacheMs = Number(options.cacheMs) || 24 * 60 * 60 * 1000;
+    this.cacheMs = Number(options.cacheMs) || DEFAULT_UPDATE_CACHE_MS;
+    this.errorRetryBaseMs = Number(options.errorRetryBaseMs) || DEFAULT_ERROR_RETRY_BASE_MS;
+    this.errorRetryMaxMs = Math.max(this.errorRetryBaseMs, Number(options.errorRetryMaxMs) || DEFAULT_ERROR_RETRY_MAX_MS);
+    this.postInstallCheckMs = Number(options.postInstallCheckMs) || DEFAULT_POST_INSTALL_CHECK_MS;
     this.autoCheckDelayMs = Number.isFinite(Number(options.autoCheckDelayMs)) ? Math.max(0, Number(options.autoCheckDelayMs)) : 10_000;
     this.autoCheck = options.autoCheck !== false;
     this.cachePath = this.installRoot ? this.pathImpl.join(this.installRoot, "logs", "update-cache.json") : null;
     this.resultPath = this.installRoot ? this.pathImpl.join(this.installRoot, "logs", "update-result.json") : null;
+    this.handoffResultPath = this.installRoot ? this.pathImpl.join(this.installRoot, "logs", "installer-handoff-result.json") : null;
+    this.receiptAckPath = this.installRoot ? this.pathImpl.join(this.installRoot, "logs", "update-receipt-ack.json") : null;
     this.lastCheckedAt = 0;
+    this.checkFailures = 0;
     this.inFlight = null;
     this.resultMonitor = null;
     this.autoCheckTimer = null;
@@ -153,14 +165,23 @@ export class UpdateRuntime {
       latestVersion: null,
       releases: [],
       message: "",
+      phase: null,
+      checkError: false,
+      lastCheckedAt: 0,
     };
     this.#restoreCache();
     const restoredResult = this.#readUpdateResult();
     const restoredInstallActive = restoredResult?.version === this.currentVersion && restoredResult.status === "started";
     let terminalResultApplied = false;
     if (restoredInstallActive) {
-      this.state = { ...this.state, status: "installing", selectedVersion: restoredResult.version, message: "" };
+      this.state = { ...this.state, status: "installing", phase: restoredResult.phase, selectedVersion: restoredResult.version, message: "" };
       this.#monitorUpdateResult(restoredResult.version, Date.parse(restoredResult.writtenAt) || this.now());
+    } else if (restoredResult?._acknowledged && ["succeeded", "degraded"].includes(restoredResult.status)) {
+      const deferredUpgrade = restoredResult.status === "degraded"
+        && restoredResult.fromVersion === this.currentVersion
+        && compareVersions(restoredResult.version, this.currentVersion) === 1;
+      this.state = { ...this.state, status: deferredUpgrade ? "available" : "current", phase: "complete", message: "" };
+      this.#consumeUpdateResult(restoredResult);
     } else {
       terminalResultApplied = this.#applyUpdateResult(restoredResult, false);
       if (restoredResult && (terminalResultApplied || ["started", "succeeded", "degraded"].includes(restoredResult.status))) this.#consumeUpdateResult(restoredResult);
@@ -169,7 +190,7 @@ export class UpdateRuntime {
       && ["started", "succeeded", "degraded"].includes(restoredResult.status));
     if (this.installRoot && this.autoCheck) {
       if (!restoredResult || staleResultDiscarded) this.#scheduleAutoCheck(this.autoCheckDelayMs);
-      else if (terminalResultApplied) this.#scheduleAutoCheck(this.cacheMs);
+      else if (terminalResultApplied) this.#scheduleAutoCheck(this.postInstallCheckMs);
     }
   }
 
@@ -200,6 +221,7 @@ export class UpdateRuntime {
       status: latestVersion && compareVersions(latestVersion, this.currentVersion) === 1 ? "available" : "current",
       latestVersion,
       releases,
+      lastCheckedAt: checkedAt,
     };
   }
 
@@ -215,15 +237,53 @@ export class UpdateRuntime {
     }
   }
 
-  #readUpdateResult() {
-    const result = this.#readJson(this.resultPath);
+  #readUpdateReceipt(filePath, source) {
+    const result = this.#readJson(filePath);
     const writtenAt = Date.parse(result?.writtenAt);
-    if (!result || result.schema !== 1 || !UPDATE_RESULT_STATUSES.has(result.status)
+    if (!result || ![1, 2].includes(result.schema) || !UPDATE_RESULT_STATUSES.has(result.status)
       || !parseVersion(result.version) || !Number.isFinite(writtenAt)
       || writtenAt > this.now() + CLOCK_SKEW_MS || this.now() - writtenAt > 24 * 60 * 60 * 1000) return null;
     if (result.fromVersion != null && !parseVersion(result.fromVersion)) return null;
     if (result.direction != null && !["update", "repair", "rollback"].includes(result.direction)) return null;
-    return result;
+    if (result.phase != null && !UPDATE_RESULT_PHASES.has(result.phase)) return null;
+    return { ...result, phase: result.phase ?? (result.status === "started" ? "preparing" : "complete"), _source: source };
+  }
+
+  #readUpdateResult() {
+    const primary = this.#readUpdateReceipt(this.resultPath, "updater");
+    const handoff = this.#readUpdateReceipt(this.handoffResultPath, "handoff");
+    let selected;
+    if (!primary) selected = handoff;
+    else if (!handoff) selected = primary;
+    else if (primary.version === handoff.version) {
+      if (TERMINAL_UPDATE_RESULT_STATUSES.has(handoff.status) && !["failed", "rolled-back", "rollback-failed"].includes(primary.status)) selected = handoff;
+      else if (TERMINAL_UPDATE_RESULT_STATUSES.has(primary.status) && handoff.status === "started") selected = primary;
+    }
+    if (!selected && primary && handoff) selected = Date.parse(handoff.writtenAt) > Date.parse(primary.writtenAt) ? handoff : primary;
+    if (!selected) return null;
+    return { ...selected, _acknowledged: this.#receiptWasAcknowledged(selected) };
+  }
+
+  #receiptWasAcknowledged(result) {
+    if (!result || result._source !== "handoff") return false;
+    const ack = this.#readJson(this.receiptAckPath);
+    return ack?.schema === 1
+      && ack.source === result._source
+      && ack.version === result.version
+      && ack.status === result.status
+      && ack.writtenAt === result.writtenAt;
+  }
+
+  #acknowledgeReceipt(result) {
+    if (!this.receiptAckPath || result?._source !== "handoff" || typeof this.fsImpl.writeFileSync !== "function" || typeof this.fsImpl.renameSync !== "function") return;
+    try {
+      this.fsImpl.mkdirSync?.(this.pathImpl.dirname(this.receiptAckPath), { recursive: true });
+      const temporary = `${this.receiptAckPath}.${process.pid}.tmp`;
+      this.fsImpl.writeFileSync(temporary, JSON.stringify({ schema: 1, source: result._source, version: result.version, status: result.status, writtenAt: result.writtenAt }), "utf8");
+      this.fsImpl.renameSync(temporary, this.receiptAckPath);
+    } catch (error) {
+      this.log(`update receipt acknowledgement failed code=${error?.code ?? error?.name ?? "Error"}`);
+    }
   }
 
   #applyUpdateResult(result, publish = true) {
@@ -241,19 +301,21 @@ export class UpdateRuntime {
     };
     let patch;
     if (result.status === "rolled-back") {
-      patch = { status: "error", message: "QuotaPin could not complete the update. The previous version was restored.", selectedVersion: result.version, selectedDirection: direction, lastOperation: operation };
+      patch = { status: "error", phase: "complete", checkError: false, message: "QuotaPin could not complete the update. The previous version was restored.", selectedVersion: result.version, selectedDirection: direction, lastOperation: operation };
     } else if (result.status === "rollback-failed") {
-      patch = { status: "error", message: "QuotaPin could not complete the update or fully restore the previous version. Run the install command to repair it.", selectedVersion: result.version, selectedDirection: direction, lastOperation: operation };
+      patch = { status: "error", phase: "complete", checkError: false, message: "QuotaPin could not complete the update or fully restore the previous version. Run the install command to repair it.", selectedVersion: result.version, selectedDirection: direction, lastOperation: operation };
     } else if (result.status === "failed") {
-      patch = { status: "error", message: "QuotaPin could not complete the update. Open the version menu to retry.", selectedVersion: result.version, selectedDirection: direction, lastOperation: operation };
+      patch = { status: "error", phase: "complete", checkError: false, message: "QuotaPin could not complete the update. Open the version menu to retry.", selectedVersion: result.version, selectedDirection: direction, lastOperation: operation };
     } else {
       patch = {
         status: deferredUpgrade ? "available" : "current",
         message: result.status === "degraded"
           ? "QuotaPin updated. The new version will join the next Codex launch."
-          : "QuotaPin updated successfully.",
+          : "QuotaPin updated without restarting Codex.",
         selectedVersion: null,
         selectedDirection: null,
+        phase: "complete",
+        checkError: false,
         lastOperation: operation,
       };
     }
@@ -264,9 +326,11 @@ export class UpdateRuntime {
 
   #consumeUpdateResult(result) {
     if (!this.resultPath || !result || typeof this.fsImpl.unlinkSync !== "function") return;
+    this.#acknowledgeReceipt(result);
     try {
       const current = this.#readJson(this.resultPath);
-      if (current?.schema === result.schema && current?.status === result.status && current?.version === result.version && current?.writtenAt === result.writtenAt) {
+      if ([1, 2].includes(current?.schema) && current?.version === result.version &&
+          (current?.writtenAt === result.writtenAt || result._source === "handoff")) {
         this.fsImpl.unlinkSync(this.resultPath);
       }
     } catch {}
@@ -300,13 +364,16 @@ export class UpdateRuntime {
       if (result?.version === version && Number.isFinite(writtenAt) && writtenAt >= notBefore && this.#applyUpdateResult(result)) {
         this.#consumeUpdateResult(result);
         this.resultMonitor = null;
-        this.#scheduleAutoCheck(this.cacheMs, true);
+        this.#scheduleAutoCheck(this.postInstallCheckMs, true);
         return;
+      }
+      if (result?.version === version && result.status === "started" && this.state.phase !== result.phase) {
+        this.#publish({ phase: result.phase, message: "" });
       }
       if (this.now() >= deadline) {
         this.resultMonitor = null;
         if (result?.version === version && result.status === "started") this.#consumeUpdateResult(result);
-        this.#publish({ status: "error", message: "QuotaPin could not confirm the update result." });
+        this.#publish({ status: "error", phase: null, message: "QuotaPin could not confirm the update result." });
         this.#scheduleAutoCheck(this.autoCheckDelayMs);
         return;
       }
@@ -320,11 +387,12 @@ export class UpdateRuntime {
   async check(force = false) {
     if (this.state.status === "installing") return this.clientState();
     if (this.inFlight) return this.inFlight;
-    if (!force && this.lastCheckedAt && this.now() - this.lastCheckedAt < this.cacheMs && ["current", "available"].includes(this.state.status)) {
+    if (!force && !this.state.checkError && this.lastCheckedAt && this.now() - this.lastCheckedAt < this.cacheMs && ["current", "available"].includes(this.state.status)) {
       this.#scheduleAutoCheck(Math.max(1, this.cacheMs - (this.now() - this.lastCheckedAt)));
       return this.clientState();
     }
-    this.#publish({ status: "checking", message: "" });
+    const fallback = this.clientState();
+    this.#publish({ status: "checking", phase: null, checkError: false, message: "" });
     this.inFlight = (async () => {
       try {
         if (typeof this.fetchImpl !== "function") throw new Error("fetch unavailable");
@@ -341,18 +409,31 @@ export class UpdateRuntime {
         const latest = releases[0]?.version ?? null;
         const available = latest && compareVersions(latest, this.currentVersion) === 1;
         this.lastCheckedAt = this.now();
+        this.checkFailures = 0;
         this.#publish({
           status: available ? "available" : "current",
           latestVersion: latest,
           releases,
           message: "",
+          checkError: false,
+          lastCheckedAt: this.lastCheckedAt,
         });
         this.#persistCache();
         this.#scheduleAutoCheck(this.cacheMs, true);
       } catch (error) {
         this.log(`update check failed code=${error?.name ?? "Error"}`);
-        this.#publish({ status: "error", message: "QuotaPin could not check for updates." });
-        this.#scheduleAutoCheck(this.cacheMs, true);
+        this.checkFailures += 1;
+        const retryDelay = Math.min(this.errorRetryMaxMs, this.errorRetryBaseMs * (2 ** Math.min(8, this.checkFailures - 1)));
+        const knownState = ["current", "available"].includes(fallback.status);
+        this.#publish({
+          status: knownState ? fallback.status : "error",
+          latestVersion: knownState ? fallback.latestVersion : this.state.latestVersion,
+          releases: knownState ? fallback.releases : this.state.releases,
+          lastCheckedAt: knownState ? fallback.lastCheckedAt : this.state.lastCheckedAt,
+          checkError: true,
+          message: "QuotaPin could not check for updates.",
+        });
+        this.#scheduleAutoCheck(retryDelay, true);
       } finally {
         this.inFlight = null;
       }
@@ -392,7 +473,7 @@ export class UpdateRuntime {
           this.resultMonitor = null;
         }
         this.log(`update launch failed code=${error?.code ?? error?.name ?? "Error"}`);
-        this.#publish({ status: "error", message: "QuotaPin could not start the update." });
+        this.#publish({ status: "error", phase: null, message: "QuotaPin could not start the update." });
       };
       child.once?.("error", failLaunch);
       child.once?.("exit", (code) => {
@@ -404,19 +485,19 @@ export class UpdateRuntime {
             try { this.clearTimeoutImpl(this.resultMonitor); } catch {}
             this.resultMonitor = null;
           }
-          this.#scheduleAutoCheck(this.cacheMs, true);
+          this.#scheduleAutoCheck(this.postInstallCheckMs, true);
           return;
         }
         failLaunch({ code: Number.isInteger(code) ? `EXIT_${code}` : "EARLY_EXIT" });
       });
       child.unref?.();
-      this.#publish({ status: "installing", message: "", selectedVersion: requested, selectedDirection: selectedRelease.direction });
+      this.#publish({ status: "installing", phase: "preparing", checkError: false, message: "", selectedVersion: requested, selectedDirection: selectedRelease.direction });
       this.#monitorUpdateResult(requested, this.now());
       this.log(`update helper launched version=${requested}`);
       return true;
     } catch (error) {
       this.log(`update launch failed code=${error?.code ?? error?.name ?? "Error"}`);
-      this.#publish({ status: "error", message: "QuotaPin could not start the update." });
+      this.#publish({ status: "error", phase: null, message: "QuotaPin could not start the update." });
       return false;
     }
   }

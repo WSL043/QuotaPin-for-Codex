@@ -19,7 +19,7 @@ import { createTimeStateToolkit } from "./renderer/time-state.mjs";
 import { createCodeConfigStateToolkit } from "./renderer/code-config-state.mjs";
 import { createProfileUsageStateToolkit } from "./renderer/profile-usage-state.mjs";
 
-const VERSION = "1.1.0";
+const VERSION = "1.1.1";
 const SOURCE_REPOSITORY = "https://github.com/WSL043/QuotaPin-for-Codex";
 const BUILD_COMMIT = "__QUOTAPIN_BUILD_COMMIT__";
 const MAIN_TARGET_URL = "app://-/index.html";
@@ -111,7 +111,7 @@ const installScript = String.raw`(() => {
     nextRefreshDelay, shouldRefreshProfileUsage
   } = rendererToolkits.profileUsage();
   delete globalThis.__quotaPinRendererToolkits;
-  const version = "1.1.0";
+  const version = "1.1.1";
   const instanceId = "__QUOTAPIN_RENDERER_INSTANCE_ID__";
   const sourceRepository = "https://github.com/WSL043/QuotaPin-for-Codex";
   const previous = window.__quotaPinController;
@@ -2856,11 +2856,20 @@ const installScript = String.raw`(() => {
     updateClose.dataset.updateClose = "true";
     Object.assign(updateClose.style, { minWidth: "0", height: "26px", paddingInline: "8px", background: "transparent" });
     updateClose.addEventListener("click", () => closeUpdateLayer(true));
-    updateHeader.append(updateTitle, updateClose);
+    const updateRefresh = actionButton(t("Check"), t("Check for updates"));
+    updateRefresh.dataset.updateRefresh = "true";
+    Object.assign(updateRefresh.style, { minWidth: "0", height: "26px", paddingInline: "8px", background: "transparent" });
+    const updateHeaderActions = document.createElement("div");
+    Object.assign(updateHeaderActions.style, { display: "flex", alignItems: "center", gap: "4px" });
+    updateHeaderActions.append(updateRefresh, updateClose);
+    updateHeader.append(updateTitle, updateHeaderActions);
     const updateStatus = document.createElement("div");
     updateStatus.setAttribute("role", "status");
     updateStatus.setAttribute("aria-live", "polite");
     Object.assign(updateStatus.style, { color: "var(--quotapin-panel-text-soft)", fontSize: "10px", lineHeight: "1.4" });
+    const updateMeta = document.createElement("div");
+    updateMeta.dataset.updateMeta = "true";
+    Object.assign(updateMeta.style, { color: "var(--quotapin-panel-muted)", fontSize: "9px", lineHeight: "1.35", minHeight: "12px" });
     const updateControls = document.createElement("div");
     Object.assign(updateControls.style, { display: "grid", gridTemplateColumns: "minmax(0, 1fr) auto", gap: "6px" });
     const updateVersions = makeSelect([], "");
@@ -2879,7 +2888,7 @@ const installScript = String.raw`(() => {
     const updateCancel = actionButton(t("Cancel"), t("Cancel"));
     updateCancel.dataset.updateCancel = "true";
     updateConfirm.append(updateConfirmText, updateConfirmAction, updateCancel);
-    updatePopover.append(updateHeader, updateStatus, updateControls, updateConfirm);
+    updatePopover.append(updateHeader, updateStatus, updateMeta, updateControls, updateConfirm);
     let pendingUpdate = null;
     const updateIntentLabel = (intent) => intent === "update" ? "Update" : intent === "rollback" ? "Roll back" : "Repair";
     const clearUpdateConfirmation = () => {
@@ -2921,23 +2930,44 @@ const installScript = String.raw`(() => {
       const selected = updateVersions.value;
       if (pendingUpdate && !releases.some((release) => release.version === pendingUpdate.version)) clearUpdateConfirmation();
       const intent = updateIntent(current, selected);
-      versionButton.textContent = "v" + current + (update.status === "available" ? " ·" : "");
+      const availableVersion = String(update.latestVersion ?? "");
+      versionButton.textContent = update.status === "installing"
+        ? t("Updating to") + " " + String(update.selectedVersion ?? "")
+        : update.status === "checking"
+          ? t("Checking")
+          : update.status === "available" && availableVersion
+            ? t("Update") + " " + availableVersion
+            : update.status === "error" || update.checkError
+              ? t("Try again")
+              : "v" + current;
       versionButton.title = t("QuotaPin updates") + " · v" + current;
-      versionButton.setAttribute("aria-label", t("QuotaPin updates") + ": " + t("Current") + " v" + current);
+      versionButton.setAttribute("aria-label", t("QuotaPin updates") + ": " + t("Current") + " v" + current
+        + (update.status === "available" && availableVersion ? " · " + t("Update available") + " v" + availableVersion : ""));
       versionButton.style.color = update.status === "available" ? "var(--quotapin-panel-accent)" : update.status === "error" ? "var(--quotapin-panel-warning)" : "var(--quotapin-panel-text-soft)";
+      versionButton.style.background = ["available", "installing"].includes(update.status) ? "var(--quotapin-panel-accent-fill)" : "transparent";
       updateAction.disabled = update.status === "checking" || update.status === "installing";
       updateAction.style.opacity = updateAction.disabled ? ".45" : "1";
+      updateRefresh.disabled = update.status === "checking" || update.status === "installing";
+      updateRefresh.style.opacity = updateRefresh.disabled ? ".45" : "1";
+      const checkedAt = Number(update.lastCheckedAt);
+      const checkedTime = Number.isFinite(checkedAt) && checkedAt > 0
+        ? new Date(checkedAt).toLocaleTimeString(state.preferences?.locale ?? "en", { hour: "2-digit", minute: "2-digit" })
+        : "";
+      updateMeta.textContent = update.checkError
+        ? t("Last check failed. Showing the last verified result.") + (checkedTime ? " · " + t("Last checked") + " " + checkedTime : "")
+        : checkedTime ? t("Last checked") + " " + checkedTime : t("Codex stays open and your settings are kept.");
       if (update.status === "checking") {
         clearUpdateConfirmation();
         updateStatus.textContent = t("Checking for updates");
         updateAction.textContent = t("Checking");
+        updateMeta.textContent = t("Codex stays open and your settings are kept.");
       } else if (update.status === "installing") {
         clearUpdateConfirmation();
         const installingVersion = String(update.selectedVersion ?? "");
-        const installingIntent = updateIntent(current, installingVersion);
-        const installingLabel = installingIntent === "update" ? "Updating to" : installingIntent === "rollback" ? "Rolling back to" : "Repairing";
-        updateStatus.textContent = t(installingLabel) + " v" + installingVersion;
+        const phaseLabel = ({ preparing: "Preparing update", downloading: "Downloading update", verifying: "Verifying update", installing: "Installing update", reconnecting: "Reconnecting to Codex" })[update.phase] ?? "Installing update";
+        updateStatus.textContent = t(phaseLabel) + " · v" + installingVersion;
         updateAction.textContent = t("Installing");
+        updateMeta.textContent = t("Codex stays open and your settings are kept.");
       } else if (update.status === "available") {
         updateStatus.textContent = t("Current") + " v" + current + " · " + t("Update available") + ": v" + String(update.latestVersion ?? "");
         updateAction.textContent = selected ? t(updateIntentLabel(intent)) : t("Check");
@@ -2965,7 +2995,7 @@ const installScript = String.raw`(() => {
       closeProfileMenu(false);
       updatePopover.style.display = "grid";
       versionButton.setAttribute("aria-expanded", "true");
-      if (["idle", "error"].includes(state.update?.status ?? "idle")) sendUpdateAction({ type: "check", force: state.update?.status === "error" });
+      if (["idle", "error"].includes(state.update?.status ?? "idle") || state.update?.checkError) sendUpdateAction({ type: "check", force: state.update?.status === "error" || state.update?.checkError });
       queueMicrotask(() => {
         if (isActiveRenderer()) (updateVersions.disabled ? updateAction : updateVersions).focus({ preventScroll: true });
       });
@@ -2974,6 +3004,7 @@ const installScript = String.raw`(() => {
       clearUpdateConfirmation();
       paintUpdate();
     });
+    updateRefresh.addEventListener("click", () => sendUpdateAction({ type: "check", force: true }));
     updateAction.addEventListener("click", () => {
       const status = state.update?.status ?? "idle";
       const selected = updateVersions.value;
@@ -2985,7 +3016,8 @@ const installScript = String.raw`(() => {
       const intent = updateIntent(current, selected);
       const label = updateIntentLabel(intent);
       pendingUpdate = { version: selected, intent };
-      updateConfirmText.textContent = t(label) + " · v" + current + (intent === "repair" ? "" : " → v" + selected);
+      updateConfirmText.textContent = t(label) + " · v" + current + (intent === "repair" ? "" : " → v" + selected)
+        + " · " + t("Codex stays open and your settings are kept.");
       updateConfirmAction.textContent = t(label);
       updateConfirmAction.setAttribute("aria-label", t(label) + " v" + selected);
       updateControls.style.display = "none";

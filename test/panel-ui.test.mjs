@@ -775,7 +775,7 @@ test("the update surface exposes full versions and explicit update, repair, and 
     confirmAction.click();
     return { version: trigger.textContent, labels, confirmation, cancelFocus, installAction: window.__fixtureUpdateActions.at(-1) };
   })()`);
-  assert.match(result.version, /^v1\.0\.0/);
+  assert.equal(result.version, "Updating to 1.0.0-beta.1");
   assert.deepEqual(result.labels, ["Update", "Repair", "Roll back", "Roll back"]);
   assert.equal(result.confirmation.visible, "grid");
   assert.match(result.confirmation.text, /Roll back.*1\.0\.0.*1\.0\.0-beta\.1/);

@@ -52,7 +52,13 @@ test("layered dismissal keeps child menus keyboard-modal without trapping the wh
 });
 
 test("the update surface uses complete versions, explicit intents, and inline confirmation", () => {
-  assert.match(renderer, /versionButton\.textContent = "v" \+ current/);
+  assert.match(renderer, /t\("Update"\) \+ " " \+ availableVersion/);
+  assert.match(renderer, /update\.status === "installing"[\s\S]*?t\("Updating to"\)/);
+  assert.match(renderer, /update\.status === "error" \|\| update\.checkError[\s\S]*?t\("Try again"\)/);
+  assert.match(renderer, /updateRefresh\.dataset\.updateRefresh = "true"/);
+  assert.match(renderer, /Last check failed\. Showing the last verified result\./);
+  assert.match(renderer, /Codex stays open and your settings are kept\./);
+  assert.match(renderer, /reconnecting: "Reconnecting to Codex"/);
   assert.match(renderer, /updateIntent\(current, selected\)/);
   assert.match(renderer, /updateConfirm\.dataset\.updateConfirm = "true"/);
   assert.match(renderer, /versionButton\.setAttribute\("aria-expanded", "false"\)/);

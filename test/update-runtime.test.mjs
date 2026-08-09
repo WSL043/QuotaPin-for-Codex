@@ -198,13 +198,60 @@ test("a recent terminal update result survives Agent replacement", () => {
     },
   });
   assert.equal(runtime.clientState().status, "current");
-  assert.equal(runtime.clientState().message, "QuotaPin updated successfully.");
+  assert.equal(runtime.clientState().message, "QuotaPin updated without restarting Codex.");
   assert.deepEqual(runtime.clientState().lastOperation, {
     direction: "repair",
     fromVersion: null,
     toVersion: "0.3.0-alpha.25",
     result: "succeeded",
   });
+});
+
+test("a completed installer handoff is shown once while still suppressing a late legacy updater result", () => {
+  const root = "C:\\Users\\Test\\AppData\\Local\\QuotaPin";
+  const resultPath = `${root}\\logs\\update-result.json`;
+  const handoffPath = `${root}\\logs\\installer-handoff-result.json`;
+  const ackPath = `${root}\\logs\\update-receipt-ack.json`;
+  const writtenAt = new Date(999_000).toISOString();
+  const files = new Map([[handoffPath, JSON.stringify({
+    schema: 2,
+    status: "succeeded",
+    phase: "complete",
+    version: "1.1.1",
+    fromVersion: "1.1.0",
+    writtenAt,
+  })]]);
+  const fsImpl = {
+    readFileSync(filePath) {
+      if (files.has(filePath)) return files.get(filePath);
+      throw Object.assign(new Error("missing"), { code: "ENOENT" });
+    },
+    writeFileSync(filePath, value) { files.set(filePath, String(value)); },
+    renameSync(from, to) {
+      files.set(to, files.get(from));
+      files.delete(from);
+    },
+    unlinkSync(filePath) { files.delete(filePath); },
+    mkdirSync() {},
+  };
+
+  const first = windowsRuntime({ currentVersion: "1.1.1", installRoot: root, autoCheck: false, now: () => 1_000_000, fsImpl });
+  assert.equal(first.clientState().message, "QuotaPin updated without restarting Codex.");
+  assert.ok(files.has(handoffPath), "handoff evidence remains briefly for legacy updater precedence");
+  assert.ok(files.has(ackPath), "the displayed terminal receipt is acknowledged atomically");
+
+  files.set(resultPath, JSON.stringify({
+    schema: 1,
+    status: "degraded",
+    version: "1.1.1",
+    fromVersion: "1.1.0",
+    direction: "update",
+    writtenAt: new Date(999_500).toISOString(),
+  }));
+  const second = windowsRuntime({ currentVersion: "1.1.1", installRoot: root, autoCheck: false, now: () => 1_000_000, fsImpl });
+  assert.equal(second.clientState().status, "current");
+  assert.equal(second.clientState().message, "", "the completion message is not replayed after Agent replacement");
+  assert.equal(files.has(resultPath), false, "the late superseded updater result is consumed");
 });
 
 test("a restored rollback is observable and a failed terminal result still schedules future checks", () => {
@@ -215,7 +262,7 @@ test("a restored rollback is observable and a failed terminal result still sched
     currentVersion: "0.3.0-alpha.25",
     installRoot: root,
     now: () => 1_000_000,
-    cacheMs: 4321,
+    postInstallCheckMs: 4321,
     setTimeoutImpl(callback, delay) {
       scheduled.push({ callback, delay });
       return { unref() {} };
@@ -248,7 +295,7 @@ test("a failed restored result does not permanently stop periodic discovery", ()
     currentVersion: "0.3.0-alpha.25",
     installRoot: root,
     now: () => 1_000_000,
-    cacheMs: 7654,
+    postInstallCheckMs: 7654,
     setTimeoutImpl(callback, delay) {
       scheduled.push({ callback, delay });
       return { unref() {} };
@@ -300,7 +347,7 @@ test("a restored update remains single-flight until its terminal result arrives"
   scheduled[0].callback();
   assert.equal(runtime.clientState().status, "current");
   assert.equal(result, null, "the one-time terminal result is consumed");
-  assert.deepEqual(scheduled.map((item) => item.delay), [250, 24 * 60 * 60 * 1000]);
+  assert.deepEqual(scheduled.map((item) => item.delay), [250, 60 * 1000]);
 });
 
 test("a stable Agent filters prereleases restored from its current cache", () => {
@@ -381,7 +428,43 @@ test("automatic update discovery schedules one bounded check and never installs"
   await new Promise((resolve) => setImmediate(resolve));
   assert.equal(checks, 1);
   assert.equal(runtime.clientState().status, "available");
-  assert.deepEqual(scheduled.map((item) => item.delay), [5000, 24 * 60 * 60 * 1000]);
+  assert.deepEqual(scheduled.map((item) => item.delay), [5000, 6 * 60 * 60 * 1000]);
+});
+
+test("a transient discovery failure preserves the last verified release and retries soon", async () => {
+  const root = "C:\\Users\\Test\\AppData\\Local\\QuotaPin";
+  const cachePath = `${root}\\logs\\update-cache.json`;
+  const scheduled = [];
+  const runtime = windowsRuntime({
+    currentVersion: "0.3.0-alpha.25",
+    installRoot: root,
+    now: () => 1_000_000,
+    errorRetryBaseMs: 3210,
+    setTimeoutImpl(callback, delay) {
+      const timer = { callback, delay, cancelled: false, unref() {} };
+      scheduled.push(timer);
+      return timer;
+    },
+    clearTimeoutImpl(timer) { timer.cancelled = true; },
+    fsImpl: {
+      readFileSync(filePath) {
+        if (filePath === cachePath) return JSON.stringify({
+          schema: 2,
+          currentVersion: "0.3.0-alpha.25",
+          checkedAt: 999_000,
+          releases: [{ version: "0.3.0-alpha.26" }],
+        });
+        throw new Error("missing");
+      },
+    },
+    fetchImpl: async () => { throw new Error("offline"); },
+  });
+  await runtime.check(true);
+  assert.equal(runtime.clientState().status, "available");
+  assert.equal(runtime.clientState().latestVersion, "0.3.0-alpha.26");
+  assert.equal(runtime.clientState().checkError, true);
+  assert.equal(runtime.clientState().lastCheckedAt, 999_000);
+  assert.deepEqual(scheduled.filter((item) => !item.cancelled).map((item) => item.delay), [3210]);
 });
 
 test("manual refresh bypasses an otherwise fresh release cache", async () => {

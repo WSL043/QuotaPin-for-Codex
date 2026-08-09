@@ -72,6 +72,7 @@ Source: "..\scripts\stop.ps1"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\scripts\update.ps1"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\scripts\stop.ps1"; Flags: dontcopy
 Source: "..\scripts\check-prerequisites.ps1"; Flags: dontcopy
+Source: "..\scripts\installer-handoff.ps1"; Flags: dontcopy
 
 [Registry]
 Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: string; ValueName: "QuotaPin"; ValueData: "{code:GetAutoAttachCommand}"; Flags: uninsdeletevalue; Check: AutoAttachEnabled
@@ -86,6 +87,7 @@ Name: "{userprograms}\QuotaPin\Official project (free source)"; Filename: "https
 Name: "{userprograms}\QuotaPin\Uninstall QuotaPin"; Filename: "{uninstallexe}"
 
 [Run]
+Filename: "{sys}\WindowsPowerShell\v1.0\powershell.exe"; Parameters: "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File ""{tmp}\installer-handoff.ps1"" -Action Resume -InstallRoot ""{app}"" -Version ""{#MyAppVersion}"""; Flags: runhidden waituntilterminated; Check: RunUpdateHandoff
 Filename: "{app}\QuotaPin.Tray.exe"; Description: "Start QuotaPin"; Flags: nowait; Check: RunTrayCompanion
 Filename: "{sys}\WindowsPowerShell\v1.0\powershell.exe"; Parameters: "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File ""{app}\src\auto-attach.ps1"" -IgnoreExisting"; Flags: runhidden nowait; Check: RunCommandWatcher
 Filename: "{sys}\WindowsPowerShell\v1.0\powershell.exe"; Parameters: "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File ""{app}\src\first-run.ps1"""; Flags: runhidden waituntilterminated; Check: RunFirstConnection
@@ -100,6 +102,11 @@ Type: files; Name: "{app}\install-state.json"
 Type: dirifempty; Name: "{app}"
 
 [InstallDelete]
+; An explicit install or update is the repair boundary for a previously
+; latched automatic-attachment transaction.  The replacement watcher starts
+; with -IgnoreExisting, so clearing only this QuotaPin-owned guard cannot
+; interrupt the already-running Codex session.
+Type: files; Name: "{app}\logs\auto-attach-guard.json"
 Type: files; Name: "{userstartup}\QuotaPin Auto Attach.lnk"
 Type: filesandordirs; Name: "{app}\runtime"
 Type: filesandordirs; Name: "{app}\src\core"
@@ -111,13 +118,30 @@ Type: files; Name: "{app}\uninstall.ps1"
 
 [Code]
 var
+  ExistingInstall: Boolean;
   ExistingSetupInstall: Boolean;
   ExistingAutoAttach: Boolean;
+  ExistingInstallOwner: String;
+  ExistingRunCommand: String;
 
 function InitializeSetup: Boolean;
 begin
-  ExistingSetupInstall := RegKeyExists(HKCU,
+  ExistingInstall := RegKeyExists(HKCU,
     'Software\Microsoft\Windows\CurrentVersion\Uninstall\{D3C316B5-8F18-45DF-98BD-2C9F579D9E24}_is1');
+  { Both supported flavors have a native uninstall registration.  Ownership is
+    therefore read from QuotaPin's explicit state, with the startup command as
+    a legacy hint and setup as the fail-safe for an ambiguous old install. }
+  ExistingSetupInstall := ExistingInstall;
+  if RegQueryStringValue(HKCU, 'Software\QuotaPin', 'InstallOwner', ExistingInstallOwner) then
+    ExistingSetupInstall := CompareText(ExistingInstallOwner, 'setup') = 0
+  else if RegQueryStringValue(HKCU,
+    'Software\Microsoft\Windows\CurrentVersion\Run', 'QuotaPin', ExistingRunCommand) then
+  begin
+    if Pos('QuotaPin.Tray.exe', ExistingRunCommand) > 0 then
+      ExistingSetupInstall := True
+    else if Pos('auto-attach.ps1', ExistingRunCommand) > 0 then
+      ExistingSetupInstall := False;
+  end;
   ExistingAutoAttach := RegValueExists(HKCU,
     'Software\Microsoft\Windows\CurrentVersion\Run', 'QuotaPin');
   Result := True;
@@ -140,7 +164,7 @@ function AutoAttachEnabled: Boolean;
 begin
   if HasCommandLineSwitch('/DISABLEAUTOATTACH=1') then
     Result := False
-  else if ExistingSetupInstall then
+  else if ExistingInstall then
     Result := ExistingAutoAttach
   else
     Result := True;
@@ -148,7 +172,10 @@ end;
 
 function CommandInstallMode: Boolean;
 begin
-  Result := HasCommandLineSwitch('/COMMANDINSTALL=1');
+  { Old command updaters always passed COMMANDINSTALL.  An existing native
+    Setup registration is the stronger ownership signal and must survive an
+    in-place upgrade instead of silently changing to watcher-only mode. }
+  Result := HasCommandLineSwitch('/COMMANDINSTALL=1') and (not ExistingSetupInstall);
 end;
 
 function GetInstallOwner(Param: String): String;
@@ -181,13 +208,20 @@ end;
 
 function RunFirstConnection: Boolean;
 begin
-  Result := (not CommandInstallMode) and (not ExistingSetupInstall) and (not WizardSilent);
+  Result := (not CommandInstallMode) and (not ExistingInstall) and (not WizardSilent);
+end;
+
+function RunUpdateHandoff: Boolean;
+begin
+  Result := (not HasCommandLineSwitch('/DEFERHANDOFF=1')) and
+    FileExists(ExpandConstant('{app}\logs\installer-handoff.json'));
 end;
 
 function PrepareToInstall(var NeedsRestart: Boolean): String;
 var
   ResultCode: Integer;
   StopScript: String;
+  HandoffScript: String;
   CheckScript: String;
   CheckResult: String;
   CheckResultText: AnsiString;
@@ -206,6 +240,20 @@ begin
     else
       Result := 'QuotaPin prerequisites could not be verified.';
     Exit;
+  end;
+
+  { Capturing a resumable session is best-effort and never blocks installation.
+    Resume revalidates the exact Codex PID, creation time, CDP endpoint and
+    generation after the new files are committed. }
+  if not HasCommandLineSwitch('/DEFERHANDOFF=1') then
+  begin
+    ExtractTemporaryFile('installer-handoff.ps1');
+    HandoffScript := ExpandConstant('{tmp}\installer-handoff.ps1');
+    Exec(ExpandConstant('{sys}\WindowsPowerShell\v1.0\powershell.exe'),
+      '-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "' + HandoffScript +
+      '" -Action Capture -InstallRoot "' + ExpandConstant('{app}') +
+      '" -Version "{#MyAppVersion}"',
+      '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
   end;
 
   ExtractTemporaryFile('stop.ps1');

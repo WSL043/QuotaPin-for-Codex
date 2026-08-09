@@ -61,6 +61,7 @@ $InstalledVersionPath = Join-Path $InstallRoot 'VERSION'
 $LogRoot = Join-Path $InstallRoot 'logs'
 $UpdateLogPath = Join-Path $LogRoot 'update.log'
 $UpdateResultPath = Join-Path $LogRoot 'update-result.json'
+$UpdateCompletionPath = Join-Path $LogRoot 'update-completion.json'
 $InstalledVersion = if (Test-Path -LiteralPath $InstalledVersionPath -PathType Leaf) {
     (Get-Content -Raw -LiteralPath $InstalledVersionPath).Trim()
 }
@@ -80,26 +81,33 @@ function Write-QuotaPinUpdateLog([string]$Message) {
     catch {}
 }
 
-function Write-QuotaPinUpdateResult([string]$Status, [string]$Message) {
+function Write-QuotaPinUpdateResult([string]$Status, [string]$Phase, [string]$Message) {
     New-Item -ItemType Directory -Path $LogRoot -Force | Out-Null
     $SafeMessage = ($Message -replace '[\r\n]+', ' ').Trim()
     if ($SafeMessage.Length -gt 200) { $SafeMessage = $SafeMessage.Substring(0, 200) }
     $Value = [ordered]@{
-        schema = 1
+        schema = 2
         status = $Status
+        phase = $Phase
         version = $Version
         fromVersion = $InstalledVersion
         direction = $UpdateDirection
         writtenAt = [DateTimeOffset]::Now.ToString('o')
         message = $SafeMessage
     }
-    $Temporary = $UpdateResultPath + '.' + [Guid]::NewGuid().ToString('N') + '.tmp'
-    try {
-        [IO.File]::WriteAllText($Temporary, ($Value | ConvertTo-Json -Compress), [Text.UTF8Encoding]::new($false))
-        Move-Item -LiteralPath $Temporary -Destination $UpdateResultPath -Force
+    $Targets = @($UpdateResultPath)
+    if ($Status -in @('succeeded', 'degraded', 'failed', 'rolled-back', 'rollback-failed')) {
+        $Targets += $UpdateCompletionPath
     }
-    finally {
-        if (Test-Path -LiteralPath $Temporary) { Remove-Item -LiteralPath $Temporary -Force -ErrorAction SilentlyContinue }
+    foreach ($Target in $Targets) {
+        $Temporary = $Target + '.' + [Guid]::NewGuid().ToString('N') + '.tmp'
+        try {
+            [IO.File]::WriteAllText($Temporary, ($Value | ConvertTo-Json -Compress), [Text.UTF8Encoding]::new($false))
+            Move-Item -LiteralPath $Temporary -Destination $Target -Force
+        }
+        finally {
+            if (Test-Path -LiteralPath $Temporary) { Remove-Item -LiteralPath $Temporary -Force -ErrorAction SilentlyContinue }
+        }
     }
 }
 
@@ -119,7 +127,7 @@ function Receive-QuotaPinInstaller([string]$Uri, [string]$Destination, [string]$
     }
     if ($ExitCode -ne 0) { throw "QuotaPin installer download failed with curl exit code $ExitCode." }
     if (-not (Test-Path -LiteralPath $Destination -PathType Leaf) -or
-        (Get-Item -LiteralPath $Destination).Length -le 0 -or
+        (Get-Item -LiteralPath $Destination).Length -ne $ExpectedBytes -or
         (Get-Item -LiteralPath $Destination).Length -gt 160MB) {
         throw 'QuotaPin installer download has an invalid size.'
     }
@@ -139,8 +147,19 @@ $TempBase = [IO.Path]::GetFullPath([IO.Path]::GetTempPath()).TrimEnd('\')
 $TempRoot = Join-Path $TempBase ('QuotaPin-update-' + [Guid]::NewGuid().ToString('N'))
 $PackagePath = $null
 try {
-    Write-QuotaPinUpdateLog "started version=$Version"
-    Write-QuotaPinUpdateResult 'started' 'QuotaPin is preparing the selected update.'
+    $LifecyclePath = Join-Path $InstallRoot 'src\lifecycle.ps1'
+    $RuntimeTrustPath = Join-Path $InstallRoot 'src\runtime-trust.ps1'
+    if (-not (Test-Path -LiteralPath $LifecyclePath -PathType Leaf) -or
+        -not (Test-Path -LiteralPath $RuntimeTrustPath -PathType Leaf)) {
+        throw 'QuotaPin update ownership and runtime verification are unavailable. Run the install command once to repair it.'
+    }
+    . $LifecyclePath -InstallRootOverride $InstallRoot
+    . $RuntimeTrustPath
+    $InstallOwner = Get-QuotaPinInstallOwner
+    if ($InstallOwner -notin @('setup', 'command')) { throw 'QuotaPin installation ownership is unavailable.' }
+    $ResumeRuntime = Get-QuotaPinResumableRuntime -InstallRoot $InstallRoot -AgentPath (Join-Path $InstallRoot 'QuotaPin.Agent.exe')
+    Write-QuotaPinUpdateLog "started version=$Version owner=$InstallOwner resume=$([bool]$ResumeRuntime)"
+    Write-QuotaPinUpdateResult 'started' 'preparing' 'QuotaPin is preparing the selected update.'
     New-Item -ItemType Directory -Path $TempRoot -Force | Out-Null
     [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
     $OfficialApiUrl = "https://api.github.com/repos/WSL043/QuotaPin-for-Codex/releases/tags/v$Version"
@@ -188,7 +207,9 @@ try {
         throw 'The selected installer does not have an exact official URL and SHA-256 digest.'
     }
     $PackagePath = Join-Path $TempRoot $PackageName
+    Write-QuotaPinUpdateResult 'started' 'downloading' 'QuotaPin is downloading the verified release.'
     Receive-QuotaPinInstaller $AssetUrl $PackagePath $PackageName $AssetBytes
+    Write-QuotaPinUpdateResult 'started' 'verifying' 'QuotaPin is verifying the downloaded release.'
     $ActualDigest = 'sha256:' + (Get-FileHash -Algorithm SHA256 -LiteralPath $PackagePath).Hash.ToLowerInvariant()
     if ($ActualDigest -cne $AssetDigest) { throw 'The downloaded QuotaPin installer failed SHA-256 verification.' }
     $VersionInfo = (Get-Item -LiteralPath $PackagePath).VersionInfo
@@ -200,9 +221,18 @@ try {
     }
     # Do not use Start-Process -Wait here: it waits for the long-running
     # auto-attach watcher that the installer starts after committing files.
-    $Process = Start-Process -FilePath $PackagePath -ArgumentList @('/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', '/COMMANDINSTALL=1') -PassThru
+    # The wrapper owns the one runtime handoff for panel and tray updates.  A
+    # directly launched installer still performs its own best-effort handoff.
+    $InstallerArguments = @('/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', '/DEFERHANDOFF=1')
+    if ($InstallOwner -eq 'command') { $InstallerArguments += '/COMMANDINSTALL=1' }
+    Write-QuotaPinUpdateResult 'started' 'installing' 'QuotaPin is installing the verified release.'
+    $Process = Start-Process -FilePath $PackagePath -ArgumentList $InstallerArguments -PassThru
     try {
-        $Process.WaitForExit()
+        if (-not $Process.WaitForExit(5 * 60 * 1000)) {
+            try { Stop-Process -Id $Process.Id -Force -ErrorAction Stop }
+            catch { Write-QuotaPinUpdateLog ("installer-timeout cleanup-warning code={0}" -f $_.Exception.GetType().Name) }
+            throw 'QuotaPin installer did not finish within five minutes. Run the install command to repair it.'
+        }
         if ($Process.ExitCode -ne 0) { throw "QuotaPin installer exited with code $($Process.ExitCode)." }
     }
     finally { $Process.Dispose() }
@@ -211,12 +241,23 @@ try {
     }
     else { '' }
     if ($InstalledNow -cne $Version) { throw 'QuotaPin installer completed without committing the selected version.' }
-    Write-QuotaPinUpdateResult 'degraded' 'QuotaPin updated. Attachment will retry on the next Codex launch.'
-    Write-QuotaPinUpdateLog "succeeded version=$Version resume=next-launch"
+    $ResumeState = 'next-launch'
+    if ($ResumeRuntime) {
+        Write-QuotaPinUpdateResult 'started' 'reconnecting' 'QuotaPin is reconnecting the current Codex session.'
+        . (Join-Path $InstallRoot 'src\runtime-trust.ps1')
+        $ResumeState = Resume-QuotaPinTrustedRuntime -InstallRoot $InstallRoot -ExpectedRuntime $ResumeRuntime -AgentPath (Join-Path $InstallRoot 'QuotaPin.Agent.exe')
+    }
+    if ($ResumeState -eq 'quota-ready') {
+        Write-QuotaPinUpdateResult 'succeeded' 'complete' 'QuotaPin updated without restarting Codex.'
+    }
+    else {
+        Write-QuotaPinUpdateResult 'degraded' 'complete' 'QuotaPin updated. Attachment will retry on the next Codex launch.'
+    }
+    Write-QuotaPinUpdateLog "succeeded version=$Version owner=$InstallOwner resume=$ResumeState"
 }
 catch {
     Write-QuotaPinUpdateLog ("failed version={0} code={1}" -f $Version, $_.Exception.GetType().Name)
-    try { Write-QuotaPinUpdateResult 'failed' 'QuotaPin could not complete the update. Open the version menu to retry.' } catch {}
+    try { Write-QuotaPinUpdateResult 'failed' 'complete' 'QuotaPin could not complete the update. Open the version menu to retry.' } catch {}
     throw
 }
 finally {

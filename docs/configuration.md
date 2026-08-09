@@ -232,20 +232,20 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\install.ps1 -D
 
 ## Updates and recovery versions
 
-The version control in the editor can read the official GitHub release list. Automatic release checks run at most once per 24 hours; opening the control can request a fresh check. Checking is read-only and never starts an installation.
+The version control in the editor reads the official GitHub release list. After a successful result, automatic checks run no more than once every six hours. A temporary failure retains the last verified list and retries with bounded backoff beginning at 15 minutes; opening the control can always request a fresh check. Checking is read-only and never starts an installation.
 
-Only compatible, immutable releases with an exact public package set are eligible. Historical Windows-only releases may contain one correctly named executable; cross-platform releases contain that Windows executable plus one correctly named universal macOS disk image. Any duplicate, renamed, or additional asset is rejected. The user must select a version and confirm before installation begins. The updater checks GitHub's asset digest and platform package identity, preserves the current configuration and launch preference, and then uses the same package as Quick Start. It never closes or launches Codex: it may reattach only to the exact loopback runtime receipt from the current session; otherwise the new version waits for the next normal Codex launch. A version absent from the picker is not treated as compatible.
+Only compatible, immutable releases with an exact public package set are eligible. Historical Windows-only releases may contain one correctly named executable; cross-platform releases contain that Windows executable plus one correctly named universal macOS disk image. Any duplicate, renamed, or additional asset is rejected. The user must select a version and confirm before installation begins. Panel and tray both hand the operation to the same updater, which resumes interrupted downloads, checks GitHub's asset digest and platform package identity, preserves the current setup/command ownership, configuration, and launch preference, and then uses the same package as Quick Start. Its receipt moves through preparation, download, verification, installation, and reconnection, so a replaced Agent or tray can recover the real outcome instead of reporting success from process presence alone. It never closes or launches Codex: it may reattach only to the exact loopback runtime receipt from the current session; otherwise the new version waits for the next normal Codex launch. A version absent from the picker is not treated as compatible.
 
 The remote bootstrap without `-Version` resolves GitHub's immutable latest stable release. Supplying an exact published stable version permits a repair or compatible rollback. Reinstalling the same version follows the same transactional replacement path and does not reset configuration.
 
 ```powershell
-& ([scriptblock]::Create((irm https://raw.githubusercontent.com/WSL043/QuotaPin-for-Codex/main/install.ps1))) -Version '1.1.0'
+& ([scriptblock]::Create((irm https://raw.githubusercontent.com/WSL043/QuotaPin-for-Codex/main/install.ps1))) -Version '1.1.1'
 ```
 
 On macOS, the equivalent exact-version boundary is:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/WSL043/QuotaPin-for-Codex/main/install-macos.sh | bash -s -- --version 1.1.0
+curl -fsSL https://raw.githubusercontent.com/WSL043/QuotaPin-for-Codex/main/install-macos.sh | bash -s -- --version 1.1.1
 ```
 
 Older entries are user-selected recovery versions, not a transactional rollback guarantee. If an older Agent encounters a configuration from a newer schema, it opens that configuration read-only instead of overwriting it. Published update behavior is counted as supported only after the corresponding path appears in [observed compatibility](compatibility.md).

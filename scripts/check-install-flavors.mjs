@@ -127,6 +127,7 @@ matches(
 );
 has(sourceUninstaller, 'Set-Location -LiteralPath $env:LOCALAPPDATA', "command uninstall must leave its owned tree before recursive cleanup");
 has(sourceInstaller, "-IgnoreExisting", "source install must not interrupt the current Codex session");
+has(setup, 'Type: files; Name: "{app}\\logs\\auto-attach-guard.json"', "guided and command updates must clear a previously latched attach transaction");
 has(sourceInstaller, "$ExistingAutoAttach", "source updates must preserve the user's startup choice");
 has(sourceInstaller, "Local\\QuotaPin.Install.", "source installation must hold a per-user single-flight mutex");
 has(sourceInstaller, "Local\\QuotaPin.Update.", "source installation must serialize with update and uninstall");
@@ -184,9 +185,12 @@ has(commandUpdater, "$MacPackageName", "command updates must recognize the compa
 has(commandUpdater, "two-platform package policy", "command updates must reject a release with extra public assets");
 has(commandUpdater, "$AssetDigest -notmatch '^sha256:[0-9a-f]{64}$'", "command updates must require GitHub's exact asset digest");
 has(commandUpdater, "OriginalFilename", "command updates must verify the versioned Windows package identity");
-has(commandUpdater, "'/COMMANDINSTALL=1'", "command updates must preserve the command-install flavor when invoking the shared executable");
+has(commandUpdater, "$InstallOwner = Get-QuotaPinInstallOwner", "updates must resolve the existing installation owner before invoking the shared executable");
+has(commandUpdater, "if ($InstallOwner -eq 'command')", "command-owned updates must preserve the command-install flavor");
+has(commandUpdater, "'/DEFERHANDOFF=1'", "the update wrapper and installer must not race two runtime handoffs");
 has(commandUpdater, "'/NORESTART'", "command updates must never restart Codex or Windows");
-has(commandUpdater, "$Process.WaitForExit()", "command updates must wait only for the installer process");
+has(commandUpdater, "$Process.WaitForExit(5 * 60 * 1000)", "command updates must wait only for the installer process and must bound that wait");
+has(commandUpdater, "Stop-Process -Id $Process.Id -Force", "a timed-out installer must not continue mutating the installation after the updater reports failure");
 lacks(commandUpdater, "-Wait -PassThru", "command updates must not wait forever on the persistent watcher descendant");
 has(commandUpdater, "Local\\QuotaPin.Update.", "command updates must hold a per-user single-flight mutex");
 has(commandUpdater, "update-result.json", "command updates must publish an atomic terminal result");
@@ -210,7 +214,9 @@ lacks(runtimeTrust, "[datetime]::Parse", "runtime trust must not reinterpret UTC
 has(updateRuntime, 'MINIMUM_SAFE_VERSION = "0.3.0-alpha.25"', "the update picker must hide releases below the maintained compatibility floor");
 has(updateRuntime, 'action?.type === "install"', "command updates must require an explicit renderer action");
 has(updateRuntime, 'this.state.status === "installing"', "renderer update actions must be single-flight");
-has(updateRuntime, "24 * 60 * 60 * 1000", "automatic release discovery must remain daily and bounded");
+has(updateRuntime, "6 * 60 * 60 * 1000", "successful automatic release discovery must remain bounded");
+has(updateRuntime, "15 * 60 * 1000", "failed release discovery must retry without hiding a verified cached result for a day");
+has(updateRuntime, "checkError", "release discovery must distinguish stale verified state from a current network failure");
 lacks(updateRuntime, "setInterval", "the command updater must not install or poll continuously in the background");
 
 // Setup is the novice path: tray controls, sign-in startup, and an Apps-list
@@ -229,7 +235,13 @@ lacks(setup, "open-settings.ps1", "Setup must not package the retired settings b
 lacks(setup, "Open QuotaPin settings", "Setup must not add a second settings entry to the Start menu");
 lacks(setup, 'Source: "..\\dist\\runtime', "Setup must not carry a private Node runtime tree");
 has(setup, 'ValueName: "QuotaPin"', "Setup must register the tray startup entry");
-has(setup, "ExistingSetupInstall", "Setup upgrades must detect an existing installer build");
+has(setup, "ExistingInstallOwner", "Setup upgrades must read the explicit installation owner instead of confusing native uninstall registration with tray ownership");
+has(setup, "CompareText(ExistingInstallOwner, 'setup') = 0", "setup ownership must be resolved from persisted state");
+has(setup, "Pos('auto-attach.ps1', ExistingRunCommand) > 0", "legacy command ownership must remain recoverable from its startup command");
+has(setup, "HasCommandLineSwitch('/COMMANDINSTALL=1') and (not ExistingSetupInstall)", "a stale command-update flag must not replace an existing setup-owned installation while a command-owned update remains command-owned");
+has(setup, "else if ExistingInstall then", "both installation flavors must preserve an explicitly disabled startup preference during update");
+has(setup, "'/DEFERHANDOFF=1'", "wrapper-driven updates must suppress the installer's duplicate runtime handoff");
+has(setup, "installer-handoff.ps1", "direct installer upgrades must retain a best-effort verified runtime handoff");
 has(setup, "ExistingAutoAttach", "Setup upgrades must preserve the user's startup choice");
 has(setup, "UninstallDisplayIcon={app}\\QuotaPin.Tray.exe", "Setup must register its Apps-list identity");
 has(setup, "UninstallDisplayName=QuotaPin", "Setup must use a clean Apps-list display name");
@@ -312,8 +324,9 @@ has(tray, "CreateToolhelp32Snapshot", "Setup tray must observe Codex launches wi
 lacks(read("scripts/build-tray.ps1"), "/reference:System.Management.dll", "tray build must not depend on a WMI process-event subscription");
 has(read("scripts/build-tray.ps1"), "Updater.cs", "tray build must include the in-place updater");
 has(updater, "ReleaseDownloadPrefix", "updates must accept only the project release asset origin");
-has(updater, "SHA256.Create()", "updates must verify the downloaded installer before launch");
-has(tray, "/VERYSILENT /SUPPRESSMSGBOXES /NORESTART", "verified updates must use the normal silent per-user upgrade path");
+has(commandUpdater, "Get-FileHash -Algorithm SHA256", "the shared update transaction must verify the downloaded installer before launch");
+has(tray, 'Path.Combine(installRoot, "update.ps1")', "the tray must delegate to the same resumable update transaction as the panel");
+lacks(tray, "DownloadedUpdate", "the tray must not retain a second package downloader and installer");
 lacks(tray, "releases/latest", "the update action must not send users to a release web page");
 has(tray, '"app://-/index.html"', "update resume must verify the active Codex renderer target");
 has(tray, 'EnvironmentVariables["QUOTAPIN_CODEX_COMMAND"]', "hot resume must provide the verified Codex app-server command to the Agent");

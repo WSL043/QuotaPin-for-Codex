@@ -350,6 +350,12 @@ function panelFixturePage(source) {
   const locale = previewLocales.has(String(source.get("locale"))) ? String(source.get("locale")) : "en";
   const panelTheme = previewAppearances.has(String(source.get("theme"))) ? String(source.get("theme")) : "dark";
   const hostAppearance = previewAppearances.has(String(source.get("appearance"))) ? String(source.get("appearance")) : panelTheme;
+  const requestedUpdateState = String(source.get("update") ?? "current");
+  const updateState = new Set(["current", "available", "checking", "installing", "error"]).has(requestedUpdateState)
+    ? requestedUpdateState : "current";
+  const requestedUpdatePhase = String(source.get("phase") ?? "downloading");
+  const updatePhase = new Set(["preparing", "downloading", "verifying", "installing", "reconnecting"]).has(requestedUpdatePhase)
+    ? requestedUpdatePhase : "downloading";
   const config = sanitizeConfig({ ...clone(DEFAULT_CONFIG), locale, panelTheme });
   const now = Date.now();
   const fixtureResetAt = now / 1000 + 4 * 86_400;
@@ -363,7 +369,19 @@ function panelFixturePage(source) {
 html,body{margin:0;width:100%;height:100%;overflow:hidden;background:${page.bg};color:${page.text};font-family:${tokens.account.fontFamily}}*{box-sizing:border-box}.shell{position:relative;width:100%;height:100%;background:${page.surface}}.top{height:36px;border-bottom:1px solid ${page.line};display:flex;align-items:center;gap:22px;padding:0 16px;color:${page.soft};font-size:13px}.top-mark{width:68px;height:6px;border-radius:999px;background:${page.soft};opacity:.42}.rail{position:absolute;left:0;top:36px;bottom:0;width:${tokens.sidebar.width}px;border-right:1px solid ${page.line}}.ghost{padding:18px;color:${page.soft};font-size:13px;line-height:31px}.ghost strong{display:block;color:${page.text};margin-bottom:8px}.account{position:absolute;left:8px;bottom:8px;width:${tokens.account.width}px;height:${tokens.account.height}px;border:0;border-radius:${tokens.account.borderRadius}px;background:transparent;color:${page.text};font:600 ${tokens.account.fontSize}px/${tokens.account.lineHeight}px ${tokens.account.fontFamily};text-align:left}.account img{width:${tokens.avatar.width}px;height:${tokens.avatar.height}px;margin-right:8px;border-radius:${tokens.avatar.borderRadius}px;vertical-align:middle}.canvas{position:absolute;left:${tokens.sidebar.width}px;right:0;top:36px;bottom:0;background:${page.bg}}.canvas::before{content:"";position:absolute;left:10%;right:10%;bottom:52px;height:92px;border:1px solid ${page.line};border-radius:17px;background:${page.surface}}
   </style></head><body><div class="shell"><header class="top"><span>□</span><span>←</span><span>→</span><span class="top-mark" aria-hidden="true"></span></header><aside class="rail"><div class="ghost"><strong>Codex</strong><div>New chat</div><div>Pull requests</div><div>Projects</div></div><button id="account" class="account" aria-haspopup="menu"><img src="/avatar.png" alt=""><span>BBQ430</span></button></aside><main class="canvas"></main></div><script src="/renderer.js"></script><script>
   let fixtureConfig=${serializeForInlineScript(config)};let fixtureView=${serializeForInlineScript(view)};let fixtureQueue=Promise.resolve();const fixtureResetAt=${serializeForInlineScript(fixtureResetAt)};
-  const fixtureUpdate={status:"current",currentVersion:"1.0.0",latestVersion:"1.0.0",releases:[],message:""};
+  const fixtureUpdate=${serializeForInlineScript({
+    status: updateState,
+    currentVersion: "1.1.0",
+    latestVersion: updateState === "available" || updateState === "installing" ? "1.1.1" : "1.1.0",
+    releases: updateState === "available" || updateState === "installing"
+      ? [{ version: "1.1.1", direction: "update" }, { version: "1.1.0", direction: "repair" }]
+      : [{ version: "1.1.0", direction: "repair" }],
+    message: updateState === "error" ? "QuotaPin could not check for updates." : "",
+    checkError: updateState === "error",
+    lastCheckedAt: updateState === "error" || updateState === "available" || updateState === "current" ? now - 5 * 60_000 : 0,
+    selectedVersion: updateState === "installing" ? "1.1.1" : null,
+    phase: updateState === "installing" ? updatePhase : null,
+  })};
   const publishFixture=(settingsAck=null)=>window.__quotaPinController.update({status:"ready",view:fixtureView,preferences:fixtureConfig,update:fixtureUpdate,settingsAck});
   window.quotapinConfigAction=(payload)=>{
     let message;

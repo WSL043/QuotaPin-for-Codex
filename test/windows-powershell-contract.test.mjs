@@ -47,7 +47,7 @@ $AsDate = ConvertTo-QuotaPinInstant ([DateTime]::Parse('2026-08-06T00:28:37.4510
 });
 
 test("update PowerShell sources parse in Windows PowerShell 5.1", { skip: process.platform !== "win32" }, () => {
-  const files = ["scripts/update.ps1", "src/runtime-trust.ps1", "src/lifecycle.ps1"]
+  const files = ["scripts/update.ps1", "scripts/installer-handoff.ps1", "src/runtime-trust.ps1", "src/lifecycle.ps1"]
     .map((relative) => path.join(root, relative).replaceAll("'", "''"));
   const script = String.raw`
 $ErrorActionPreference = 'Stop'
@@ -63,6 +63,73 @@ Write-Output 'parsed'
   const result = spawnSync(powershell, ["-NoLogo", "-NoProfile", "-EncodedCommand", encoded], { encoding: "utf8" });
   assert.equal(result.status, 0, result.stderr || result.stdout);
   assert.match(result.stdout, /parsed/);
+});
+
+test("installer handoff publishes one exact hot-resume completion receipt", { skip: process.platform !== "win32" }, () => {
+  const handoffPath = path.join(root, "scripts", "installer-handoff.ps1").replaceAll("'", "''");
+  const script = String.raw`
+$ErrorActionPreference = 'Stop'
+$Root = Join-Path ([IO.Path]::GetTempPath()) ('QuotaPin-handoff-test-' + [Guid]::NewGuid().ToString('N'))
+try {
+    New-Item -ItemType Directory -Path (Join-Path $Root 'src') -Force | Out-Null
+    [IO.File]::WriteAllText((Join-Path $Root 'VERSION'), '1.1.0')
+    [IO.File]::WriteAllText((Join-Path $Root 'QuotaPin.Agent.exe'), 'fixture')
+    @'
+function Get-QuotaPinResumableRuntime([string]$InstallRoot, [string]$AgentPath) {
+    [pscustomobject]@{
+        codexPid = 4242
+        codexCreationTimeUtc = '2026-08-09T00:00:00Z'
+        port = 43124
+        generation = ('a' * 32)
+    }
+}
+function Resume-QuotaPinTrustedRuntime([string]$InstallRoot, $ExpectedRuntime, [string]$AgentPath) {
+    if ([int]$ExpectedRuntime.codexPid -ne 4242) { throw 'wrong runtime' }
+    'quota-ready'
+}
+'@ | Set-Content -LiteralPath (Join-Path $Root 'src\runtime-trust.ps1') -Encoding UTF8
+    & '${handoffPath}' -Action Capture -InstallRoot $Root -Version '1.1.1'
+    $Captured = Test-Path -LiteralPath (Join-Path $Root 'logs\installer-handoff.json')
+    & '${handoffPath}' -Action Resume -InstallRoot $Root -Version '1.1.1'
+    $Result = Get-Content -Raw -LiteralPath (Join-Path $Root 'logs\installer-handoff-result.json') | ConvertFrom-Json
+    $Completion = Get-Content -Raw -LiteralPath (Join-Path $Root 'logs\update-completion.json') | ConvertFrom-Json
+    [IO.File]::WriteAllText((Join-Path $Root 'logs\installer-handoff.json'), (@{
+        schema = 1
+        targetVersion = '1.1.1'
+        fromVersion = ''
+        capturedAt = [DateTimeOffset]::Now.ToString('o')
+        expectedRuntime = @{ codexPid = 4242 }
+    } | ConvertTo-Json -Compress))
+    & '${handoffPath}' -Action Resume -InstallRoot $Root -Version '1.1.1'
+    $Malformed = Get-Content -Raw -LiteralPath (Join-Path $Root 'logs\installer-handoff-result.json') | ConvertFrom-Json
+    [ordered]@{
+        captured = $Captured
+        snapshotRemoved = -not (Test-Path -LiteralPath (Join-Path $Root 'logs\installer-handoff.json'))
+        schema = [int]$Result.schema
+        status = [string]$Result.status
+        phase = [string]$Result.phase
+        version = [string]$Result.version
+        completionStatus = [string]$Completion.status
+        malformedStatus = [string]$Malformed.status
+        malformedHasFromVersion = $null -ne $Malformed.PSObject.Properties['fromVersion']
+    } | ConvertTo-Json -Compress
+}
+finally { Remove-Item -LiteralPath $Root -Recurse -Force -ErrorAction SilentlyContinue }
+`;
+  const encoded = Buffer.from(script, "utf16le").toString("base64");
+  const result = spawnSync(powershell, ["-NoLogo", "-NoProfile", "-ExecutionPolicy", "Bypass", "-EncodedCommand", encoded], { encoding: "utf8" });
+  assert.equal(result.status, 0, result.stderr || result.stdout);
+  assert.deepEqual(JSON.parse(result.stdout.trim().split(/\r?\n/).at(-1)), {
+    captured: true,
+    snapshotRemoved: true,
+    schema: 2,
+    status: "succeeded",
+    phase: "complete",
+    version: "1.1.1",
+    completionStatus: "succeeded",
+    malformedStatus: "degraded",
+    malformedHasFromVersion: false,
+  });
 });
 
 test("Windows release extraction accepts the exact trust payload and rejects extra entries", { skip: process.platform !== "win32" }, () => {
@@ -153,12 +220,18 @@ test("command updater contract keeps exact platform-package trust, cleanup, and 
   assert.match(updater, /\$AssetDigest -notmatch '\^sha256:/);
   assert.match(updater, /OriginalFilename\)\.Trim\(\) -cne \$PackageName/);
   assert.match(updater, /ConvertTo-QuotaPinWindowsFileVersion \$Version/);
-  assert.match(updater, /Start-Process -FilePath \$PackagePath[\s\S]*'\/COMMANDINSTALL=1'/);
-  assert.match(updater, /\$Process\.WaitForExit\(\)/);
+  assert.match(updater, /\$InstallOwner = Get-QuotaPinInstallOwner/);
+  assert.match(updater, /if \(\$InstallOwner -eq 'command'\) \{ \$InstallerArguments \+= '\/COMMANDINSTALL=1' \}/);
+  assert.match(updater, /'\/DEFERHANDOFF=1'/);
+  assert.match(updater, /\$Process\.WaitForExit\(5 \* 60 \* 1000\)/);
+  assert.match(updater, /Stop-Process -Id \$Process\.Id -Force/);
+  assert.match(updater, /\.Length -ne \$ExpectedBytes/);
   assert.doesNotMatch(updater, /Start-Process -FilePath \$PackagePath[^\r\n]*-Wait/);
   assert.match(updater, /'\/NORESTART'/);
   assert.match(updater, /Local\\QuotaPin\.Update\./);
   assert.match(updater, /Write-QuotaPinUpdateResult 'degraded'/);
+  assert.match(updater, /Resume-QuotaPinTrustedRuntime/);
+  assert.match(updater, /update-completion\.json/);
   assert.match(updater, /cleanup-warning temp-root/);
   assert.doesNotMatch(updater, /Start-Process[^\r\n]*(?:ChatGPT|Codex\.exe|launch\.ps1)/i);
 });

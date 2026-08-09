@@ -1,11 +1,9 @@
 using System;
 using System.Collections.Generic;
-using System.Diagnostics;
 using System.Globalization;
 using System.IO;
 using System.Net;
 using System.Security;
-using System.Security.Cryptography;
 using System.Text;
 using System.Text.RegularExpressions;
 using System.Web.Script.Serialization;
@@ -18,12 +16,6 @@ namespace QuotaPin.Tray
         internal string PackageUrl;
         internal string PackageSha256;
         internal string PageUrl;
-    }
-
-    internal sealed class DownloadedUpdate
-    {
-        internal ReleaseInfo Release;
-        internal string SetupPath;
     }
 
     internal static class UpdateService
@@ -121,62 +113,6 @@ namespace QuotaPin.Tray
                 IntegerValue(asset, "size") > 0 && IntegerValue(asset, "size") <= PackageFileLimit;
         }
 
-        internal static DownloadedUpdate DownloadAndVerify(ReleaseInfo release, string currentVersion)
-        {
-            if (release == null) throw new ArgumentNullException("release");
-            ValidateReleaseInfo(release, currentVersion);
-            var updateRoot = Path.Combine(Path.GetTempPath(), "QuotaPin", "updates");
-            Directory.CreateDirectory(updateRoot);
-            var versionRoot = Path.GetFullPath(Path.Combine(updateRoot, SafeFileName(release.Version)));
-            if (!versionRoot.StartsWith(Path.GetFullPath(updateRoot) + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
-                throw new InvalidDataException("Unsafe update directory.");
-            if (Directory.Exists(versionRoot)) Directory.Delete(versionRoot, true);
-            Directory.CreateDirectory(versionRoot);
-            var packagePath = Path.Combine(versionRoot, PackageName(release.Version));
-            try
-            {
-                DownloadFileBounded(release.PackageUrl, packagePath, currentVersion, PackageFileLimit);
-                var actual = ComputeSha256(packagePath);
-                if (!string.Equals(actual, release.PackageSha256, StringComparison.Ordinal))
-                    throw new InvalidDataException("The downloaded installer failed GitHub digest verification.");
-                VerifyPackageIdentity(packagePath, release.Version);
-                return new DownloadedUpdate { Release = release, SetupPath = packagePath };
-            }
-            catch
-            {
-                TryDeleteDirectory(versionRoot);
-                throw;
-            }
-        }
-
-        internal static void CleanupOldDownloads()
-        {
-            try
-            {
-                var root = Path.Combine(Path.GetTempPath(), "QuotaPin", "updates");
-                if (!Directory.Exists(root)) return;
-                foreach (var directory in Directory.GetDirectories(root))
-                {
-                    try { if (Directory.GetLastWriteTimeUtc(directory) < DateTime.UtcNow.AddDays(-7)) Directory.Delete(directory, true); }
-                    catch { }
-                }
-            }
-            catch { }
-        }
-
-        private static void ValidateReleaseInfo(ReleaseInfo release, string currentVersion)
-        {
-            var version = SemanticVersion.Parse(release.Version);
-            var current = SemanticVersion.Parse(currentVersion);
-            if (version.CompareTo(current) <= 0) throw new InvalidDataException("The release version is not newer than the installed version.");
-            var rawTag = "v" + release.Version;
-            var expectedUrl = ReleaseDownloadPrefix + rawTag + "/" + PackageName(release.Version);
-            if (!string.Equals(release.PackageUrl, expectedUrl, StringComparison.Ordinal) ||
-                !Regex.IsMatch(release.PackageSha256 ?? "", "\\A[0-9a-f]{64}\\z", RegexOptions.CultureInvariant) ||
-                !string.Equals(release.PageUrl, RepositoryUrl + "/releases/tag/" + rawTag, StringComparison.Ordinal))
-                throw new SecurityException("The update release does not use the official immutable asset identity.");
-        }
-
         private static string DownloadTextBounded(string url, string currentVersion, long maximumBytes)
         {
             using (var response = OpenResponse(url, currentVersion))
@@ -186,21 +122,6 @@ namespace QuotaPin.Tray
                 CopyBounded(input, output, maximumBytes);
                 return new UTF8Encoding(false, true).GetString(output.ToArray());
             }
-        }
-
-        private static void DownloadFileBounded(string url, string destination, string currentVersion, long maximumBytes)
-        {
-            var partial = destination + ".partial";
-            TryDeleteFile(partial);
-            try
-            {
-                using (var response = OpenResponse(url, currentVersion))
-                using (var input = response.GetResponseStream())
-                using (var output = new FileStream(partial, FileMode.CreateNew, FileAccess.Write, FileShare.None))
-                    CopyBounded(input, output, maximumBytes);
-                File.Move(partial, destination);
-            }
-            finally { TryDeleteFile(partial); }
         }
 
         private static HttpWebResponse OpenResponse(string url, string currentVersion)
@@ -255,35 +176,10 @@ namespace QuotaPin.Tray
             }
         }
 
-        private static string ComputeSha256(string path)
-        {
-            using (var stream = File.OpenRead(path))
-            using (var algorithm = SHA256.Create())
-                return ToHex(algorithm.ComputeHash(stream));
-        }
-
-        private static void VerifyPackageIdentity(string path, string expectedVersion)
-        {
-            var info = FileVersionInfo.GetVersionInfo(path);
-            var productVersion = (info.ProductVersion ?? "").Trim();
-            var description = info.FileDescription ?? "";
-            if (!string.Equals(productVersion, WindowsFileVersion(expectedVersion), StringComparison.Ordinal) ||
-                description.IndexOf(RepositoryUrl, StringComparison.Ordinal) < 0 ||
-                !string.Equals((info.OriginalFilename ?? "").Trim(), PackageName(expectedVersion), StringComparison.Ordinal))
-                throw new SecurityException("The downloaded installer identity does not match the release.");
-        }
-
         private static string PackageName(string version)
         {
             SemanticVersion.Parse(version);
             return "QuotaPin-" + version + ".exe";
-        }
-
-        private static string WindowsFileVersion(string version)
-        {
-            var match = Regex.Match(version ?? "", "\\A(\\d+\\.\\d+\\.\\d+)(?:-(?:alpha|beta)\\.(\\d+))?\\z", RegexOptions.CultureInvariant);
-            if (!match.Success) throw new FormatException("Version cannot be represented as a Windows file version.");
-            return match.Groups[1].Value + "." + (match.Groups[2].Success ? match.Groups[2].Value : "0");
         }
 
         private static string StringValue(Dictionary<string, object> source, string key)
@@ -305,30 +201,6 @@ namespace QuotaPin.Tray
             return source.TryGetValue(key, out value) && value != null &&
                 Int64.TryParse(Convert.ToString(value, CultureInfo.InvariantCulture), NumberStyles.Integer, CultureInfo.InvariantCulture, out parsed)
                 ? parsed : -1;
-        }
-
-        private static string SafeFileName(string value)
-        {
-            var safe = Regex.Replace(value ?? "", "[^0-9A-Za-z._-]+", "-").Trim('-');
-            if (safe.Length == 0) throw new InvalidDataException("Unsafe update version.");
-            return safe;
-        }
-
-        private static string ToHex(byte[] value)
-        {
-            return BitConverter.ToString(value).Replace("-", "").ToLowerInvariant();
-        }
-
-        private static void TryDeleteFile(string path)
-        {
-            try { if (File.Exists(path)) File.Delete(path); }
-            catch { }
-        }
-
-        private static void TryDeleteDirectory(string path)
-        {
-            try { if (Directory.Exists(path)) Directory.Delete(path, true); }
-            catch { }
         }
 
         private sealed class SemanticVersion : IComparable<SemanticVersion>

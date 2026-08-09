@@ -37,11 +37,13 @@ fi
 write_update_result() {
   [[ "$WRITE_RESULT" == true ]] || return 0
   local status="$1"
+  local phase="${2:-preparing}"
   local temporary="$UPDATE_RESULT.$$.tmp"
   mkdir -p "$(dirname "$UPDATE_RESULT")"
   plutil -create xml1 "$temporary"
-  plutil -insert schema -integer 1 "$temporary"
+  plutil -insert schema -integer 2 "$temporary"
   plutil -insert status -string "$status" "$temporary"
+  plutil -insert phase -string "$phase" "$temporary"
   plutil -insert version -string "$VERSION" "$temporary"
   if [[ "$FROM_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-beta\.[0-9]+)?$ ]]; then
     plutil -insert fromVersion -string "$FROM_VERSION" "$temporary"
@@ -55,7 +57,7 @@ write_update_result() {
 report_update_failure() {
   local exit_code=$?
   trap - ERR
-  write_update_result failed || true
+  write_update_result failed complete || true
   exit "$exit_code"
 }
 if [[ -n "$REQUESTED_VERSION" && ! "$REQUESTED_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-beta\.[0-9]+)?$ ]]; then
@@ -94,7 +96,7 @@ fi
 [[ "$IMMUTABLE" == "true" ]] || { echo "The selected GitHub release is not immutable." >&2; exit 3; }
 [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-beta\.[0-9]+)?$ ]] || { echo "GitHub returned an invalid tag: $TAG" >&2; exit 3; }
 [[ "$PAGE_URL" == "https://github.com/$REPOSITORY/releases/tag/$TAG" ]] || { echo "GitHub returned an unexpected release identity." >&2; exit 3; }
-write_update_result started
+write_update_result started preparing
 if [[ "$WRITE_RESULT" == true ]]; then trap report_update_failure ERR; fi
 
 ASSET_NAME="QuotaPin-macOS-$VERSION.dmg"
@@ -139,9 +141,11 @@ done
 
 ARCHIVE="$TEMP_ROOT/$ASSET_NAME"
 echo "Downloading $ASSET_NAME"
+write_update_result started downloading
 curl --fail --show-error --location --retry 6 --retry-all-errors --connect-timeout 20 \
   --max-time 600 --continue-at - "$ASSET_URL" --output "$ARCHIVE"
 [[ "$(stat -f '%z' "$ARCHIVE")" -eq "$ASSET_BYTES" ]] || { echo "The macOS package size does not match GitHub." >&2; exit 4; }
+write_update_result started verifying
 ACTUAL_DIGEST="sha256:$(shasum -a 256 "$ARCHIVE" | awk '{print $1}')"
 [[ "$ACTUAL_DIGEST" == "$ASSET_DIGEST" ]] || { echo "The macOS package SHA-256 does not match GitHub." >&2; exit 4; }
 
@@ -158,6 +162,7 @@ plutil -lint "$APP_ROOT/Contents/Info.plist" >/dev/null
 codesign --verify --strict --deep "$APP_ROOT"
 INSTALL_ARGUMENTS=(--source "$PACKAGE_ROOT")
 if [[ -n "$CODEX_APP" ]]; then INSTALL_ARGUMENTS+=(--codex-app "$CODEX_APP"); fi
+write_update_result started installing
 "$PACKAGE_ROOT/install.sh" "${INSTALL_ARGUMENTS[@]}"
-write_update_result degraded
+write_update_result degraded complete
 trap - ERR

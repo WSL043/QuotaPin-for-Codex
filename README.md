@@ -47,7 +47,7 @@ QuotaPin keeps the useful part visible in the account row, so checking quota bec
 
 ## Platform status
 
-Latest stable: **v1.1.0**.
+Latest stable: **v1.1.1**.
 
 | Platform | Status |
 |---|---|
@@ -158,7 +158,7 @@ QuotaPin does not claim to defend against malware already running as the same OS
 
 ## Updates and compatibility
 
-QuotaPin checks for updates at most once a day and never installs one without confirmation. It never restarts Codex. Reinstalling or updating keeps your saved views and preferences.
+QuotaPin checks after a successful result no more than once every six hours. A temporary network failure keeps the last verified result and retries sooner, beginning after 15 minutes. Nothing is installed without confirmation, Codex is never restarted, and saved views and preferences survive repair or update.
 
 Codex can change its UI over time. QuotaPin deliberately refuses to render when it cannot identify the account row unambiguously. Observed compatibility and recovery options are documented in [compatibility](docs/compatibility.md) and [configuration](docs/configuration.md).
 

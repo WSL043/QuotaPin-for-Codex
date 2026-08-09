@@ -23,7 +23,7 @@ irm https://raw.githubusercontent.com/WSL043/QuotaPin-for-Codex/main/install.ps1
 The moving bootstrap selects only GitHub's immutable latest stable release. Exact-version repair and historical rollback retain the same `-Version` boundary:
 
 ```powershell
-& ([scriptblock]::Create((irm https://raw.githubusercontent.com/WSL043/QuotaPin-for-Codex/main/install.ps1))) -Version '1.1.0'
+& ([scriptblock]::Create((irm https://raw.githubusercontent.com/WSL043/QuotaPin-for-Codex/main/install.ps1))) -Version '1.1.1'
 ```
 
 Both installations are per-user and preserve `%LOCALAPPDATA%\QuotaPin\config.json`. Public GitHub Releases expose only the reviewed platform installers: beta releases are explicit prereleases and never Latest; stable releases alone feed the moving channel. Keep the official Codex icon as the normal launch path. Do not offer unpublished packaging experiments as installation choices.
@@ -48,7 +48,7 @@ Before reporting success, verify all of the following:
 - the injector listens only on `127.0.0.1`;
 - the badge is inside the account menu button and the App Server returns real duration labels.
 
-Installing or updating does not authorize interrupting a running Codex session. Do not close or relaunch Codex unless the user explicitly agrees. The updater itself must never relaunch Codex. A replacement watcher ignores the current process; an updater may reattach only to the exact verified runtime port it owned before replacement. If that receipt cannot be proved, leave the new version installed for the next normal Codex launch.
+Installing or updating does not authorize interrupting a running Codex session. Do not close or relaunch Codex unless the user explicitly agrees. The updater itself must never relaunch Codex. Panel and tray updates use the same resumable, identity-verifying transaction and preserve the existing setup/command installation owner. A replacement watcher ignores the current process; an updater may reattach only to the exact verified runtime port it owned before replacement. If that receipt cannot be proved, leave the new version installed for the next normal Codex launch.
 
 Reinstall and update preserve `config.json`. A supported older schema is migrated atomically with the original retained as `config.json.previous`; a future schema is read-only and must never be downgraded. Uninstall removes the configuration together with every other QuotaPin-owned file because uninstall is an explicit full removal.
 

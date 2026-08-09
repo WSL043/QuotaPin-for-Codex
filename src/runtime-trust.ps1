@@ -112,6 +112,27 @@ function Resume-QuotaPinTrustedRuntime(
     if (-not $AgentPath) { $AgentPath = Join-Path $ResolvedRoot 'QuotaPin.Agent.exe' }
     $ResolvedAgentPath = [IO.Path]::GetFullPath($AgentPath)
     $LogRoot = Join-Path $ResolvedRoot 'logs'
+    # Setup may have already started the replacement tray while the updater is
+    # completing its handoff.  A live, verified Agent for the same immutable
+    # Codex process wins; wait for it instead of starting a duplicate Agent.
+    $LiveRuntime = Get-QuotaPinTrustedRuntime -InstallRoot $ResolvedRoot -RequireAgent -AgentPath $ResolvedAgentPath
+    $SameLiveCodex = $LiveRuntime -and
+        [int]$LiveRuntime.codexPid -eq [int]$ExpectedRuntime.codexPid -and
+        [string]$LiveRuntime.codexCreationTimeUtc -ceq [string]$ExpectedRuntime.codexCreationTimeUtc
+    if ($SameLiveCodex) {
+        foreach ($Attempt in 1..60) {
+            try {
+                $Lifecycle = Get-Content -Raw -LiteralPath (Join-Path $LogRoot 'lifecycle.json') | ConvertFrom-Json
+                if ([int]$Lifecycle.agentPid -eq [int]$LiveRuntime.agentPid -and
+                    [int]$Lifecycle.codexPid -eq [int]$LiveRuntime.codexPid -and
+                    [string]$Lifecycle.state -eq 'quota-ready') { return 'quota-ready' }
+            }
+            catch {}
+            if (-not (Get-Process -Id ([int]$LiveRuntime.agentPid) -ErrorAction SilentlyContinue)) { break }
+            Start-Sleep -Milliseconds 250
+        }
+        if (Get-Process -Id ([int]$LiveRuntime.agentPid) -ErrorAction SilentlyContinue) { return 'next-launch' }
+    }
     $CurrentRuntime = Get-QuotaPinTrustedRuntime -InstallRoot $ResolvedRoot
     $SameRuntime = $CurrentRuntime -and
         [int]$CurrentRuntime.port -eq [int]$ExpectedRuntime.port -and

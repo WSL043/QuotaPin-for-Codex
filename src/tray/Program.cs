@@ -18,8 +18,8 @@ using Microsoft.Win32;
 [assembly: AssemblyCompany("QuotaPin contributors")]
 [assembly: AssemblyProduct("QuotaPin")]
 [assembly: AssemblyCopyright("Copyright 2026 QuotaPin contributors")]
-[assembly: AssemblyVersion("1.1.0.0")]
-[assembly: AssemblyFileVersion("1.1.0.0")]
+[assembly: AssemblyVersion("1.1.1.0")]
+[assembly: AssemblyFileVersion("1.1.1.0")]
 
 namespace QuotaPin.Tray
 {
@@ -68,8 +68,9 @@ namespace QuotaPin.Tray
         private bool observerReady;
         private DateTime nextPackageRefresh = DateTime.MinValue;
         private DateTime nextUpdateCheck = DateTime.MinValue;
+        private DateTime nextUpdateReceiptCheck = DateTime.MinValue;
         private Task<ReleaseInfo> updateCheckTask;
-        private Task<DownloadedUpdate> updateDownloadTask;
+        private Process updateProcess;
         private ReleaseInfo availableRelease;
         private bool manualUpdateCheck;
         private string notifiedVersion;
@@ -167,7 +168,6 @@ namespace QuotaPin.Tray
             RefreshCodexPackageRoot();
             ScanCodexProcesses(true);
             TryResumeAgent();
-            UpdateService.CleanupOldDownloads();
             nextUpdateCheck = DateTime.UtcNow.AddSeconds(8);
             stateTimer = new System.Windows.Forms.Timer();
             stateTimer.Interval = 1000;
@@ -176,9 +176,15 @@ namespace QuotaPin.Tray
                 ScanCodexProcesses(false);
                 UpdateRuntimeState();
                 PollUpdates();
+                if (DateTime.UtcNow >= nextUpdateReceiptCheck)
+                {
+                    nextUpdateReceiptCheck = DateTime.UtcNow.AddSeconds(5);
+                    ShowCompletedUpdateNotice();
+                }
             };
             stateTimer.Start();
             UpdateRuntimeState();
+            ShowCompletedUpdateNotice();
         }
 
         private static string UiText(string english, string chinese, string japanese)
@@ -636,7 +642,7 @@ namespace QuotaPin.Tray
 
         private void CheckForUpdates(bool manual)
         {
-            if (updateCheckTask != null || updateDownloadTask != null) return;
+            if (updateCheckTask != null || updateProcess != null) return;
             manualUpdateCheck = manual;
             availableRelease = null;
             updateItem.Enabled = false;
@@ -651,9 +657,9 @@ namespace QuotaPin.Tray
                 var task = updateCheckTask;
                 updateCheckTask = null;
                 updateItem.Enabled = true;
-                nextUpdateCheck = DateTime.UtcNow.AddHours(12);
                 if (task.IsFaulted)
                 {
+                    nextUpdateCheck = DateTime.UtcNow.AddMinutes(15);
                     updateItem.Text = UiText("Check for updates", "检查更新", "更新を確認");
                     WriteLog("update check failed: " + task.Exception.GetBaseException().Message);
                     if (manualUpdateCheck) ShowInformation(UiText(
@@ -663,6 +669,7 @@ namespace QuotaPin.Tray
                 }
                 else
                 {
+                    nextUpdateCheck = DateTime.UtcNow.AddHours(6);
                     availableRelease = task.Result;
                     if (availableRelease == null)
                     {
@@ -693,53 +700,134 @@ namespace QuotaPin.Tray
                 manualUpdateCheck = false;
             }
 
-            if (updateDownloadTask != null && updateDownloadTask.IsCompleted)
+            if (updateProcess != null && updateProcess.HasExited)
             {
-                var task = updateDownloadTask;
-                updateDownloadTask = null;
+                var process = updateProcess;
+                updateProcess = null;
                 updateItem.Enabled = true;
-                if (task.IsFaulted)
+                var exitCode = process.ExitCode;
+                process.Dispose();
+                if (exitCode != 0)
                 {
-                    WriteLog("update download failed: " + task.Exception.GetBaseException().Message);
+                    WriteLog("update helper failed: exit=" + exitCode.ToString(CultureInfo.InvariantCulture));
                     updateItem.Text = availableRelease == null
                         ? UiText("Check for updates", "检查更新", "更新を確認")
                         : string.Format(CultureInfo.CurrentCulture, UiText("Update to {0}...", "更新到 {0}…", "{0} に更新…"), availableRelease.Version);
                     ShowInformation(UiText(
-                        "The update could not be downloaded or verified. Nothing was installed.",
-                        "更新下载或校验失败，未安装任何内容。",
-                        "更新のダウンロードまたは検証に失敗しました。何もインストールされていません。"));
+                        "The update could not be completed. Nothing unverified was installed.",
+                        "更新未能完成，未安装任何未经校验的内容。",
+                        "更新を完了できませんでした。未検証の内容はインストールされていません。"));
                 }
                 else
                 {
-                    var update = task.Result;
-                    WriteLog("verified update " + update.Release.Version);
-                    Process.Start(new ProcessStartInfo(update.SetupPath, "/VERYSILENT /SUPPRESSMSGBOXES /NORESTART") { UseShellExecute = true });
-                    updateItem.Text = UiText("Installing update...", "正在安装更新…", "更新をインストール中…");
-                    updateItem.Enabled = false;
+                    updateItem.Text = UiText("Check for updates", "检查更新", "更新を確認");
+                    availableRelease = null;
+                    nextUpdateCheck = DateTime.UtcNow.AddMinutes(1);
                 }
             }
 
-            if (updateCheckTask == null && updateDownloadTask == null && DateTime.UtcNow >= nextUpdateCheck) CheckForUpdates(false);
+            if (updateCheckTask == null && updateProcess == null && DateTime.UtcNow >= nextUpdateCheck) CheckForUpdates(false);
         }
 
         private void OfferAvailableUpdate()
         {
-            if (availableRelease == null || updateDownloadTask != null) return;
+            if (availableRelease == null || updateProcess != null) return;
             var message = string.Format(CultureInfo.CurrentCulture, UiText(
                 "QuotaPin {0} is available. Download, verify, and install it now? Codex will stay open, but the quota may briefly disappear during the update.",
                 "QuotaPin {0} 已可用。现在下载、校验并安装吗？Codex 会保持打开，但更新期间额度显示可能会短暂消失。",
                 "QuotaPin {0} を利用できます。今すぐダウンロード、検証、インストールしますか？Codex は開いたままですが、更新中は残量表示が一時的に消える場合があります。"), availableRelease.Version);
             var choice = MessageBox.Show(message, "QuotaPin", MessageBoxButtons.YesNo, MessageBoxIcon.Information, MessageBoxDefaultButton.Button2);
             if (choice != DialogResult.Yes) return;
-            updateItem.Enabled = false;
-            updateItem.Text = UiText("Downloading update...", "正在下载更新…", "更新をダウンロード中…");
             var release = availableRelease;
-            updateDownloadTask = Task.Factory.StartNew(delegate { return UpdateService.DownloadAndVerify(release, currentVersion); });
+            var updater = Path.Combine(installRoot, "update.ps1");
+            if (!File.Exists(updater))
+            {
+                ShowInformation(UiText(
+                    "The update helper is missing. Run the install command once to repair QuotaPin.",
+                    "更新组件缺失，请重新运行一次安装命令修复 QuotaPin。",
+                    "更新コンポーネントがありません。インストールコマンドをもう一度実行して修復してください。"));
+                return;
+            }
+            try
+            {
+                var arguments = "-NoLogo -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File \"" + updater + "\" -Version \"" + release.Version + "\"";
+                updateProcess = Process.Start(new ProcessStartInfo(powerShellPath, arguments)
+                {
+                    UseShellExecute = false,
+                    CreateNoWindow = true,
+                    WindowStyle = ProcessWindowStyle.Hidden,
+                });
+                if (updateProcess == null) throw new InvalidOperationException("The update helper did not start.");
+                updateItem.Enabled = false;
+                updateItem.Text = string.Format(CultureInfo.CurrentCulture, UiText(
+                    "Updating to {0}...",
+                    "正在更新到 {0}…",
+                    "{0} に更新中…"), release.Version);
+                WriteLog("update helper started version=" + release.Version);
+            }
+            catch (Exception error)
+            {
+                if (updateProcess != null) updateProcess.Dispose();
+                updateProcess = null;
+                WriteLog("update helper start failed: " + error.GetType().Name);
+                ShowInformation(UiText(
+                    "QuotaPin could not start the update. Please try again.",
+                    "QuotaPin 无法启动更新，请重试。",
+                    "QuotaPin の更新を開始できませんでした。もう一度お試しください。"));
+            }
         }
 
         private static void ShowInformation(string message)
         {
             MessageBox.Show(message, "QuotaPin", MessageBoxButtons.OK, MessageBoxIcon.Information);
+        }
+
+        private void ShowCompletedUpdateNotice()
+        {
+            try
+            {
+                var resultPath = Path.Combine(installRoot, "logs", "update-completion.json");
+                if (!File.Exists(resultPath) || new FileInfo(resultPath).Length > 16 * 1024) return;
+                var serializer = new JavaScriptSerializer { MaxJsonLength = 16 * 1024 };
+                var result = serializer.DeserializeObject(File.ReadAllText(resultPath)) as Dictionary<string, object>;
+                if (result == null) return;
+                object rawStatus;
+                object rawVersion;
+                object rawWrittenAt;
+                if (!result.TryGetValue("status", out rawStatus) || !result.TryGetValue("version", out rawVersion) ||
+                    !result.TryGetValue("writtenAt", out rawWrittenAt)) return;
+                var status = Convert.ToString(rawStatus, CultureInfo.InvariantCulture);
+                var version = Convert.ToString(rawVersion, CultureInfo.InvariantCulture);
+                DateTimeOffset writtenAt;
+                if (!string.Equals(version, currentVersion, StringComparison.Ordinal) ||
+                    !(string.Equals(status, "succeeded", StringComparison.Ordinal) || string.Equals(status, "degraded", StringComparison.Ordinal)) ||
+                    !DateTimeOffset.TryParse(Convert.ToString(rawWrittenAt, CultureInfo.InvariantCulture), CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out writtenAt) ||
+                    writtenAt > DateTimeOffset.UtcNow.AddMinutes(5) || writtenAt < DateTimeOffset.UtcNow.AddHours(-24)) return;
+                var receipt = version + "|" + writtenAt.ToUniversalTime().ToString("o", CultureInfo.InvariantCulture);
+                using (var key = Registry.CurrentUser.CreateSubKey(@"Software\QuotaPin"))
+                {
+                    var previous = Convert.ToString(key.GetValue("LastUpdateNotice"), CultureInfo.InvariantCulture);
+                    if (string.Equals(previous, receipt, StringComparison.Ordinal)) return;
+                    key.SetValue("LastUpdateNotice", receipt, RegistryValueKind.String);
+                }
+                trayIcon.BalloonTipTitle = "QuotaPin";
+                trayIcon.BalloonTipText = string.Equals(status, "succeeded", StringComparison.Ordinal)
+                    ? string.Format(CultureInfo.CurrentCulture, UiText(
+                        "Updated to {0}. Codex stayed open.",
+                        "已更新到 {0}，Codex 保持打开。",
+                        "{0} に更新しました。Codex は開いたままです。"), version)
+                    : string.Format(CultureInfo.CurrentCulture, UiText(
+                        "Updated to {0}. The quota will rejoin on the next Codex launch.",
+                        "已更新到 {0}，额度会在下次启动 Codex 时重新接入。",
+                        "{0} に更新しました。残量表示は次回 Codex 起動時に再接続します。"), version);
+                trayIcon.ShowBalloonTip(5000);
+                nextUpdateReceiptCheck = DateTime.UtcNow.AddHours(6);
+                try { File.Delete(resultPath); } catch { }
+            }
+            catch (Exception error)
+            {
+                WriteLog("update completion notice skipped: " + error.GetType().Name);
+            }
         }
 
         private void WriteLog(string message)

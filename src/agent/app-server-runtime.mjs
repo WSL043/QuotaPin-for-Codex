@@ -86,6 +86,10 @@ export class AppServerRuntime {
     this.rpcId = 10;
     this.readInFlight = null;
     this.readTimeoutMs = Math.max(1_000, Number(options.readTimeoutMs) || 10_000);
+    this.maxConsecutiveReadTimeouts = Math.max(1, Math.min(5, Number(options.maxConsecutiveReadTimeouts) || 2));
+    this.consecutiveReadTimeouts = 0;
+    this.initializeTimeoutMs = Math.max(1_000, Number(options.initializeTimeoutMs) || 10_000);
+    this.initializeTimer = null;
     this.refreshQueued = false;
     this.usageRevision = 0;
     this.usageTrace = [];
@@ -109,7 +113,14 @@ export class AppServerRuntime {
   }
 
   getDiagnostics() {
-    return { usageRevision: this.usageRevision, usageTrace: this.usageTrace.map((entry) => ({ ...entry })) };
+    return {
+      usageRevision: this.usageRevision,
+      usageTrace: this.usageTrace.map((entry) => ({ ...entry })),
+      rpcReady: this.state.rpcReady,
+      appServerPid: Number(this.child?.pid) || null,
+      readInFlightId: this.readInFlight?.id ?? null,
+      consecutiveReadTimeouts: this.consecutiveReadTimeouts,
+    };
   }
 
   waitForFirstUsage() {
@@ -129,6 +140,7 @@ export class AppServerRuntime {
   }
 
   markStartupFailure(reason) {
+    this.clearInitializationTimer();
     this.state = {
       ...this.state,
       rpcReady: false,
@@ -152,14 +164,39 @@ export class AppServerRuntime {
     }
     const id = this.rpcId++;
     const timeout = setTimeout(() => {
-      if (this.readInFlight?.id !== id) return;
-      this.readInFlight = null;
-      this.log(`app-server rate-limit read timed out id=${id}`);
-      this.flushQueuedRefresh(true);
+      this.handleReadTimeout(id);
     }, this.readTimeoutMs);
     timeout.unref?.();
     this.readInFlight = { id, usageRevision: this.usageRevision, timeout };
     this.rpcSend({ id, method: "account/rateLimits/read", params: null });
+  }
+
+  handleReadTimeout(id) {
+    if (this.readInFlight?.id !== id) return false;
+    this.clearReadInFlight();
+    this.consecutiveReadTimeouts += 1;
+    const reason = `app-server consecutive rate-limit read timeouts ${this.consecutiveReadTimeouts}/${this.maxConsecutiveReadTimeouts}`;
+    this.log(`${reason} id=${id}`);
+    this.writeLifecycleState("degraded", reason);
+    if (this.consecutiveReadTimeouts >= this.maxConsecutiveReadTimeouts) {
+      this.retireChild(reason);
+      return true;
+    }
+    this.flushQueuedRefresh(true);
+    return false;
+  }
+
+  clearInitializationTimer() {
+    clearTimeout(this.initializeTimer);
+    this.initializeTimer = null;
+  }
+
+  handleInitializationTimeout(child) {
+    if (child !== this.child || this.state.rpcReady) return false;
+    const reason = "app-server initialization timed out";
+    this.clearInitializationTimer();
+    this.retireChild(reason);
+    return true;
   }
 
   clearReadInFlight() {
@@ -193,11 +230,27 @@ export class AppServerRuntime {
     this.restartTimer.unref?.();
   }
 
+  retireChild(reason) {
+    const child = this.child;
+    if (!child) {
+      this.markStartupFailure(reason);
+      return;
+    }
+    this.handleFailure(child, reason);
+    try { child.stdin?.end(); } catch {}
+    const killTimer = setTimeout(() => {
+      try { child.kill(); } catch {}
+    }, 300);
+    killTimer.unref?.();
+  }
+
   handleFailure(child, reason) {
     if (child !== this.child) return;
     this.child = null;
+    this.clearInitializationTimer();
     this.clearReadInFlight();
     this.refreshQueued = false;
+    this.consecutiveReadTimeouts = 0;
     this.state = {
       ...this.state,
       rpcReady: false,
@@ -228,6 +281,7 @@ export class AppServerRuntime {
         return;
       }
       this.clearReadInFlight();
+      this.consecutiveReadTimeouts = 0;
       if (activeRead.usageRevision !== this.usageRevision) {
         this.log(`ignored stale rate-limit response id=${message.id}`);
         this.flushQueuedRefresh(true);
@@ -242,6 +296,7 @@ export class AppServerRuntime {
     });
     this.state = result.state;
     if (result.effect === "initialized") {
+      this.clearInitializationTimer();
       this.rpcSend({ method: "initialized", params: null });
       this.refresh();
       this.log("app-server initialized");
@@ -297,6 +352,8 @@ export class AppServerRuntime {
     this.clearReadInFlight();
     this.refreshQueued = false;
     this.usageRevision = 0;
+    this.consecutiveReadTimeouts = 0;
+    this.clearInitializationTimer();
     this.state = { ...this.state, rpcReady: false };
     let invocation;
     try {
@@ -324,6 +381,8 @@ export class AppServerRuntime {
     child.on("exit", (code) => {
       this.handleFailure(child, `app-server exited code=${code ?? "unknown"}`);
     });
+    this.initializeTimer = setTimeout(() => this.handleInitializationTimeout(child), this.initializeTimeoutMs);
+    this.initializeTimer.unref?.();
     this.rpcSend({
       id: 1,
       method: "initialize",
@@ -336,6 +395,7 @@ export class AppServerRuntime {
     this.stopping = true;
     clearTimeout(this.restartTimer);
     this.restartTimer = null;
+    this.clearInitializationTimer();
     this.clearReadInFlight();
     this.refreshQueued = false;
     const child = this.child;

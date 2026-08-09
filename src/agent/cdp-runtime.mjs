@@ -4,19 +4,32 @@ export class CdpSession {
   constructor(url, targetId, onConfigAction, options = {}) {
     const WebSocketImpl = options.WebSocketImpl ?? globalThis.WebSocket;
     if (typeof WebSocketImpl !== "function") throw new Error("WebSocket is unavailable");
+    this.url = url;
     this.targetId = targetId;
     this.onConfigAction = onConfigAction;
     this.onUpdateAction = options.onUpdateAction;
+    this.onClose = options.onClose;
     this.nextId = 1;
     this.pending = new Map();
+    this.closed = false;
     this.socket = new WebSocketImpl(url);
     this.ready = new Promise((resolve, reject) => {
+      let settled = false;
+      const settle = (error = null) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        if (error) reject(error);
+        else resolve();
+      };
       const timer = setTimeout(() => {
-        try { this.socket.close(); } catch {}
-        reject(new Error("CDP socket open timed out"));
+        this.invalidate(new Error("CDP socket open timed out"));
       }, options.openTimeoutMs ?? 5000);
-      this.socket.addEventListener("open", () => { clearTimeout(timer); resolve(); }, { once: true });
-      this.socket.addEventListener("error", () => { clearTimeout(timer); reject(new Error("CDP socket failed to open")); }, { once: true });
+      this.settleReady = settle;
+      this.socket.addEventListener("open", () => settle(), { once: true });
+    });
+    this.socket.addEventListener("error", () => {
+      this.invalidate(new Error("CDP socket failed"));
     });
     this.socket.addEventListener("message", (event) => {
       let message;
@@ -41,22 +54,42 @@ export class CdpSession {
       if (message.error) pending.reject(new Error(message.error.message));
       else pending.resolve(message.result);
     });
-    this.socket.addEventListener("close", () => {
-      for (const pending of this.pending.values()) {
-        clearTimeout(pending.timer);
-        pending.reject(new Error("CDP socket closed"));
-      }
-      this.pending.clear();
-    });
+    this.socket.addEventListener("close", () => this.markClosed(new Error("CDP socket closed")));
+  }
+
+  markClosed(error = new Error("CDP socket closed")) {
+    if (this.closed) return;
+    this.closed = true;
+    this.settleReady?.(error);
+    for (const pending of this.pending.values()) {
+      clearTimeout(pending.timer);
+      pending.reject(error);
+    }
+    this.pending.clear();
+    this.onClose?.(this, error);
+  }
+
+  invalidate(error) {
+    this.markClosed(error);
+    try { this.socket.close(); } catch {}
+  }
+
+  isAlive() {
+    if (this.closed) return false;
+    const readyState = Number(this.socket?.readyState);
+    return !Number.isFinite(readyState) || readyState < 2;
   }
 
   async send(method, params = {}, timeoutMs = 5000) {
     await this.ready;
+    if (!this.isAlive()) throw new Error("CDP socket is not open");
     const id = this.nextId++;
     return new Promise((resolve, reject) => {
       const timer = setTimeout(() => {
         this.pending.delete(id);
-        reject(new Error(`CDP ${method} timed out`));
+        const error = new Error(`CDP ${method} timed out`);
+        reject(error);
+        this.invalidate(error);
       }, timeoutMs);
       this.pending.set(id, { resolve, reject, timer });
       try {
@@ -65,6 +98,7 @@ export class CdpSession {
         clearTimeout(timer);
         this.pending.delete(id);
         reject(error);
+        this.invalidate(error);
       }
     });
   }
@@ -139,7 +173,7 @@ export class CdpSession {
   }
 
   close() {
-    try { this.socket.close(); } catch {}
+    this.invalidate(new Error("CDP session closed"));
   }
 }
 
@@ -169,7 +203,10 @@ export class CdpTargetRuntime {
     this.reloadConfig = options.reloadConfig ?? (() => {});
     this.log = options.log ?? (() => {});
     this.fetchImpl = options.fetchImpl ?? globalThis.fetch;
-    this.createSession = options.createSession ?? ((url, id, configHandler, updateHandler) => new CdpSession(url, id, configHandler, { onUpdateAction: updateHandler }));
+    this.createSession = options.createSession ?? ((url, id, configHandler, updateHandler, onClosed) => new CdpSession(url, id, configHandler, {
+      onUpdateAction: updateHandler,
+      onClose: onClosed,
+    }));
     this.sessions = new Map();
     this.everConnected = false;
     this.deliverySequence = 0;
@@ -184,10 +221,32 @@ export class CdpTargetRuntime {
     const mainTargets = selectMainTargets(list, this.mainTargetUrl);
     let attached = false;
     for (const target of mainTargets) {
-      if (this.sessions.has(target.id)) continue;
-      const session = this.createSession(target.webSocketDebuggerUrl, target.id, this.onConfigAction, this.onUpdateAction);
+      const current = this.sessions.get(target.id);
+      const currentAlive = current && (typeof current.isAlive !== "function" || current.isAlive() !== false);
+      const currentEndpoint = typeof current?.url === "string" ? current.url : target.webSocketDebuggerUrl;
+      if (currentAlive && currentEndpoint === target.webSocketDebuggerUrl) continue;
+      if (current) {
+        this.sessions.delete(target.id);
+        current.close();
+        this.log(`discarded unusable main target session id=${target.id}`);
+      }
+      const onClosed = (closedSession) => {
+        if (this.sessions.get(target.id) !== closedSession) return;
+        this.sessions.delete(target.id);
+        this.log(`detached closed main target id=${target.id}`);
+      };
+      const session = this.createSession(
+        target.webSocketDebuggerUrl,
+        target.id,
+        this.onConfigAction,
+        this.onUpdateAction,
+        onClosed,
+      );
       try {
         await session.install(this.installSource);
+        if (typeof session.isAlive === "function" && session.isAlive() === false) {
+          throw new Error("CDP session closed during installation");
+        }
       } catch (error) {
         session.close();
         throw error;

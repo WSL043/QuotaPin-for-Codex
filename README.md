@@ -47,6 +47,8 @@ QuotaPin keeps the useful part visible in the account row, so checking quota bec
 
 ## Platform status
 
+Latest stable: **v1.1.0**.
+
 | Platform | Status |
 |---|---|
 | Windows 11 x64 | ✅ Stable / verified on a signed-in machine |

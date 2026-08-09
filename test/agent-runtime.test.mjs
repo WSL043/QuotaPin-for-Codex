@@ -76,6 +76,44 @@ test("CDP target runtime installs one payload, updates it, and closes stale sess
   assert.equal(runtime.firstSession(), null);
 });
 
+test("CDP target runtime replaces a disconnected session even when the target id is unchanged", async () => {
+  const target = { id: "main", url: "app://-/index.html", type: "page", webSocketDebuggerUrl: "ws://main" };
+  const created = [];
+  const runtime = new CdpTargetRuntime({
+    port: 9222,
+    installSource: "single-payload",
+    rendererInstanceId: "agent-runtime-reconnect",
+    getClientState: () => ({ status: "ready" }),
+    fetchImpl: async () => ({ ok: true, json: async () => [target] }),
+    createSession: (_url, id, _configHandler, _updateHandler, onClosed) => {
+      let alive = true;
+      const session = {
+        install: async () => {},
+        update: async () => true,
+        cleanup: async () => true,
+        isAlive: () => alive,
+        close: () => { alive = false; },
+        disconnect: () => {
+          alive = false;
+          onClosed?.(session);
+        },
+      };
+      created.push({ id, session });
+      return session;
+    },
+  });
+
+  await runtime.sync();
+  assert.equal(created.length, 1);
+  created[0].session.disconnect();
+  assert.equal(runtime.firstSession(), null, "a closed WebSocket remained registered as the active target session");
+
+  await runtime.sync();
+  assert.equal(created.length, 2, "the unchanged target id suppressed a replacement CDP connection");
+  assert.equal(runtime.firstSession(), created[1].session);
+  runtime.close();
+});
+
 test("CDP target runtime refuses ownerless renderer delivery", () => {
   assert.throws(() => new CdpTargetRuntime({
     port: 9222,
@@ -122,6 +160,31 @@ test("CDP session update and cleanup are owner-scoped", async () => {
   assert.equal(await session.cleanup("agent-a"), true);
   assert.match(socket.messages.at(-1).params.expression, /controller\.instanceId !== "agent-a"/);
   session.close();
+});
+
+test("CDP session invalidates a silent socket after a command timeout", async () => {
+  class SilentSocket extends EventTarget {
+    constructor() {
+      super();
+      this.readyState = 0;
+      queueMicrotask(() => {
+        this.readyState = 1;
+        this.dispatchEvent(new Event("open"));
+      });
+    }
+
+    send() {}
+
+    close() {
+      if (this.readyState === 3) return;
+      this.readyState = 3;
+      this.dispatchEvent(new Event("close"));
+    }
+  }
+
+  const session = new CdpSession("ws://silent", "main", null, { WebSocketImpl: SilentSocket });
+  await assert.rejects(session.send("Runtime.enable", {}, 10), /CDP Runtime\.enable timed out/);
+  assert.equal(session.isAlive(), false, "a timed-out CDP command left the socket eligible for reuse");
 });
 
 function createConfigRuntime(options = {}) {
@@ -250,6 +313,128 @@ test("App Server serializes reads and rejects a response made stale by a newer n
   assert.deepEqual(usages, ["notification-new", "response-current"]);
   assert.equal(runtime.getDiagnostics().usageTrace.length, 0, "marker-only fixtures must not invent quota windows");
   assert.ok(logs.some((message) => message.includes("ignored stale rate-limit response id=10")));
+  runtime.stop();
+});
+
+test("App Server retires an unresponsive child after consecutive rate-limit read timeouts", () => {
+  const writes = [];
+  const logs = [];
+  let ended = 0;
+  const runtime = new AppServerRuntime({
+    version: "test",
+    readTimeoutMs: 60_000,
+    maxConsecutiveReadTimeouts: 2,
+    log: (message) => logs.push(message),
+  });
+  const child = {
+    stdin: {
+      writable: true,
+      write: (line) => writes.push(JSON.parse(line)),
+      end: () => { ended += 1; },
+    },
+    kill: () => {},
+  };
+  runtime.child = child;
+  runtime.state = { ...runtime.state, rpcReady: true };
+
+  runtime.refresh();
+  runtime.handleReadTimeout(10);
+  assert.equal(runtime.child, child, "one transient timeout should not immediately discard the process");
+  assert.deepEqual(writes.map((message) => message.id), [10, 11]);
+
+  runtime.handleReadTimeout(11);
+  assert.equal(runtime.child, null, "the unresponsive process remained the active App Server");
+  assert.equal(runtime.getUsage().status, "error", "stale quota remained marked ready during process recovery");
+  assert.equal(ended, 1);
+  assert.ok(logs.some((message) => message.includes("consecutive rate-limit read timeouts")));
+  runtime.stop();
+});
+
+test("App Server clears the timeout streak after a successful read", () => {
+  const writes = [];
+  const runtime = new AppServerRuntime({
+    version: "test",
+    readTimeoutMs: 60_000,
+    maxConsecutiveReadTimeouts: 2,
+    normalizeRateLimits: () => ({ status: "ready", windows: [] }),
+  });
+  const child = {
+    stdin: {
+      writable: true,
+      write: (line) => writes.push(JSON.parse(line)),
+      end: () => {},
+    },
+    kill: () => {},
+  };
+  runtime.child = child;
+  runtime.state = { ...runtime.state, rpcReady: true };
+
+  runtime.refresh();
+  runtime.handleReadTimeout(10);
+  runtime.handleMessage({ id: 11, result: { rateLimits: { marker: "recovered" } } });
+  assert.equal(runtime.getDiagnostics().consecutiveReadTimeouts, 0);
+
+  runtime.refresh();
+  runtime.handleReadTimeout(12);
+  assert.equal(runtime.child, child, "two non-consecutive timeouts incorrectly retired a healthy process");
+  assert.equal(runtime.getDiagnostics().consecutiveReadTimeouts, 1);
+  runtime.stop();
+});
+
+test("App Server retires a child that never completes initialization", () => {
+  const logs = [];
+  let ended = 0;
+  const runtime = new AppServerRuntime({
+    version: "test",
+    log: (message) => logs.push(message),
+  });
+  const child = {
+    stdin: { writable: true, write: () => {}, end: () => { ended += 1; } },
+    kill: () => {},
+  };
+  runtime.child = child;
+
+  runtime.handleInitializationTimeout(child);
+  assert.equal(runtime.child, null, "a spawned but uninitialized process remained active forever");
+  assert.equal(runtime.getUsage().status, "error");
+  assert.equal(ended, 1);
+  assert.ok(logs.some((message) => message.includes("initialization timed out")));
+  runtime.stop();
+});
+
+test("App Server clears its initialization watchdog only after the handshake succeeds", () => {
+  const writes = [];
+  const childHandlers = {};
+  const stdoutHandlers = {};
+  const child = {
+    stdin: {
+      writable: true,
+      write: (line) => writes.push(JSON.parse(line)),
+      end: () => {},
+    },
+    stdout: {
+      setEncoding: () => {},
+      on: (name, handler) => { stdoutHandlers[name] = handler; },
+    },
+    on: (name, handler) => { childHandlers[name] = handler; },
+    kill: () => {},
+  };
+  const runtime = new AppServerRuntime({
+    version: "test",
+    initializeTimeoutMs: 60_000,
+    commandResolver: () => ({ command: "fixture", args: [] }),
+    spawnImpl: () => child,
+  });
+
+  runtime.start();
+  assert.equal(writes[0]?.method, "initialize");
+  assert.ok(runtime.initializeTimer, "the spawned child had no initialization liveness deadline");
+  runtime.handleMessage({ id: 1, result: {} });
+  assert.equal(runtime.initializeTimer, null, "a successful handshake left a stale initialization timer");
+  assert.equal(runtime.state.rpcReady, true);
+  assert.equal(writes.at(-1)?.method, "account/rateLimits/read");
+  assert.equal(typeof stdoutHandlers.data, "function");
+  assert.equal(typeof childHandlers.exit, "function");
   runtime.stop();
 });
 

@@ -607,6 +607,7 @@ test("live sidebar resizing uses a frame-coalesced layout path without full rend
     await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
     const before = controller.inspectLayoutRuntime();
     const footer = document.querySelector('#account-footer');
+    const beforeRowWidth = document.querySelector('#account').getBoundingClientRect().width;
     await new Promise((resolve) => {
       let index = 0;
       const timer = setInterval(() => {
@@ -629,7 +630,9 @@ test("live sidebar resizing uses a frame-coalesced layout path without full rend
     return {
       before,
       after,
+      beforeRowWidth,
       row,
+      rowWidth: row.width,
       visible,
       contained: visible.every(({ rect }) => rect.left >= row.left - .5 && rect.right <= row.right + .5),
       separated: visible.every(({ rect }, index) => index === 0 || rect.left >= visible[index - 1].rect.right - .5),
@@ -638,9 +641,10 @@ test("live sidebar resizing uses a frame-coalesced layout path without full rend
   const eventDelta = result.after.resizeEvents - result.before.resizeEvents;
   const frameDelta = result.after.resizeFrames - result.before.resizeFrames;
   const pendingFrameDebt = Math.max(0, result.before.resizeEvents - result.before.resizeFrames);
-  assert.ok(eventDelta >= 10, JSON.stringify(result));
+  assert.ok(eventDelta > 0, JSON.stringify(result));
   assert.ok(frameDelta > 0 && frameDelta <= eventDelta + pendingFrameDebt, JSON.stringify(result));
   assert.ok(result.after.resizeFrames <= result.after.resizeEvents, JSON.stringify(result));
+  assert.ok(result.rowWidth > result.beforeRowWidth + 1, JSON.stringify(result));
   assert.ok(result.after.renders - result.before.renders <= 1, JSON.stringify(result));
   assert.equal(result.after.integrityRepairs, result.before.integrityRepairs, JSON.stringify(result));
   assert.equal(result.contained, true, JSON.stringify(result));

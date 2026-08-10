@@ -17,10 +17,18 @@ test("settings and CDP operations have bounded acknowledgements", () => {
 });
 
 test("the usage service reports readiness and has bounded restart recovery", () => {
-  assert.match(source, /this\.restartAttempt >= 5/);
+  assert.match(source, /Math\.min\(60_000/);
+  assert.doesNotMatch(source, /retries exhausted|restart budget exhausted/);
   assert.match(source, /this\.writeLifecycleState\("quota-ready"\)/);
   assert.match(source, /this\.writeLifecycleState\("degraded"/);
   assert.match(source, /broadcastClientState\(null, "quota"\)/);
+});
+
+test("the renderer receives a low-cost heartbeat and refuses to leave stale quota looking live", () => {
+  assert.match(source, /broadcastClientState\(null, "heartbeat"\)/);
+  assert.match(source, /nextState\?\.delivery\?\.reason === "heartbeat" && !wasStale/);
+  assert.match(source, /evaluateDeliveryFreshness\(deliveryRuntime\)/);
+  assert.match(source, /Quota data is temporarily unavailable/);
 });
 
 test("disabled optional runtime performs no DOM classification", () => {

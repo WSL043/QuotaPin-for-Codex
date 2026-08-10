@@ -102,12 +102,81 @@ function Get-QuotaPinResumableRuntime(
     Get-QuotaPinTrustedRuntime -InstallRoot $InstallRoot
 }
 
+function Publish-QuotaPinResumedAutoAttachGuard(
+    [Parameter(Mandatory = $true)][string]$InstallRoot,
+    [Parameter(Mandatory = $true)]$Runtime,
+    [Parameter(Mandatory = $true)][int]$AgentPid
+) {
+    $ResolvedRoot = [IO.Path]::GetFullPath($InstallRoot).TrimEnd('\')
+    $StatePath = Join-Path $ResolvedRoot 'install-state.json'
+    if (-not (Test-Path -LiteralPath $StatePath -PathType Leaf)) { return 'not-required' }
+    try { $InstallState = Get-Content -Raw -LiteralPath $StatePath | ConvertFrom-Json }
+    catch { throw 'QuotaPin install ownership is unreadable after the update.' }
+    if ([int]$InstallState.schema -ne 1 -or [string]$InstallState.owner -cne 'command' -or
+        $InstallState.preferences.autoAttach -ne $true) { return 'not-required' }
+
+    $Generation = [string]$Runtime.generation
+    $CodexPid = [int]$Runtime.codexPid
+    $Port = [int]$Runtime.port
+    if ($Generation -notmatch '^[0-9a-f]{32}$' -or $CodexPid -le 0 -or $AgentPid -le 0 -or
+        $Port -lt 1024 -or $Port -gt 65535) {
+        throw 'QuotaPin cannot publish an invalid resumed runtime to its watcher.'
+    }
+    $CodexCreation = (ConvertTo-QuotaPinInstant $Runtime.codexCreationTimeUtc).ToString('o')
+    $Guard = [ordered]@{
+        schema = 1
+        state = 'successor-observed'
+        generation = $Generation
+        writtenAt = [DateTimeOffset]::Now.ToString('o')
+        # A hot update does not create a new Codex process.  Bind both sides of
+        # the supervision receipt to the exact already-verified process so the
+        # watcher can recover only this session and can never relaunch Codex.
+        sourcePid = $CodexPid
+        sourceCreationTimeUtc = $CodexCreation
+        successorPid = $CodexPid
+        successorCreationTimeUtc = $CodexCreation
+        agentPid = $AgentPid
+        port = $Port
+    }
+    $GuardPath = Join-Path $ResolvedRoot 'logs\auto-attach-guard.json'
+    $Parent = Split-Path -Parent $GuardPath
+    New-Item -ItemType Directory -Path $Parent -Force | Out-Null
+    $Temporary = '{0}.{1}.tmp' -f $GuardPath, ([Guid]::NewGuid().ToString('N'))
+    try {
+        [IO.File]::WriteAllText($Temporary, ($Guard | ConvertTo-Json -Compress), [Text.UTF8Encoding]::new($false))
+        Move-Item -LiteralPath $Temporary -Destination $GuardPath -Force
+    }
+    finally {
+        if (Test-Path -LiteralPath $Temporary) { Remove-Item -LiteralPath $Temporary -Force -ErrorAction SilentlyContinue }
+    }
+    'published'
+}
+
 function Resume-QuotaPinTrustedRuntime(
     [Parameter(Mandatory = $true)][string]$InstallRoot,
     [Parameter(Mandatory = $true)]$ExpectedRuntime,
     [string]$AgentPath = ''
 ) {
     if (-not $ExpectedRuntime) { return 'not-needed' }
+    $ResumeMutex = [Threading.Mutex]::new($false, 'Local\QuotaPinAgentResume')
+    $ResumeMutexAcquired = $false
+    try {
+        try { $ResumeMutexAcquired = $ResumeMutex.WaitOne(20000) }
+        catch [Threading.AbandonedMutexException] { $ResumeMutexAcquired = $true }
+        if (-not $ResumeMutexAcquired) { return 'next-launch' }
+        Invoke-QuotaPinTrustedRuntimeResumeLocked -InstallRoot $InstallRoot -ExpectedRuntime $ExpectedRuntime -AgentPath $AgentPath
+    }
+    finally {
+        if ($ResumeMutexAcquired) { try { $ResumeMutex.ReleaseMutex() } catch {} }
+        $ResumeMutex.Dispose()
+    }
+}
+
+function Invoke-QuotaPinTrustedRuntimeResumeLocked(
+    [Parameter(Mandatory = $true)][string]$InstallRoot,
+    [Parameter(Mandatory = $true)]$ExpectedRuntime,
+    [string]$AgentPath = ''
+) {
     $ResolvedRoot = [IO.Path]::GetFullPath($InstallRoot).TrimEnd('\')
     if (-not $AgentPath) { $AgentPath = Join-Path $ResolvedRoot 'QuotaPin.Agent.exe' }
     $ResolvedAgentPath = [IO.Path]::GetFullPath($AgentPath)
@@ -121,13 +190,18 @@ function Resume-QuotaPinTrustedRuntime(
         [string]$LiveRuntime.codexCreationTimeUtc -ceq [string]$ExpectedRuntime.codexCreationTimeUtc
     if ($SameLiveCodex) {
         foreach ($Attempt in 1..60) {
+            $QuotaReady = $false
             try {
                 $Lifecycle = Get-Content -Raw -LiteralPath (Join-Path $LogRoot 'lifecycle.json') | ConvertFrom-Json
                 if ([int]$Lifecycle.agentPid -eq [int]$LiveRuntime.agentPid -and
                     [int]$Lifecycle.codexPid -eq [int]$LiveRuntime.codexPid -and
-                    [string]$Lifecycle.state -eq 'quota-ready') { return 'quota-ready' }
+                    [string]$Lifecycle.state -eq 'quota-ready') { $QuotaReady = $true }
             }
             catch {}
+            if ($QuotaReady) {
+                $null = Publish-QuotaPinResumedAutoAttachGuard -InstallRoot $ResolvedRoot -Runtime $LiveRuntime -AgentPid ([int]$LiveRuntime.agentPid)
+                return 'quota-ready'
+            }
             if (-not (Get-Process -Id ([int]$LiveRuntime.agentPid) -ErrorAction SilentlyContinue)) { break }
             Start-Sleep -Milliseconds 250
         }
@@ -170,14 +244,19 @@ function Resume-QuotaPinTrustedRuntime(
     Write-QuotaPinJsonAtomic -Path (Join-Path $LogRoot 'runtime.json') -Value $ReplacementRuntime
     foreach ($Attempt in 1..60) {
         Start-Sleep -Milliseconds 250
+        $QuotaReady = $false
         try {
             $Lifecycle = Get-Content -Raw -LiteralPath (Join-Path $LogRoot 'lifecycle.json') | ConvertFrom-Json
             if ([int]$Lifecycle.agentPid -eq $ReplacementAgent.Id -and [int]$Lifecycle.port -eq $ResumePort -and
                 [int]$Lifecycle.codexPid -eq [int]$CurrentRuntime.codexPid -and
                 [string]$Lifecycle.generation -ceq [string]$CurrentRuntime.generation -and
-                $Lifecycle.state -eq 'quota-ready') { return 'quota-ready' }
+                $Lifecycle.state -eq 'quota-ready') { $QuotaReady = $true }
         }
         catch {}
+        if ($QuotaReady) {
+            $null = Publish-QuotaPinResumedAutoAttachGuard -InstallRoot $ResolvedRoot -Runtime $ReplacementRuntime -AgentPid $ReplacementAgent.Id
+            return 'quota-ready'
+        }
         if (-not (Get-Process -Id $ReplacementAgent.Id -ErrorAction SilentlyContinue)) { break }
     }
     # A timed-out replacement is not a trusted background runtime. Stop only

@@ -5,6 +5,7 @@ import path from "node:path";
 import test from "node:test";
 import { resolveCodexAppServerCommand } from "../src/agent/app-server-runtime.mjs";
 import {
+  macAgentResumeDelayMs,
   macAutoAttachDecision,
   macProcessIdentityKey,
   macProcessIdentityMatches,
@@ -116,6 +117,22 @@ test("macOS auto-attach permits one fresh handoff and then protects the successo
   assert.equal(macProcessIdentityKey(source), `100:${source.startedAt}`);
   assert.equal(macProcessIdentityMatches(source, source), true);
   assert.equal(macProcessIdentityMatches(source, successor), false);
+});
+
+test("macOS Agent recovery uses bounded exponential backoff without reopening Codex", () => {
+  assert.deepEqual(
+    Array.from({ length: 9 }, (_, failureCount) => macAgentResumeDelayMs(failureCount)),
+    [0, 2_000, 4_000, 8_000, 16_000, 30_000, 30_000, 30_000, 30_000],
+  );
+  const launcher = fs.readFileSync(new URL("../src/macos/launcher.mjs", import.meta.url), "utf8");
+  assert.match(launcher, /async function resumeManagedAgent/);
+  assert.match(launcher, /agent resumed without reopening Codex/);
+  assert.match(launcher, /mainTargetAvailable/);
+  const resumeSource = launcher.slice(
+    launcher.indexOf("async function resumeManagedAgent"),
+    launcher.indexOf("async function launchOnce"),
+  );
+  assert.doesNotMatch(resumeSource, /\/usr\/bin\/open|openArguments/);
 });
 
 test("macOS production package owns a user LaunchAgent and a bounded uninstall path", () => {

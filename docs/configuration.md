@@ -154,7 +154,7 @@ A compact valid document looks like this:
 | `displayMode` | `modules`, `template` | Independent modules or one Code-defined value. |
 | `showValue`, `showDot`, `showTodayTokens`, `showLifetimeTokens`, `showLabel`, `showCountdown`, `showRelative`, `showSeconds`, `showDate`, `showReset` | boolean | Independent inline module visibility. The token counters are optional; `countdown` is compact and universal; `relative` uses localized words. |
 | `showBar` | boolean | Optional quota line at the bottom of the account row; it uses the current percentage and value color without entering horizontal layout. |
-| `barScope` | `quota` \| `row` | `quota` follows the first and last visible quota module so the line reads as part of that group. `row` restores the former full-row rail. This advanced setting is available in Code. |
+| `barScope` | `quota` \| `row` | `quota` follows the first and last visible quota module. `row` spans the usable account row: Legacy stops before Codex Help, while Beta uses the expanded row after Help is hidden. Both choices have a direct visual control in Quick and remain editable in Code. |
 | `moduleOrder` | one permutation of all twelve module ids | Fallback order when two modules are saved at the same horizontal point. |
 | `layoutMode` | `auto`, `free` | Stable semantic docking or exact normalized coordinates. Quick uses `auto`; `free` is an expert Code option. |
 | `snapThreshold` | integer `0`–`48` | Magnetic distance in pixels for `auto`; `0` requires an exact target hit. |
@@ -239,13 +239,13 @@ Only compatible, immutable releases with an exact public package set are eligibl
 The remote bootstrap without `-Version` resolves GitHub's immutable latest stable release. Supplying an exact published stable version permits a repair or compatible rollback. Reinstalling the same version follows the same transactional replacement path and does not reset configuration.
 
 ```powershell
-& ([scriptblock]::Create((irm https://raw.githubusercontent.com/WSL043/QuotaPin-for-Codex/main/install.ps1))) -Version '1.1.1'
+& ([scriptblock]::Create((irm https://raw.githubusercontent.com/WSL043/QuotaPin-for-Codex/main/install.ps1))) -Version '1.1.2'
 ```
 
 On macOS, the equivalent exact-version boundary is:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/WSL043/QuotaPin-for-Codex/main/install-macos.sh | bash -s -- --version 1.1.1
+curl -fsSL https://raw.githubusercontent.com/WSL043/QuotaPin-for-Codex/main/install-macos.sh | bash -s -- --version 1.1.2
 ```
 
 Older entries are user-selected recovery versions, not a transactional rollback guarantee. If an older Agent encounters a configuration from a newer schema, it opens that configuration read-only instead of overwriting it. Published update behavior is counted as supported only after the corresponding path appears in [observed compatibility](compatibility.md).

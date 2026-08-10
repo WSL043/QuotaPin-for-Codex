@@ -4,6 +4,7 @@ import path from "node:path";
 import { randomUUID } from "node:crypto";
 import { spawn, spawnSync } from "node:child_process";
 import {
+  macAgentResumeDelayMs,
   macAutoAttachDecision,
   macProcessIdentityKey,
   macProcessIdentityMatches,
@@ -17,7 +18,7 @@ import {
   validateOfficialCodexIdentity,
 } from "./launcher-runtime.mjs";
 
-const VERSION = "1.1.1";
+const VERSION = "1.1.2";
 const SOURCE_REPOSITORY = "https://github.com/WSL043/QuotaPin-for-Codex";
 const BUILD_COMMIT = "__QUOTAPIN_BUILD_COMMIT__";
 const POLL_MS = 1_000;
@@ -196,16 +197,78 @@ function receiptMatches(receipt, expected = {}) {
     && Number(receipt?.port) > 0;
 }
 
-function recoverManagedRuntime(paths, bundleIdentity) {
+function recoverManagedRuntime(paths, bundleIdentity, roots = null, expected = {}) {
   const receipt = readJson(paths.launchReceiptPath);
   if (!receiptMatches(receipt, receipt)) return null;
-  const roots = codexRootProcesses(bundleIdentity);
-  const successor = roots.find((item) => item.pid === Number(receipt.successorPid));
+  if (!/^[0-9a-f]{32}$/i.test(String(receipt.generation ?? ""))) return null;
+  if (expected.generation && receipt.generation !== expected.generation) return null;
+  if (Number(expected.successorPid) > 0 && Number(receipt.successorPid) !== Number(expected.successorPid)) return null;
+  if (expected.successorStartedAt && String(receipt.successorStartedAt ?? "") !== expected.successorStartedAt) return null;
+  const currentRoots = Array.isArray(roots) ? roots : codexRootProcesses(bundleIdentity);
+  const successor = currentRoots.find((item) => item.pid === Number(receipt.successorPid));
   if (!successor || successor.startedAt !== String(receipt.successorStartedAt ?? "")) return null;
   const agentPath = path.join(paths.installRoot, "QuotaPin.Agent");
   const agent = agentIdentityForPid(receipt.agentPid, agentPath);
-  if (!agent || agent.startedAt !== String(receipt.agentStartedAt ?? "")) return null;
-  return { receipt, successor, agent };
+  const verifiedAgent = agent && agent.startedAt === String(receipt.agentStartedAt ?? "") ? agent : null;
+  return { receipt, successor, agent: verifiedAgent, agentPath };
+}
+
+async function mainTargetAvailable(port, fetchImpl = globalThis.fetch) {
+  if (!Number.isInteger(Number(port)) || Number(port) < 1024 || Number(port) > 65535) return false;
+  try {
+    const response = await fetchImpl(`http://127.0.0.1:${Number(port)}/json/list`, {
+      signal: AbortSignal.timeout(1_500),
+    });
+    if (!response.ok) return false;
+    const targets = await response.json();
+    return Array.isArray(targets) && targets.some((target) => target?.url === "app://-/index.html");
+  } catch {
+    return false;
+  }
+}
+
+async function resumeManagedAgent(paths, bundleIdentity, recovered) {
+  if (recovered?.agent) return "active";
+  if (!recovered?.receipt || !recovered?.successor || !recovered?.agentPath) return "failed";
+  if (!await mainTargetAvailable(Number(recovered.receipt.port))) return "not-ready";
+  if (!fs.existsSync(recovered.agentPath)) return "failed";
+
+  const plan = macosLaunchPlan({
+    port: Number(recovered.receipt.port),
+    bundleOverride: bundleIdentity.bundlePath,
+    env: process.env,
+    installRoot: paths.installRoot,
+  });
+  const logHandle = fs.openSync(paths.launcherLogPath, "a");
+  let agent;
+  try {
+    agent = spawn(recovered.agentPath, [
+      "--port", String(recovered.receipt.port),
+      "--config", path.join(paths.installRoot, "config.json"),
+      "--log", paths.launcherLogPath,
+      "--attach-generation", recovered.receipt.generation,
+    ], {
+      env: { ...process.env, QUOTAPIN_CODEX_COMMAND: plan.commandPath },
+      detached: true,
+      stdio: ["ignore", logHandle, logHandle],
+    });
+  } finally {
+    fs.closeSync(logHandle);
+  }
+  const identity = processIdentityForPid(agent.pid, recovered.agentPath);
+  if (!identity) {
+    stopAgent(agent);
+    return "failed";
+  }
+  atomicWriteJson(paths.launchReceiptPath, {
+    ...recovered.receipt,
+    agentPid: agent.pid,
+    agentStartedAt: identity.startedAt,
+    resumedAt: new Date().toISOString(),
+  });
+  agent.unref();
+  appendLog(paths.watcherLogPath, `agent resumed without reopening Codex successorPid=${recovered.successor.pid} agentPid=${agent.pid} port=${recovered.receipt.port}`);
+  return "started";
 }
 
 async function launchOnce() {
@@ -308,6 +371,8 @@ async function watch() {
   let ignored = new Set();
   let initialized = false;
   let idleSince = 0;
+  let agentResumeFailures = 0;
+  let nextAgentResumeAt = 0;
   appendLog(paths.watcherLogPath, "watcher started");
 
   while (true) {
@@ -321,7 +386,7 @@ async function watch() {
       let guard = normalizedGuard(readJson(paths.guardPath));
 
       if (!initialized) {
-        const recovered = recoverManagedRuntime(paths, bundleIdentity);
+        const recovered = recoverManagedRuntime(paths, bundleIdentity, roots);
         if (recovered) {
           guard = {
             state: "successor-observed",
@@ -354,6 +419,29 @@ async function watch() {
         candidateFresh,
         idleSeconds,
       });
+
+      if (decision === "adopt" && Date.now() >= nextAgentResumeAt) {
+        const recovered = recoverManagedRuntime(paths, bundleIdentity, roots, {
+          generation: guard.generation,
+          successorPid: guard.protectedPid,
+          successorStartedAt: guard.protectedStartedAt,
+        });
+        const resumeResult = recovered
+          ? await resumeManagedAgent(paths, bundleIdentity, recovered)
+          : "failed";
+        if (["active", "started"].includes(resumeResult)) {
+          agentResumeFailures = 0;
+          nextAgentResumeAt = Date.now() + POLL_MS;
+        } else {
+          agentResumeFailures += 1;
+          const delay = macAgentResumeDelayMs(agentResumeFailures);
+          nextAgentResumeAt = Date.now() + delay;
+          appendLog(paths.watcherLogPath, `agent resume waiting result=${resumeResult} retryMs=${delay}`);
+        }
+      } else if (decision !== "adopt") {
+        agentResumeFailures = 0;
+        nextAgentResumeAt = 0;
+      }
 
       if (decision === "launch-once") {
         const source = roots[0];

@@ -1,6 +1,6 @@
 # QuotaPin for macOS
 
-QuotaPin 1.1.1 includes the public macOS delivery path. The runtime is self-contained, per user, and does not modify the official Codex application. GitHub Actions validates the package lifecycle on native Apple silicon and Intel runners; the account-row adapter and Gatekeeper behavior still need evidence from a signed-in Mac before macOS can be listed as fully supported.
+QuotaPin 1.1.2 includes the public macOS delivery path. The runtime is self-contained, per user, and does not modify the official Codex application. GitHub Actions validates the package lifecycle on native Apple silicon and Intel runners; the account-row adapter and Gatekeeper behavior still need evidence from a signed-in Mac before macOS can be listed as fully supported.
 
 ## What is implemented
 
@@ -11,6 +11,7 @@ QuotaPin 1.1.1 includes the public macOS delivery path. The runtime is self-cont
 - Normal launching from the official Codex icon. The watcher ignores a Codex session that was already open during install or update.
 - A single generation-bound handoff for a fresh uninstrumented launch. PID, process start time, official bundle identifier, OpenAI Team ID, Agent PID, loopback port, and renderer receipt must all agree.
 - A circuit breaker: a failed or ambiguous handoff is latched and is never retried while Codex remains open. QuotaPin does not force-quit Codex.
+- Bounded Agent supervision after a successful handoff. If the Agent exits while the exact Codex PID, start time, generation, and loopback target still agree, the watcher resumes it without reopening Codex.
 - Transactional reinstall/update with configuration and runtime receipt preservation.
 - Exact-identity Agent shutdown and complete QuotaPin removal on uninstall.
 

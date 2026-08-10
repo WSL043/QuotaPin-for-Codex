@@ -15,6 +15,11 @@ function usageSignature(usage) {
   return JSON.stringify(usageSummary(usage));
 }
 
+export function appServerRestartDelayMs(attempt) {
+  const count = Math.max(0, Math.trunc(Number(attempt) || 0));
+  return Math.min(60_000, 1_000 * (2 ** Math.min(6, count)));
+}
+
 export function resolveCodexAppServerCommand(options = {}) {
   const configured = (options.env ?? process.env).QUOTAPIN_CODEX_COMMAND;
   const fsImpl = options.fsImpl ?? fs;
@@ -215,14 +220,9 @@ export class AppServerRuntime {
 
   scheduleRestart(reason) {
     if (this.stopping || this.selfTest || this.restartTimer) return;
-    if (this.restartAttempt >= 5) {
-      this.writeLifecycleState("degraded", `${reason}; retries exhausted`);
-      this.log("app-server restart budget exhausted");
-      return;
-    }
-    const delay = Math.min(15_000, 1000 * (2 ** this.restartAttempt));
-    this.restartAttempt += 1;
-    this.writeLifecycleState("degraded", `${reason}; retry ${this.restartAttempt}/5`);
+    const delay = appServerRestartDelayMs(this.restartAttempt);
+    this.restartAttempt = Math.min(31, this.restartAttempt + 1);
+    this.writeLifecycleState("degraded", `${reason}; retry ${this.restartAttempt} in ${delay}ms`);
     this.restartTimer = setTimeout(() => {
       this.restartTimer = null;
       this.start();

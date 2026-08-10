@@ -18,8 +18,9 @@ import { createColorStateToolkit } from "./renderer/color-state.mjs";
 import { createTimeStateToolkit } from "./renderer/time-state.mjs";
 import { createCodeConfigStateToolkit } from "./renderer/code-config-state.mjs";
 import { createProfileUsageStateToolkit } from "./renderer/profile-usage-state.mjs";
+import { createDeliveryStateToolkit } from "./renderer/delivery-state.mjs";
 
-const VERSION = "1.1.1";
+const VERSION = "1.1.2";
 const SOURCE_REPOSITORY = "https://github.com/WSL043/QuotaPin-for-Codex";
 const BUILD_COMMIT = "__QUOTAPIN_BUILD_COMMIT__";
 const MAIN_TARGET_URL = "app://-/index.html";
@@ -71,7 +72,8 @@ const rendererToolkitScript = `globalThis.__quotaPinRendererToolkits = {
   color: ${createColorStateToolkit.toString()},
   time: ${createTimeStateToolkit.toString()},
   codeConfig: ${createCodeConfigStateToolkit.toString()},
-  profileUsage: ${createProfileUsageStateToolkit.toString()}
+  profileUsage: ${createProfileUsageStateToolkit.toString()},
+  delivery: ${createDeliveryStateToolkit.toString()}
 };\n`;
 
 const rendererInstanceId = randomUUID();
@@ -110,8 +112,9 @@ const installScript = String.raw`(() => {
     emptyProfileUsage, normalizeProfileUsage, formatProfileUsageParts,
     nextRefreshDelay, shouldRefreshProfileUsage
   } = rendererToolkits.profileUsage();
+  const { markDeliveryAccepted, evaluateDeliveryFreshness } = rendererToolkits.delivery();
   delete globalThis.__quotaPinRendererToolkits;
-  const version = "1.1.1";
+  const version = "1.1.2";
   const instanceId = "__QUOTAPIN_RENDERER_INSTANCE_ID__";
   const sourceRepository = "https://github.com/WSL043/QuotaPin-for-Codex";
   const previous = window.__quotaPinController;
@@ -120,7 +123,7 @@ const installScript = String.raw`(() => {
 
   const badgeId = "quotapin-inline-badge";
   let state = { status: "loading", view: { text: "--%", parts: { value: "--%", todayTokens: "—", lifetimeTokens: "—", label: "", countdown: "--", relative: "--", seconds: "--:--:--", date: "--", reset: "--" }, runtimeWindows: [], tooltipWindows: [], renderTemplate: "{remaining}%", renderHoverTemplate: "", renderSeparator: " · ", tooltip: "QuotaPin is loading", severity: "unavailable", profileId: "glance", availableWindowCount: 0, showValue: true, showDot: false, showBar: false, barScope: "quota", remainingPercent: null, showLabel: false, showCountdown: false, showRelative: false, showSeconds: false, showDate: false, showReset: false, showTodayTokens: false, showLifetimeTokens: false, displayMode: "modules", valueColor: "muted", dotColor: "muted", identityColor: "inherit", valueColorMode: "muted", dotColorMode: "muted", identityColorMode: "inherit", effect: "none", effectTarget: "dot", effectAt: "critical", overdriveEgg: false, overdriveAlways: false, overdriveEffect: "menuFire", accountRowMode: "legacy", layout: { moduleOrder: defaultModuleOrder, layoutMode: "auto", snapThreshold: 16, snapTargets: ["edges", "center", "modules"], moduleAnchors: defaultModuleAnchors, identity: "show", avatarShape: "native", fontSize: 14, barScope: "quota" } }, preferences: null };
-  const deliveryRuntime = { highestSequence: 0, accepted: 0, rejected: 0, lastReason: null, trace: [] };
+  const deliveryRuntime = { highestSequence: 0, accepted: 0, rejected: 0, lastReason: null, lastAcceptedAt: 0, stale: false, staleTransitions: 0, recoveries: 0, trace: [] };
   const deliverySummary = (nextState, sequence, accepted, cause) => {
     const view = nextState?.view ?? {};
     const visible = ["value", "dot", "bar", "label", "countdown", "relative", "seconds", "date", "reset", "todayTokens", "lifetimeTokens"]
@@ -162,6 +165,7 @@ const installScript = String.raw`(() => {
     deliveryRuntime.highestSequence = sequence;
     deliveryRuntime.accepted += 1;
     deliveryRuntime.lastReason = typeof nextState.delivery.reason === "string" ? nextState.delivery.reason : null;
+    markDeliveryAccepted(deliveryRuntime);
     deliverySummary(nextState, sequence, true, "accepted");
     return true;
   };
@@ -180,6 +184,7 @@ const installScript = String.raw`(() => {
     return timeout;
   };
   let liveTimeTimer = 0;
+  let deliveryFreshnessTimer = 0;
   let profileUsageTimer = 0;
   let profileUsageRequest = null;
   let profileUsage = emptyProfileUsage();
@@ -519,12 +524,12 @@ const installScript = String.raw`(() => {
   function viewWithOptimisticLayout(baseView = {}) {
     const draft = getRenderableSettings(settingsState);
     const profile = draft?.profiles?.find((candidate) => candidate.id === (baseView.profileId ?? draft.activeProfile));
-    if (!profile) return baseView;
+    if (!profile) return deliveryRuntime.stale ? staleQuotaView(baseView) : baseView;
     const responsiveAnchors = responsiveFreeLayout?.profileId === profile.id
       && cleanLayoutMode(profile.layoutMode) === "free"
       ? responsiveFreeLayout.moduleAnchors
       : profile.moduleAnchors;
-    return {
+    const optimisticView = {
       ...baseView,
       displayMode: profile.displayMode,
       showValue: profile.showValue,
@@ -552,6 +557,37 @@ const installScript = String.raw`(() => {
         fontSize: profile.fontSize,
         barScope: profile.barScope === "row" ? "row" : "quota",
       },
+    };
+    return deliveryRuntime.stale ? staleQuotaView(optimisticView) : optimisticView;
+  }
+
+  function staleQuotaView(baseView = {}) {
+    return {
+      ...baseView,
+      text: "--%",
+      runtimeWindows: [],
+      tooltipWindows: [],
+      renderHoverTemplate: "",
+      parts: {
+        ...(baseView.parts ?? {}),
+        value: "--%",
+        todayTokens: "—",
+        lifetimeTokens: "—",
+        label: "—",
+        countdown: "--",
+        relative: "--",
+        seconds: "--:--:--",
+        date: "--",
+        reset: "--",
+      },
+      tooltip: t("Quota data is temporarily unavailable"),
+      severity: "unavailable",
+      remainingPercent: null,
+      valueColor: "muted",
+      dotColor: "muted",
+      valueColorMode: "muted",
+      dotColorMode: "muted",
+      effect: "none",
     };
   }
 
@@ -773,6 +809,9 @@ const installScript = String.raw`(() => {
   }
 
   function profileUsageCopy() {
+    if (deliveryRuntime.stale) {
+      return { todayTokens: "—", lifetimeTokens: "—", tooltip: t("Quota data is temporarily unavailable") };
+    }
     const locale = getRenderableSettings(settingsState)?.locale ?? state.preferences?.locale ?? "en";
     const localUsage = state.localTokenUsage;
     const localReady = ["ready", "partial"].includes(localUsage?.status)
@@ -1141,8 +1180,8 @@ const installScript = String.raw`(() => {
     if (!(bar instanceof HTMLElement)) return;
     const bounds = accountLayoutBounds(row);
     const scope = requestedScope === "row" ? "row" : "quota";
-    let targetLeft = bounds.left;
-    let targetRight = bounds.right;
+    let targetLeft = scope === "row" ? bounds.rowRect.left : bounds.left;
+    let targetRight = scope === "row" ? bounds.rowRect.right : bounds.right;
     if (scope === "quota") {
       const modules = findAccountModules(row, badge);
       const quotaRects = layoutModules
@@ -1157,8 +1196,8 @@ const installScript = String.raw`(() => {
       }
     }
     if (targetRight <= targetLeft) {
-      targetLeft = bounds.left;
-      targetRight = bounds.right;
+      targetLeft = scope === "row" ? bounds.rowRect.left : bounds.left;
+      targetRight = scope === "row" ? bounds.rowRect.right : bounds.right;
     }
     bar.dataset.quotapinBarScope = scope;
     bar.style.left = targetLeft - bounds.rowRect.left + "px";
@@ -2000,6 +2039,7 @@ const installScript = String.raw`(() => {
     let quickShowValue = profile.showValue !== false;
     let quickShowDot = profile.showDot === true;
     let quickShowBar = profile.showBar === true;
+    let quickBarScope = profile.barScope === "row" ? "row" : "quota";
     let quickShowLabel = profile.showLabel === true;
     let quickShowCountdown = profile.showCountdown === true;
     let quickShowRelative = profile.showRelative === true;
@@ -2016,6 +2056,8 @@ const installScript = String.raw`(() => {
     let nameVisible = !["hideName", "quotaOnly"].includes(profile.identity);
     const profileFromDraft = (draft) => draft?.profiles?.find((item) => item.id === profile.id) ?? null;
     let moduleChips = {};
+    let quotaBarChip = null;
+    let rowBarChip = null;
     const syncQuickControls = (draft) => {
       const saved = profileFromDraft(draft);
       if (!saved) return;
@@ -2023,6 +2065,7 @@ const installScript = String.raw`(() => {
       quickShowValue = saved.showValue !== false;
       quickShowDot = saved.showDot === true;
       quickShowBar = saved.showBar === true;
+      quickBarScope = saved.barScope === "row" ? "row" : "quota";
       quickShowLabel = saved.showLabel === true;
       quickShowCountdown = saved.showCountdown === true;
       quickShowRelative = saved.showRelative === true;
@@ -2037,7 +2080,8 @@ const installScript = String.raw`(() => {
         avatar: avatarVisible, name: nameVisible, dot: quickShowDot, value: quickShowValue, todayTokens: quickShowTodayTokens, lifetimeTokens: quickShowLifetimeTokens,
         label: availableWindowCount > 1 && quickShowLabel, countdown: quickShowCountdown, relative: quickShowRelative, seconds: quickShowSeconds, date: quickShowDate, reset: quickShowReset,
       })) moduleChips[module]?.setActive(Boolean(visible));
-      barChip.setActive(quickShowBar);
+      quotaBarChip?.setActive(quickShowBar && quickBarScope === "quota");
+      rowBarChip?.setActive(quickShowBar && quickBarScope === "row");
     };
     const sendModuleVisibility = (key, next, finish) => {
       sendAction({ type: "updateProfile", id: profile.id, patch: { displayMode: "modules", [key]: next } }, {
@@ -2046,6 +2090,19 @@ const installScript = String.raw`(() => {
           if (ack?.ok) syncQuickControls(renderable);
           const saved = profileFromDraft(renderable);
           finish?.(saved ? (key === "showValue" ? saved[key] !== false : saved[key] === true) : undefined);
+          if (!ack?.ok || !panel) return;
+          schedule(() => setLayoutEditing(isLayoutEditingMode()));
+        },
+      });
+    };
+    const sendBarVisibility = (scope, next, finish) => {
+      sendAction({ type: "updateProfile", id: profile.id, patch: { displayMode: "modules", showBar: next, barScope: scope } }, {
+        onAck: (ack) => {
+          const renderable = getRenderableSettings(settingsState);
+          if (ack?.ok) syncQuickControls(renderable);
+          const saved = profileFromDraft(renderable);
+          const savedScope = saved?.barScope === "row" ? "row" : "quota";
+          finish?.(saved ? saved.showBar === true && savedScope === scope : undefined);
           if (!ack?.ok || !panel) return;
           schedule(() => setLayoutEditing(isLayoutEditingMode()));
         },
@@ -2067,15 +2124,22 @@ const installScript = String.raw`(() => {
     const dotColor = state.view?.dotColor === "muted" ? "rgba(255,255,255,.58)" : (state.view?.dotColor ?? "#6ee7b7");
     Object.assign(dotVisual.style, { width: "7px", height: "7px", borderRadius: "999px", background: dotColor, display: "block" });
     const dotChip = toggleChip("Show status dot", quickShowDot, (next, finish) => sendModuleVisibility("showDot", next, finish), dotVisual);
-    const barVisual = document.createElement("span");
-    const barFillVisual = document.createElement("span");
-    barVisual.dataset.quickPreview = "bar";
-    barFillVisual.dataset.quickPreview = "bar-fill";
-    Object.assign(barVisual.style, { position: "relative", display: "block", width: "58px", height: "3px", overflow: "hidden", borderRadius: "999px", background: "rgba(127,127,127,.24)" });
-    Object.assign(barFillVisual.style, { display: "block", width: Math.max(0, Math.min(100, Number(state.view?.remainingPercent) || 0)) + "%", height: "100%", borderRadius: "inherit", background: valueColor });
-    barVisual.append(barFillVisual);
-    const barChip = toggleChip("Show quota bar", quickShowBar, (next, finish) => sendModuleVisibility("showBar", next, finish), barVisual);
-    barChip.style.width = "118px";
+    const makeBarVisual = (previewName, width) => {
+      const track = document.createElement("span");
+      const fill = document.createElement("span");
+      track.dataset.quickPreview = previewName;
+      fill.dataset.quickPreview = previewName + "-fill";
+      Object.assign(track.style, { position: "relative", display: "block", width, height: "3px", overflow: "hidden", borderRadius: "999px", background: "rgba(127,127,127,.24)" });
+      Object.assign(fill.style, { display: "block", width: Math.max(0, Math.min(100, Number(state.view?.remainingPercent) || 0)) + "%", height: "100%", borderRadius: "inherit", background: valueColor });
+      track.append(fill);
+      return { track, fill };
+    };
+    const quotaBarVisual = makeBarVisual("bar", "48px");
+    const rowBarVisual = makeBarVisual("row-bar", "88px");
+    quotaBarChip = toggleChip("Show module quota bar", quickShowBar && quickBarScope === "quota", (next, finish) => sendBarVisibility("quota", next, finish), quotaBarVisual.track);
+    rowBarChip = toggleChip("Show full-width quota bar", quickShowBar && quickBarScope === "row", (next, finish) => sendBarVisibility("row", next, finish), rowBarVisual.track);
+    quotaBarChip.style.width = "78px";
+    rowBarChip.style.width = "118px";
     const makeTextPreview = (module, fallback) => {
       const preview = visualSpan(liveParts[module] ?? fallback, valueColor);
       preview.dataset.quickPreview = module;
@@ -2187,19 +2251,25 @@ const installScript = String.raw`(() => {
         dotVisual.style.borderRadius = dotStyle.borderRadius;
         dotVisual.style.background = dotStyle.backgroundColor;
       }
-      barFillVisual.style.width = Math.max(0, Math.min(100, Number(currentView.remainingPercent) || 0)) + "%";
+      for (const preview of [quotaBarVisual, rowBarVisual]) {
+        preview.fill.style.width = Math.max(0, Math.min(100, Number(currentView.remainingPercent) || 0)) + "%";
+      }
       const currentBar = currentBadge.querySelector('[data-part="bar"]');
       const currentBarFill = currentBar?.querySelector('[data-part="bar-fill"]');
       if (currentBar instanceof HTMLElement) {
         const barStyle = getComputedStyle(currentBar);
-        barVisual.style.height = barStyle.height;
-        barVisual.style.borderRadius = barStyle.borderRadius;
-        barVisual.style.background = barStyle.backgroundColor;
+        for (const preview of [quotaBarVisual, rowBarVisual]) {
+          preview.track.style.height = barStyle.height;
+          preview.track.style.borderRadius = barStyle.borderRadius;
+          preview.track.style.background = barStyle.backgroundColor;
+        }
       }
       if (currentBarFill instanceof HTMLElement) {
         const barFillStyle = getComputedStyle(currentBarFill);
-        barFillVisual.style.borderRadius = barFillStyle.borderRadius;
-        barFillVisual.style.background = barFillStyle.backgroundColor;
+        for (const preview of [quotaBarVisual, rowBarVisual]) {
+          preview.fill.style.borderRadius = barFillStyle.borderRadius;
+          preview.fill.style.background = barFillStyle.backgroundColor;
+        }
       }
       const currentName = currentModules.name;
       if (currentName instanceof HTMLElement) {
@@ -2222,12 +2292,14 @@ const installScript = String.raw`(() => {
       }
       const previewSurface = hostPreviewSurface(currentRow);
       for (const chip of Object.values(moduleChips)) chip.setPreviewSurface?.(previewSurface);
-      barChip.setPreviewSurface?.(previewSurface);
+      quotaBarChip?.setPreviewSurface?.(previewSurface);
+      rowBarChip?.setPreviewSurface?.(previewSurface);
     };
     moduleChips = { avatar: avatarChip, name: nameChip, dot: dotChip, value: valueChip, todayTokens: todayTokensChip, lifetimeTokens: lifetimeTokensChip, label: labelChip, countdown: countdownChip, relative: relativeChip, seconds: secondsChip, date: dateChip, reset: resetChip };
     const initialPreviewSurface = hostPreviewSurface(liveRow ?? row);
     for (const chip of Object.values(moduleChips)) chip.setPreviewSurface?.(initialPreviewSurface);
-    barChip.setPreviewSurface?.(initialPreviewSurface);
+    quotaBarChip.setPreviewSurface?.(initialPreviewSurface);
+    rowBarChip.setPreviewSurface?.(initialPreviewSurface);
     for (const [module, chip] of Object.entries(moduleChips)) {
       chip.dataset.layoutModule = module;
       chip.style.flex = module === "name" ? "0 1 auto" : "0 0 auto";
@@ -2254,7 +2326,7 @@ const installScript = String.raw`(() => {
           if (module === "label" && availableWindowCount <= 1) continue;
           group.append(moduleChips[module]);
         }
-        if (id === "status") group.append(barChip);
+        if (id === "status") group.append(quotaBarChip, rowBarChip);
         if (group.childElementCount) elementRows.append(group);
       }
     }
@@ -4224,6 +4296,10 @@ const installScript = String.raw`(() => {
     effectMonitorMetrics.watchdogWakeups += 1;
     schedule();
   }, effectWatchdogMs);
+  deliveryFreshnessTimer = setInterval(() => {
+    if (!isActiveRenderer()) return;
+    if (evaluateDeliveryFreshness(deliveryRuntime)) schedule(undefined, true);
+  }, 5_000);
   const onVisibilityChange = () => {
     if (!isActiveRenderer()) return;
     clearLiveTimeTimer();
@@ -4331,7 +4407,9 @@ const installScript = String.raw`(() => {
     },
     update(nextState) {
       if (disposed || window.__quotaPinController !== controller) return false;
+      const wasStale = deliveryRuntime.stale === true;
       if (!acceptDeliveredState(nextState)) return false;
+      if (nextState?.delivery?.reason === "heartbeat" && !wasStale) return true;
       state = nextState && typeof nextState === "object" ? nextState : { status: "error", view: { text: "--%" } };
       if (state.preferences) settingsState = syncSettingsPreferences(settingsState, state.preferences);
       if (state.settingsAck) acceptSettingsAck(state.settingsAck, document.getElementById(badgeId));
@@ -4382,6 +4460,11 @@ const installScript = String.raw`(() => {
         accepted: deliveryRuntime.accepted,
         rejected: deliveryRuntime.rejected,
         lastReason: deliveryRuntime.lastReason,
+        lastAcceptedAt: deliveryRuntime.lastAcceptedAt,
+        stale: deliveryRuntime.stale,
+        ageMs: deliveryRuntime.lastAcceptedAt > 0 ? Math.max(0, Date.now() - deliveryRuntime.lastAcceptedAt) : null,
+        staleTransitions: deliveryRuntime.staleTransitions,
+        recoveries: deliveryRuntime.recoveries,
         trace: deliveryRuntime.trace.map((entry) => ({ ...entry, visible: [...entry.visible] })),
       };
     },
@@ -4504,6 +4587,8 @@ const installScript = String.raw`(() => {
       lastLayoutSignature = "";
       lastLayoutPlan = null;
       safely(() => clearInterval(effectWatchdog));
+      safely(() => clearInterval(deliveryFreshnessTimer));
+      deliveryFreshnessTimer = 0;
       safely(clearLiveTimeTimer);
       safely(clearProfileUsageTimer);
       safely(() => profileUsageCancel?.());
@@ -4560,6 +4645,7 @@ const updateRuntime = new UpdateRuntime({
 let cdpRuntime = null;
 let stopping = false;
 let unavailableSince = null;
+let heartbeatTimer = null;
 const localTokenUsageRuntime = new LocalTokenUsageRuntime({
   log,
   onChange: () => broadcastClientState(null, "local-usage"),
@@ -4619,6 +4705,8 @@ function stop() {
   cdpRuntime.close();
   appServerRuntime.stop();
   localTokenUsageRuntime.stop();
+  clearInterval(heartbeatTimer);
+  heartbeatTimer = null;
   writeLifecycleState("stopped");
 }
 
@@ -4643,6 +4731,8 @@ async function main() {
   appServerRuntime.start();
   if (!selfTest) localTokenUsageRuntime.start();
   setInterval(() => appServerRuntime.refresh(), 60_000).unref();
+  heartbeatTimer = setInterval(() => broadcastClientState(null, "heartbeat"), 15_000);
+  heartbeatTimer.unref();
 
   if (selfTest) {
     const timeout = new Promise((_, reject) => setTimeout(() => reject(new Error("App Server self-test timed out")), 15_000));

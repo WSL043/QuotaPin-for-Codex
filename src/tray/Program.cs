@@ -18,8 +18,8 @@ using Microsoft.Win32;
 [assembly: AssemblyCompany("QuotaPin contributors")]
 [assembly: AssemblyProduct("QuotaPin")]
 [assembly: AssemblyCopyright("Copyright 2026 QuotaPin contributors")]
-[assembly: AssemblyVersion("1.1.1.0")]
-[assembly: AssemblyFileVersion("1.1.1.0")]
+[assembly: AssemblyVersion("1.1.2.0")]
+[assembly: AssemblyFileVersion("1.1.2.0")]
 
 namespace QuotaPin.Tray
 {
@@ -69,6 +69,8 @@ namespace QuotaPin.Tray
         private DateTime nextPackageRefresh = DateTime.MinValue;
         private DateTime nextUpdateCheck = DateTime.MinValue;
         private DateTime nextUpdateReceiptCheck = DateTime.MinValue;
+        private DateTime nextAgentResumeCheck = DateTime.MinValue;
+        private int agentResumeFailures;
         private Task<ReleaseInfo> updateCheckTask;
         private Process updateProcess;
         private ReleaseInfo availableRelease;
@@ -91,6 +93,14 @@ namespace QuotaPin.Tray
         {
             internal string State;
             internal DateTimeOffset WrittenAt;
+        }
+
+        private enum AgentResumeResult
+        {
+            Active,
+            Started,
+            NotReady,
+            Failed,
         }
 
         [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Auto)]
@@ -167,13 +177,14 @@ namespace QuotaPin.Tray
 
             RefreshCodexPackageRoot();
             ScanCodexProcesses(true);
-            TryResumeAgent();
+            ReconcileAgentRuntime(true);
             nextUpdateCheck = DateTime.UtcNow.AddSeconds(8);
             stateTimer = new System.Windows.Forms.Timer();
             stateTimer.Interval = 1000;
             stateTimer.Tick += delegate
             {
                 ScanCodexProcesses(false);
+                ReconcileAgentRuntime(false);
                 UpdateRuntimeState();
                 PollUpdates();
                 if (DateTime.UtcNow >= nextUpdateReceiptCheck)
@@ -473,36 +484,98 @@ namespace QuotaPin.Tray
             }
         }
 
-        private void TryResumeAgent()
+        private bool IsUpdateRunning()
         {
-            if (IsAgentActive()) return;
+            if (updateProcess == null) return false;
+            try { return !updateProcess.HasExited; }
+            catch { return false; }
+        }
+
+        private static int AgentResumeDelaySeconds(int failures)
+        {
+            var exponent = Math.Max(0, Math.Min(4, failures - 1));
+            return Math.Min(30, 2 * (1 << exponent));
+        }
+
+        private void ReconcileAgentRuntime(bool immediate)
+        {
+            if (IsAgentActive())
+            {
+                agentResumeFailures = 0;
+                nextAgentResumeCheck = DateTime.UtcNow.AddSeconds(2);
+                return;
+            }
+            if (IsUpdateRunning()) return;
+            if (!immediate && DateTime.UtcNow < nextAgentResumeCheck) return;
+
+            var result = TryResumeAgent();
+            if (result == AgentResumeResult.Started || result == AgentResumeResult.Active)
+            {
+                agentResumeFailures = 0;
+                nextAgentResumeCheck = DateTime.UtcNow.AddSeconds(2);
+                return;
+            }
+            agentResumeFailures = Math.Min(16, agentResumeFailures + 1);
+            nextAgentResumeCheck = DateTime.UtcNow.AddSeconds(AgentResumeDelaySeconds(agentResumeFailures));
+        }
+
+        private AgentResumeResult TryResumeAgent()
+        {
+            using (var resumeMutex = new Mutex(false, @"Local\QuotaPinAgentResume"))
+            {
+                var acquired = false;
+                try
+                {
+                    try { acquired = resumeMutex.WaitOne(0); }
+                    catch (AbandonedMutexException) { acquired = true; }
+                    if (!acquired) return AgentResumeResult.NotReady;
+                    return TryResumeAgentLocked();
+                }
+                finally
+                {
+                    if (acquired)
+                    {
+                        try { resumeMutex.ReleaseMutex(); }
+                        catch { }
+                    }
+                }
+            }
+        }
+
+        private AgentResumeResult TryResumeAgentLocked()
+        {
+            if (IsAgentActive()) return AgentResumeResult.Active;
             try
             {
                 var statePath = Path.Combine(installRoot, "logs", "runtime.json");
-                if (!File.Exists(statePath)) return;
+                if (!File.Exists(statePath)) return AgentResumeResult.NotReady;
                 var serializer = new JavaScriptSerializer();
                 var state = serializer.DeserializeObject(File.ReadAllText(statePath)) as Dictionary<string, object>;
-                if (state == null || !state.ContainsKey("codexPid") || !state.ContainsKey("port") || !state.ContainsKey("writtenAt")) return;
+                if (state == null || !state.ContainsKey("schema") || Convert.ToInt32(state["schema"], CultureInfo.InvariantCulture) != 2
+                    || !state.ContainsKey("codexPid") || !state.ContainsKey("codexCreationTimeUtc") || !state.ContainsKey("port")
+                    || !state.ContainsKey("writtenAt") || !state.ContainsKey("generation")) return AgentResumeResult.NotReady;
                 DateTimeOffset writtenAt;
-                if (!DateTimeOffset.TryParse(Convert.ToString(state["writtenAt"], CultureInfo.InvariantCulture), CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out writtenAt)) return;
-                if (writtenAt > DateTimeOffset.UtcNow.AddMinutes(5)) return;
+                DateTimeOffset expectedCodexStartedAt;
+                if (!DateTimeOffset.TryParse(Convert.ToString(state["writtenAt"], CultureInfo.InvariantCulture), CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out writtenAt)) return AgentResumeResult.NotReady;
+                if (!DateTimeOffset.TryParse(Convert.ToString(state["codexCreationTimeUtc"], CultureInfo.InvariantCulture), CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out expectedCodexStartedAt)) return AgentResumeResult.NotReady;
+                if (writtenAt > DateTimeOffset.UtcNow.AddMinutes(5)) return AgentResumeResult.NotReady;
                 var processId = Convert.ToInt32(state["codexPid"], CultureInfo.InvariantCulture);
                 var port = Convert.ToInt32(state["port"], CultureInfo.InvariantCulture);
-                if (port < 1024 || port > 65535 || !IsOfficialCodexRoot(processId)) return;
+                if (port < 1024 || port > 65535 || !IsOfficialCodexRoot(processId)) return AgentResumeResult.NotReady;
                 using (var codexProcess = Process.GetProcessById(processId))
                 {
                     var startedAt = new DateTimeOffset(codexProcess.StartTime.ToUniversalTime(), TimeSpan.Zero);
-                    if (startedAt > writtenAt.AddMinutes(2)) return;
+                    if (Math.Abs((startedAt - expectedCodexStartedAt.ToUniversalTime()).TotalSeconds) > 2) return AgentResumeResult.NotReady;
                 }
 
                 var request = WebRequest.Create("http://127.0.0.1:" + port.ToString(CultureInfo.InvariantCulture) + "/json/list") as HttpWebRequest;
-                if (request == null) return;
+                if (request == null) return AgentResumeResult.NotReady;
                 request.Timeout = 700;
                 request.ReadWriteTimeout = 700;
                 request.Proxy = null;
                 using (var response = request.GetResponse() as HttpWebResponse)
                 {
-                    if (response == null || response.StatusCode != HttpStatusCode.OK) return;
+                    if (response == null || response.StatusCode != HttpStatusCode.OK) return AgentResumeResult.NotReady;
                     using (var reader = new StreamReader(response.GetResponseStream()))
                     {
                         var targets = serializer.DeserializeObject(reader.ReadToEnd()) as object[];
@@ -517,22 +590,26 @@ namespace QuotaPin.Tray
                                 break;
                             }
                         }
-                        if (!mainTargetFound) return;
+                        if (!mainTargetFound) return AgentResumeResult.NotReady;
                     }
                 }
 
                 var agent = Path.Combine(installRoot, "QuotaPin.Agent.exe");
                 var config = Path.Combine(installRoot, "config.json");
                 var log = Path.Combine(installRoot, "logs", "agent.log");
-                if (!File.Exists(agent) || !File.Exists(config)) return;
+                if (!File.Exists(agent) || !File.Exists(config)) return AgentResumeResult.NotReady;
                 var codexCommand = ResolveSignedCodexCommand();
                 if (string.IsNullOrEmpty(codexCommand))
                 {
                     WriteLog("agent resume skipped: signed Codex command unavailable");
-                    return;
+                    return AgentResumeResult.NotReady;
                 }
-                var start = new ProcessStartInfo(agent,
-                    "--port " + port.ToString(CultureInfo.InvariantCulture) + " --config \"" + config + "\" --log \"" + log + "\"");
+                var generation = Convert.ToString(state["generation"], CultureInfo.InvariantCulture);
+                Guid parsedGeneration;
+                if (!Guid.TryParseExact(generation, "N", out parsedGeneration)) return AgentResumeResult.NotReady;
+                var arguments = "--port " + port.ToString(CultureInfo.InvariantCulture) + " --config \"" + config + "\" --log \"" + log + "\"";
+                arguments += " --attach-generation \"" + generation + "\"";
+                var start = new ProcessStartInfo(agent, arguments);
                 start.UseShellExecute = false;
                 start.CreateNoWindow = true;
                 start.WorkingDirectory = installRoot;
@@ -540,14 +617,21 @@ namespace QuotaPin.Tray
                 var process = Process.Start(start);
                 if (process != null)
                 {
+                    state["agentPid"] = process.Id;
+                    state["rendererAttached"] = true;
+                    state["writtenAt"] = DateTimeOffset.Now.ToString("o", CultureInfo.InvariantCulture);
+                    WriteJsonAtomic(statePath, state);
                     seenCodexRoots.Add(processId);
                     WriteLifecycleState("attached", processId, process.Id, port, 0, "resumed");
                     WriteLog("agent resumed on existing Codex port=" + port.ToString(CultureInfo.InvariantCulture));
+                    return AgentResumeResult.Started;
                 }
+                return AgentResumeResult.Failed;
             }
             catch (Exception error)
             {
-                WriteLog("agent resume skipped: " + error.Message);
+                WriteLog("agent resume waiting: " + error.GetType().Name);
+                return AgentResumeResult.Failed;
             }
         }
 
@@ -573,7 +657,6 @@ namespace QuotaPin.Tray
                 var logRoot = Path.Combine(installRoot, "logs");
                 Directory.CreateDirectory(logRoot);
                 var path = Path.Combine(logRoot, "lifecycle.json");
-                var temporary = path + "." + Guid.NewGuid().ToString("N") + ".tmp";
                 var value = new Dictionary<string, object>();
                 value["schema"] = 1;
                 value["state"] = state;
@@ -583,6 +666,18 @@ namespace QuotaPin.Tray
                 if (port > 0) value["port"] = port;
                 if (attempt > 0) value["attempt"] = attempt;
                 if (!string.IsNullOrEmpty(reason)) value["reason"] = reason.Length > 160 ? reason.Substring(0, 160) : reason;
+                WriteJsonAtomic(path, value);
+            }
+            catch { }
+        }
+
+        private static void WriteJsonAtomic(string path, object value)
+        {
+            var parent = Path.GetDirectoryName(path);
+            if (!string.IsNullOrEmpty(parent)) Directory.CreateDirectory(parent);
+            var temporary = path + "." + Guid.NewGuid().ToString("N") + ".tmp";
+            try
+            {
                 File.WriteAllText(temporary, new JavaScriptSerializer().Serialize(value));
                 if (File.Exists(path))
                 {
@@ -595,7 +690,14 @@ namespace QuotaPin.Tray
                 }
                 else File.Move(temporary, path);
             }
-            catch { }
+            finally
+            {
+                if (File.Exists(temporary))
+                {
+                    try { File.Delete(temporary); }
+                    catch { }
+                }
+            }
         }
 
         private void UpdateRuntimeState()

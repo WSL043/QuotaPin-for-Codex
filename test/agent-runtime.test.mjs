@@ -3,7 +3,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { AppServerRuntime, reduceAppServerMessage } from "../src/agent/app-server-runtime.mjs";
+import { AppServerRuntime, appServerRestartDelayMs, reduceAppServerMessage } from "../src/agent/app-server-runtime.mjs";
 import { CdpSession, CdpTargetRuntime, selectMainTargets } from "../src/agent/cdp-runtime.mjs";
 import { ConfigRuntime } from "../src/agent/config-runtime.mjs";
 import { createLifecycleStateWriter } from "../src/agent/lifecycle-state.mjs";
@@ -347,6 +347,19 @@ test("App Server retires an unresponsive child after consecutive rate-limit read
   assert.equal(runtime.getUsage().status, "error", "stale quota remained marked ready during process recovery");
   assert.equal(ended, 1);
   assert.ok(logs.some((message) => message.includes("consecutive rate-limit read timeouts")));
+  runtime.stop();
+});
+
+test("App Server recovery stays bounded but never becomes permanently exhausted", () => {
+  assert.deepEqual(
+    Array.from({ length: 10 }, (_, attempt) => appServerRestartDelayMs(attempt)),
+    [1_000, 2_000, 4_000, 8_000, 16_000, 32_000, 60_000, 60_000, 60_000, 60_000],
+  );
+  const runtime = new AppServerRuntime({ version: "test" });
+  runtime.restartAttempt = 12;
+  runtime.scheduleRestart("still unavailable");
+  assert.ok(runtime.restartTimer, "a long outage permanently exhausted App Server recovery");
+  assert.equal(runtime.restartAttempt, 13);
   runtime.stop();
 });
 

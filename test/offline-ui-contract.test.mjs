@@ -203,7 +203,7 @@ test("Quick, Customize, and Code keep one coherent settings chain without duplic
   assert.doesNotMatch(renderer, /editorSection/);
   assert.doesNotMatch(renderer, /tabButton\("Visual"/);
   assert.doesNotMatch(renderer, /makeSection\("(?:content|look|motion)"\)/);
-  for (const toggle of ["Avatar", "Name", "Show status dot", "Show quota bar", "Show value", "Show window label", "Show compact countdown", "Show local countdown", "Show seconds", "Show reset date", "Show reset time"]) {
+  for (const toggle of ["Avatar", "Name", "Show status dot", "Show module quota bar", "Show full-width quota bar", "Show value", "Show window label", "Show compact countdown", "Show local countdown", "Show seconds", "Show reset date", "Show reset time"]) {
     assert.ok(renderer.includes(`toggleChip("${toggle}"`), `missing Quick toggle: ${toggle}`);
   }
   assert.doesNotMatch(renderer, /value: "auto", label: "Auto"/);

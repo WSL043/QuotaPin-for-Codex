@@ -47,7 +47,7 @@ QuotaPin keeps the useful part visible in the account row, so checking quota bec
 
 ## Platform status
 
-Latest stable: **v1.1.1**.
+Latest stable: **v1.1.2**.
 
 | Platform | Status |
 |---|---|
@@ -114,7 +114,7 @@ The default keeps the original Codex avatar and account name and adds only the r
 You can independently show, hide, and reorder:
 
 - remaining percentage;
-- status dot and quota line;
+- status dot and a quota line that can follow the quota modules or span the account row;
 - time left and second-by-second countdown;
 - reset date and reset time;
 - today's token total from this device;

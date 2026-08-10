@@ -199,6 +199,7 @@ matches(runtimeTrust, /\$SameRuntime[\s\S]*?codexCreationTimeUtc[\s\S]*?generati
 has(runtimeTrust, "--attach-generation", "hot resume must preserve the verified attach generation");
 has(runtimeTrust, "Start-Process -FilePath $ResolvedAgentPath", "hot resume must restore an attached Agent without restarting Codex");
 has(runtimeTrust, "codexCreationTimeUtc", "runtime trust must bind a saved PID to the exact Codex creation time");
+has(runtimeTrust, "Local\\QuotaPinAgentResume", "the updater must serialize Agent recovery with the tray");
 has(runtimeTrust, 'app://-/index.html', "runtime trust must verify the Codex main renderer target");
 has(runtimeTrust, "$Lifecycle.generation", "runtime trust must bind lifecycle and runtime to one generation");
 has(updateRuntime, "`QuotaPin-${version}.exe`", "the update picker must require the exact versioned executable");
@@ -330,8 +331,11 @@ lacks(tray, "DownloadedUpdate", "the tray must not retain a second package downl
 lacks(tray, "releases/latest", "the update action must not send users to a release web page");
 has(tray, '"app://-/index.html"', "update resume must verify the active Codex renderer target");
 has(tray, 'EnvironmentVariables["QUOTAPIN_CODEX_COMMAND"]', "hot resume must provide the verified Codex app-server command to the Agent");
+has(tray, 'Local\\QuotaPinAgentResume', "the tray must serialize Agent recovery with the updater");
+has(tray, 'state["agentPid"] = process.Id', "the tray must publish replacement Agent ownership before releasing recovery");
 lacks(tray, "AddDays(-1)", "a valid long-running Codex endpoint must remain eligible for hot resume");
-has(tray, "startedAt > writtenAt.AddMinutes(2)", "hot resume must reject a runtime handoff whose PID was reused");
+has(tray, "expectedCodexStartedAt", "hot resume must read the exact persisted Codex creation time");
+has(tray, "Math.Abs((startedAt - expectedCodexStartedAt.ToUniversalTime()).TotalSeconds) > 2", "hot resume must reject a runtime handoff whose PID was reused");
 has(read("scripts/verify-cdp.mjs"), "assertVerificationPermissions", "CDP diagnostics must use the shared permission boundary");
 has(verifierSafety, "--allow-sensitive-capture", "screenshot diagnostics must require explicit sensitive-capture approval");
 lacks(read("src/launch.ps1"), "Get-Command 'node.exe'", "launcher must not depend on system Node.js");

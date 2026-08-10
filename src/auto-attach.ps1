@@ -16,13 +16,15 @@ $PowerShellExe = Join-Path $env:WINDIR 'System32\WindowsPowerShell\v1.0\powershe
 $LifecycleHelpers = Join-Path $PSScriptRoot 'lifecycle.ps1'
 $ProcessHelpers = Join-Path $PSScriptRoot 'codex-process.ps1'
 $PolicyHelpers = Join-Path $PSScriptRoot 'auto-attach-policy.ps1'
+$CodexCommandHelpers = Join-Path $PSScriptRoot 'codex-command.ps1'
 
-foreach ($Required in @($LaunchScript, $LifecycleHelpers, $ProcessHelpers, $PolicyHelpers)) {
+foreach ($Required in @($LaunchScript, $LifecycleHelpers, $ProcessHelpers, $PolicyHelpers, $CodexCommandHelpers)) {
     if (-not (Test-Path -LiteralPath $Required)) { throw "QuotaPin runtime file not found: $Required" }
 }
 . $LifecycleHelpers
 . $ProcessHelpers
 . $PolicyHelpers
+. $CodexCommandHelpers
 
 function Write-WatcherLog([string]$Message) {
     Write-QuotaPinLog -Path $WatcherLog -Message $Message
@@ -66,6 +68,86 @@ function Get-QuotaPinRuntimeHandoff(
         }
     }
     catch { return $null }
+}
+
+function Test-QuotaPinAgentIdentity([int]$ProcessId) {
+    if ($ProcessId -le 0) { return $false }
+    try {
+        $Expected = [IO.Path]::GetFullPath((Join-Path $InstallRoot 'QuotaPin.Agent.exe'))
+        $Agent = Get-Process -Id $ProcessId -ErrorAction Stop
+        [bool]($Agent.Path -and [IO.Path]::GetFullPath($Agent.Path).Equals($Expected, [StringComparison]::OrdinalIgnoreCase))
+    }
+    catch { $false }
+}
+
+function Get-QuotaPinRecoverableRuntime($SavedGuard, [string]$PackageRoot) {
+    try {
+        if ([string]$SavedGuard.state -ne 'successor-observed' -or -not (Test-Path -LiteralPath $RuntimePath)) { return $null }
+        $Runtime = Get-Content -Raw -LiteralPath $RuntimePath | ConvertFrom-Json
+        if ([int]$Runtime.schema -ne 2 -or [string]$Runtime.generation -notmatch '^[0-9a-f]{32}$') { return $null }
+        if (-not [string]::Equals([string]$Runtime.generation, [string]$SavedGuard.generation, [StringComparison]::Ordinal)) { return $null }
+        $SuccessorPid = [int]$Runtime.codexPid
+        $Port = [int]$Runtime.port
+        if ($SuccessorPid -le 0 -or $Port -lt 1024 -or $Port -gt 65535 -or $SuccessorPid -ne [int]$SavedGuard.successorPid) { return $null }
+        $ExpectedCreation = [DateTimeOffset]::Parse([string]$Runtime.codexCreationTimeUtc).UtcDateTime
+        $GuardCreation = [DateTimeOffset]::Parse([string]$SavedGuard.successorCreationTimeUtc).UtcDateTime
+        if ([Math]::Abs(($ExpectedCreation - $GuardCreation).TotalSeconds) -gt 2) { return $null }
+        if (-not (Test-QuotaPinOfficialCodexIdentity -ProcessId $SuccessorPid -PackageRoot $PackageRoot -ExpectedCreationTimeUtc $ExpectedCreation)) { return $null }
+        $ReadyPath = Join-Path $LogRoot ('attach-ready.{0}.json' -f [string]$Runtime.generation)
+        if (-not (Test-Path -LiteralPath $ReadyPath)) { return $null }
+        $Ready = Get-Content -Raw -LiteralPath $ReadyPath | ConvertFrom-Json
+        if ([int]$Ready.schema -ne 1 -or [string]$Ready.state -ne 'renderer-attached' -or
+            -not [string]::Equals([string]$Ready.generation, [string]$Runtime.generation, [StringComparison]::Ordinal) -or
+            [int]$Ready.port -ne $Port) { return $null }
+        [pscustomobject]@{
+            generation = [string]$Runtime.generation
+            sourcePid = [int]$SavedGuard.sourcePid
+            sourceCreationTimeUtc = [DateTimeOffset]::Parse([string]$SavedGuard.sourceCreationTimeUtc).UtcDateTime
+            successorPid = $SuccessorPid
+            successorCreationTimeUtc = $ExpectedCreation
+            agentPid = [int]$Runtime.agentPid
+            port = $Port
+        }
+    }
+    catch { $null }
+}
+
+function Test-QuotaPinMainTarget([int]$Port) {
+    if ($Port -lt 1024 -or $Port -gt 65535) { return $false }
+    try {
+        $Response = Invoke-WebRequest -UseBasicParsing -Uri ('http://127.0.0.1:{0}/json/list' -f $Port) -TimeoutSec 1
+        if ([int]$Response.StatusCode -ne 200) { return $false }
+        $Targets = @($Response.Content | ConvertFrom-Json)
+        [bool](@($Targets | Where-Object { [string]$_.url -ceq 'app://-/index.html' }).Count -gt 0)
+    }
+    catch { $false }
+}
+
+function Start-QuotaPinRecoveredAgent($Runtime) {
+    try {
+        if (Test-QuotaPinAgentIdentity ([int]$Runtime.agentPid)) { return [pscustomobject]@{ state = 'active'; processId = [int]$Runtime.agentPid } }
+        if (-not (Test-QuotaPinMainTarget ([int]$Runtime.port))) { return [pscustomobject]@{ state = 'waiting'; processId = 0 } }
+        $AgentPath = Join-Path $InstallRoot 'QuotaPin.Agent.exe'
+        $ConfigPath = Join-Path $InstallRoot 'config.json'
+        $AgentLogPath = Join-Path $LogRoot 'agent.log'
+        if (-not (Test-Path -LiteralPath $AgentPath) -or -not (Test-Path -LiteralPath $ConfigPath)) { return [pscustomobject]@{ state = 'waiting'; processId = 0 } }
+        $CodexCommand = Get-QuotaPinCodexCommand
+        $StartInfo = [Diagnostics.ProcessStartInfo]::new()
+        $StartInfo.FileName = $AgentPath
+        $StartInfo.Arguments = '--port {0} --config "{1}" --log "{2}" --attach-generation "{3}"' -f ([int]$Runtime.port), $ConfigPath, $AgentLogPath, [string]$Runtime.generation
+        $StartInfo.WorkingDirectory = $InstallRoot
+        $StartInfo.UseShellExecute = $false
+        $StartInfo.CreateNoWindow = $true
+        $StartInfo.EnvironmentVariables['QUOTAPIN_CODEX_COMMAND'] = $CodexCommand
+        $Agent = [Diagnostics.Process]::Start($StartInfo)
+        if (-not $Agent) { return [pscustomobject]@{ state = 'failed'; processId = 0 } }
+        Write-QuotaPinLifecycleState -State 'attached' -CodexPid ([int]$Runtime.successorPid) -AgentPid $Agent.Id -Port ([int]$Runtime.port) -Generation ([string]$Runtime.generation) -Reason 'supervisor-resumed'
+        [pscustomobject]@{ state = 'started'; processId = $Agent.Id }
+    }
+    catch {
+        Write-WatcherLog ('agent recovery failed error=' + $_.Exception.GetType().Name)
+        [pscustomobject]@{ state = 'failed'; processId = 0 }
+    }
 }
 
 function Set-QuotaPinAttachLatch(
@@ -115,11 +197,12 @@ if (-not $CreatedNew) {
 $Ignored = New-Object 'System.Collections.Generic.HashSet[string]'
 $ProtectedPid = 0
 $IdleSince = $null
+$AgentResumeFailures = 0
+$NextAgentResumeAt = Get-Date
 $Guard = Read-QuotaPinAutoAttachGuard $GuardPath
 $StartupRoots = @(Get-QuotaPinCodexRootProcesses $PackageRoot)
 if ([string]$Guard.state -eq 'successor-observed') {
-    $GuardWrittenAt = try { [DateTimeOffset]::Parse([string]$Guard.writtenAt).AddMinutes(-1) } catch { [DateTimeOffset]::Now.AddMinutes(-2) }
-    $Recovered = Get-QuotaPinRuntimeHandoff -Generation ([string]$Guard.generation) -SourcePid ([int]$Guard.sourcePid) -NotBefore $GuardWrittenAt -PackageRoot $PackageRoot
+    $Recovered = Get-QuotaPinRecoverableRuntime -SavedGuard $Guard -PackageRoot $PackageRoot
     if ($Recovered -and [int]$Recovered.successorPid -eq [int]$Guard.successorPid) {
         $ExpectedSuccessorCreation = try { [DateTimeOffset]::Parse([string]$Guard.successorCreationTimeUtc).UtcDateTime } catch { [DateTime]::MinValue }
         if ($ExpectedSuccessorCreation -ne [DateTime]::MinValue -and
@@ -160,6 +243,25 @@ try {
             if (-not $IdleSince) { $IdleSince = Get-Date }
         } else {
             $IdleSince = $null
+        }
+
+        # A command-mode installer starts its replacement watcher before the
+        # updater finishes reconnecting the already-running Codex session. The
+        # updater then publishes one exact successor receipt. Adopt only that
+        # one-way none -> successor-observed transition and only after the
+        # complete runtime identity validates; arbitrary external guard edits
+        # can never steer this watcher.
+        $PublishedGuard = Read-QuotaPinAutoAttachGuard $GuardPath
+        if (Test-QuotaPinPublishedGuardTransition -LocalState ([string]$Guard.state) -PublishedState ([string]$PublishedGuard.state)) {
+            $PublishedRuntime = Get-QuotaPinRecoverableRuntime -SavedGuard $PublishedGuard -PackageRoot $PackageRoot
+            $PublishedRoot = @($Roots | Where-Object { [int]$_.ProcessId -eq [int]$PublishedGuard.successorPid })
+            if ($PublishedRuntime -and $PublishedRoot.Count -eq 1) {
+                $Guard = $PublishedGuard
+                $ProtectedPid = [int]$PublishedRuntime.successorPid
+                $AgentResumeFailures = 0
+                $NextAgentResumeAt = Get-Date
+                Write-WatcherLog "adopted verified hot-update runtime generation=$([string]$Guard.generation) successorPid=$ProtectedPid"
+            }
         }
 
         $GuardState = [string]$Guard.state
@@ -247,6 +349,31 @@ try {
             $null = $Ignored.Add($CandidateIdentity)
             Write-WatcherLog "successor adopted generation=$Generation sourcePid=$SourcePid successorPid=$ProtectedPid; destructive budget exhausted"
             continue
+        }
+        elseif ($Decision -eq 'adopt') {
+            $Runtime = Get-QuotaPinRecoverableRuntime -SavedGuard $Guard -PackageRoot $PackageRoot
+            if ($Runtime -and (Test-QuotaPinAgentIdentity ([int]$Guard.agentPid))) {
+                $AgentResumeFailures = 0
+                $NextAgentResumeAt = (Get-Date).AddSeconds(2)
+            }
+            elseif ($Runtime -and (Get-Date) -ge $NextAgentResumeAt) {
+                $Recovery = Start-QuotaPinRecoveredAgent -Runtime $Runtime
+                if ([string]$Recovery.state -in @('active', 'started')) {
+                    $Guard = New-QuotaPinAutoAttachGuard -State 'successor-observed' -Generation ([string]$Runtime.generation) `
+                        -SourcePid ([int]$Runtime.sourcePid) -SourceCreationTimeUtc ([datetime]$Runtime.sourceCreationTimeUtc) `
+                        -SuccessorPid ([int]$Runtime.successorPid) -SuccessorCreationTimeUtc ([datetime]$Runtime.successorCreationTimeUtc) `
+                        -AgentPid ([int]$Recovery.processId) -Port ([int]$Runtime.port)
+                    Write-QuotaPinAutoAttachGuard -Path $GuardPath -Value $Guard
+                    $AgentResumeFailures = 0
+                    $NextAgentResumeAt = (Get-Date).AddSeconds(2)
+                    if ([string]$Recovery.state -eq 'started') { Write-WatcherLog "agent resumed on existing Codex port=$([int]$Runtime.port)" }
+                }
+                else {
+                    $AgentResumeFailures = [Math]::Min(16, $AgentResumeFailures + 1)
+                    $Delay = Get-QuotaPinAgentResumeDelaySeconds -FailureCount $AgentResumeFailures
+                    $NextAgentResumeAt = (Get-Date).AddSeconds($Delay)
+                }
+            }
         }
         Start-Sleep -Milliseconds 1000
     }

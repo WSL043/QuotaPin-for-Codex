@@ -15,6 +15,7 @@ import { createSettingsStateToolkit } from "../src/renderer/settings-state.mjs";
 import { createTimeStateToolkit } from "../src/renderer/time-state.mjs";
 import { createCodeConfigStateToolkit } from "../src/renderer/code-config-state.mjs";
 import { createProfileUsageStateToolkit } from "../src/renderer/profile-usage-state.mjs";
+import { createDeliveryStateToolkit } from "../src/renderer/delivery-state.mjs";
 import { DEFAULT_CONFIG, sanitizeConfig } from "../src/core/config.mjs";
 import { formatQuota } from "../src/core/format.mjs";
 import { normalizeRateLimits } from "../src/core/model.mjs";
@@ -42,7 +43,8 @@ const renderer = `globalThis.__quotaPinRendererToolkits = {
   color: ${createColorStateToolkit.toString()},
   time: ${createTimeStateToolkit.toString()},
   codeConfig: ${createCodeConfigStateToolkit.toString()},
-  profileUsage: ${createProfileUsageStateToolkit.toString()}
+  profileUsage: ${createProfileUsageStateToolkit.toString()},
+  delivery: ${createDeliveryStateToolkit.toString()}
 };\n${loadRendererSource()}`;
 const fixtureNow = Date.now();
 const fixturePreferences = sanitizeConfig(DEFAULT_CONFIG);
@@ -938,7 +940,7 @@ test("Quick module previews repaint from the same live row after quota updates",
     const liveAvatar = document.querySelector('#account img');
     const previewAvatar = document.querySelector('[data-quick-preview="avatar"]');
     const valueToggle = document.querySelector('[data-toggle="Show value"]');
-    const barToggle = document.querySelector('[data-toggle="Show quota bar"]');
+    const barToggle = document.querySelector('[data-toggle="Show module quota bar"]');
     const liveBar = document.querySelector('#quotapin-inline-badge [data-part="bar"]');
     const liveBarFill = liveBar.querySelector('[data-part="bar-fill"]');
     const previewBar = document.querySelector('[data-quick-preview="bar"]');
@@ -1158,11 +1160,12 @@ test("Quick has no quota-source selector", { skip: !canRun }, async () => {
   assert.equal(await client.evaluate(`Boolean(document.querySelector('[data-module-group="quota-source"]'))`), false);
 });
 
-test("the optional quota bar is saved separately and paints inside the real account row", { skip: !canRun }, async () => {
+test("quota-width and full-width bars share the real Legacy and Beta account boundaries", { skip: !canRun }, async () => {
   await navigate("en");
   await openPanel();
   const result = await client.evaluate(`(async () => {
-    const button = document.querySelector('[data-toggle="Show quota bar"]');
+    const button = document.querySelector('[data-toggle="Show module quota bar"]');
+    const fullButton = document.querySelector('[data-toggle="Show full-width quota bar"]');
     const bar = document.querySelector('#quotapin-inline-badge [data-part="bar"]');
     const fill = bar.querySelector('[data-part="bar-fill"]');
     const row = document.getElementById('account');
@@ -1172,7 +1175,7 @@ test("the optional quota bar is saved separately and paints inside the real acco
     const afterRect = bar.getBoundingClientRect();
     const valueRect = document.querySelector('[data-quotapin-module="value"]').getBoundingClientRect();
     const rowRect = row.getBoundingClientRect();
-    return {
+    const quota = {
       before,
       after: {
         pressed: button.getAttribute('aria-pressed'),
@@ -1184,6 +1187,21 @@ test("the optional quota bar is saved separately and paints inside the real acco
         row: rowRect.toJSON(),
       },
     };
+    fullButton.click();
+    await new Promise((resolve) => setTimeout(resolve, 120));
+    const legacyFullRect = bar.getBoundingClientRect();
+    const legacyRowRect = row.getBoundingClientRect();
+    const legacyHelpRect = document.querySelector('#native-help').getBoundingClientRect();
+    document.querySelector('[data-editor-mode="advanced"]').click();
+    document.querySelector('[data-config-key="accountRowMode"] [data-quick-value="beta"]').click();
+    await new Promise((resolve) => setTimeout(resolve, 160));
+    const betaFullRect = bar.getBoundingClientRect();
+    const betaRowRect = row.getBoundingClientRect();
+    return {
+      ...quota,
+      legacyFull: { left: legacyFullRect.left, right: legacyFullRect.right, rowLeft: legacyRowRect.left, rowRight: legacyRowRect.right, helpLeft: legacyHelpRect.left, scope: bar.dataset.quotapinBarScope },
+      betaFull: { left: betaFullRect.left, right: betaFullRect.right, rowLeft: betaRowRect.left, rowRight: betaRowRect.right, helpDisplay: getComputedStyle(document.querySelector('#native-help')).display, scope: bar.dataset.quotapinBarScope },
+    };
   })()`);
   assert.equal(result.before.pressed, "false");
   assert.equal(result.before.display, "none");
@@ -1194,6 +1212,14 @@ test("the optional quota bar is saved separately and paints inside the real acco
   assert.equal(result.after.followsQuota, true);
   assert.equal(result.after.scope, "quota");
   assert.deepEqual(result.after.row, result.before.row, "the bar must not resize the account row");
+  assert.ok(Math.abs(result.legacyFull.left - result.legacyFull.rowLeft) <= .5, JSON.stringify(result.legacyFull));
+  assert.ok(Math.abs(result.legacyFull.right - result.legacyFull.rowRight) <= .5, JSON.stringify(result.legacyFull));
+  assert.ok(result.legacyFull.right <= result.legacyFull.helpLeft + .5, JSON.stringify(result.legacyFull));
+  assert.equal(result.legacyFull.scope, "row");
+  assert.ok(Math.abs(result.betaFull.left - result.betaFull.rowLeft) <= .5, JSON.stringify(result.betaFull));
+  assert.ok(Math.abs(result.betaFull.right - result.betaFull.rowRight) <= .5, JSON.stringify(result.betaFull));
+  assert.equal(result.betaFull.helpDisplay, "none");
+  assert.equal(result.betaFull.scope, "row");
 });
 
 test("free layout keeps its physical composition during a live sidebar resize", { skip: !canRun }, async () => {
@@ -1634,7 +1660,7 @@ test("dragging keeps the Composition card fixed and displaced modules on the cur
     const panel = document.querySelector('#quotapin-profile-editor');
     const group = panel.querySelector('[data-module-group="composition"]');
     const card = group.closest('section');
-    const bar = panel.querySelector('[data-toggle="Show quota bar"]');
+    const bar = panel.querySelector('[data-toggle="Show module quota bar"]');
     const row = document.getElementById('account');
     const value = document.querySelector('[data-quotapin-module="value"]');
     const heights = [];

@@ -212,6 +212,54 @@ $Strict = Get-QuotaPinResumableRuntime -InstallRoot 'C:\fixture' -AgentPath 'C:\
   });
 });
 
+test("a command hot update republishes exact watcher ownership without touching Codex", { skip: process.platform !== "win32" }, () => {
+  const trustPath = path.join(root, "src", "runtime-trust.ps1").replaceAll("'", "''");
+  const script = String.raw`
+$ErrorActionPreference = 'Stop'
+. '${trustPath}'
+$Root = Join-Path ([IO.Path]::GetTempPath()) ('QuotaPin-resume-guard-test-' + [Guid]::NewGuid().ToString('N'))
+try {
+    New-Item -ItemType Directory -Path $Root -Force | Out-Null
+    [IO.File]::WriteAllText((Join-Path $Root 'install-state.json'), '{"schema":1,"owner":"command","preferences":{"autoAttach":true}}')
+    $Runtime = [pscustomobject]@{
+        generation = ('a' * 32)
+        codexPid = 4242
+        codexCreationTimeUtc = '2026-08-10T00:00:00Z'
+        port = 43124
+    }
+    $Result = Publish-QuotaPinResumedAutoAttachGuard -InstallRoot $Root -Runtime $Runtime -AgentPid 4343
+    $Guard = Get-Content -Raw -LiteralPath (Join-Path $Root 'logs\auto-attach-guard.json') | ConvertFrom-Json
+    [IO.File]::WriteAllText((Join-Path $Root 'install-state.json'), '{"schema":1,"owner":"setup","preferences":{"autoAttach":true}}')
+    Remove-Item -LiteralPath (Join-Path $Root 'logs\auto-attach-guard.json') -Force
+    $SetupResult = Publish-QuotaPinResumedAutoAttachGuard -InstallRoot $Root -Runtime $Runtime -AgentPid 4343
+    [ordered]@{
+        result = $Result
+        state = [string]$Guard.state
+        generation = [string]$Guard.generation
+        sameProcess = [int]$Guard.sourcePid -eq 4242 -and [int]$Guard.successorPid -eq 4242
+        exactAgent = [int]$Guard.agentPid -eq 4343
+        exactPort = [int]$Guard.port -eq 43124
+        setupResult = $SetupResult
+        setupGuard = Test-Path -LiteralPath (Join-Path $Root 'logs\auto-attach-guard.json')
+    } | ConvertTo-Json -Compress
+}
+finally { Remove-Item -LiteralPath $Root -Recurse -Force -ErrorAction SilentlyContinue }
+`;
+  const encoded = Buffer.from(script, "utf16le").toString("base64");
+  const result = spawnSync(powershell, ["-NoLogo", "-NoProfile", "-EncodedCommand", encoded], { encoding: "utf8" });
+  assert.equal(result.status, 0, result.stderr || result.stdout);
+  assert.deepEqual(JSON.parse(result.stdout.trim().split(/\r?\n/).at(-1)), {
+    result: "published",
+    state: "successor-observed",
+    generation: "a".repeat(32),
+    sameProcess: true,
+    exactAgent: true,
+    exactPort: true,
+    setupResult: "not-required",
+    setupGuard: false,
+  });
+});
+
 test("command updater contract keeps exact platform-package trust, cleanup, and no-restart ownership", () => {
   const updater = fs.readFileSync(path.join(root, "scripts", "update.ps1"), "utf8");
   assert.match(updater, /\$PackageName = "QuotaPin-\$Version\.exe"/);

@@ -23,6 +23,19 @@ function Get-QuotaPinAutoAttachDecision(
     'launch-once'
 }
 
+function Get-QuotaPinAgentResumeDelaySeconds([int]$FailureCount) {
+    if ($FailureCount -le 0) { return 0 }
+    $Exponent = [Math]::Min(4, $FailureCount - 1)
+    [int][Math]::Min(30, 2 * [Math]::Pow(2, $Exponent))
+}
+
+function Test-QuotaPinPublishedGuardTransition([string]$LocalState, [string]$PublishedState) {
+    # The only guard transition another process may publish is the updater's
+    # exact hot-resume receipt.  Every other lifecycle transition remains
+    # owned by the single watcher process.
+    [bool]($LocalState -eq 'none' -and $PublishedState -eq 'successor-observed')
+}
+
 function Read-QuotaPinAutoAttachGuard([string]$Path) {
     if (-not (Test-Path -LiteralPath $Path)) {
         return [pscustomobject]@{ schema = 1; state = 'none' }

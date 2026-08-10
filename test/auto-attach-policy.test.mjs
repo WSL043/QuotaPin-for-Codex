@@ -53,6 +53,29 @@ test("successor generation is rearmed only after a sustained fully closed interv
   );
 });
 
+test("Agent recovery retries are bounded instead of forming a restart storm", () => {
+  assert.deepEqual(
+    runPolicy("@(0..8 | ForEach-Object { Get-QuotaPinAgentResumeDelaySeconds -FailureCount $_ })"),
+    [0, 2, 4, 8, 16, 30, 30, 30, 30],
+  );
+});
+
+test("a running watcher accepts only the updater's one-way verified guard handoff", () => {
+  assert.equal(runPolicy("Test-QuotaPinPublishedGuardTransition -LocalState none -PublishedState successor-observed"), true);
+  for (const [local, published] of [
+    ["none", "handoff-pending"],
+    ["none", "degraded-latched"],
+    ["successor-observed", "successor-observed"],
+    ["degraded-latched", "successor-observed"],
+  ]) {
+    assert.equal(runPolicy(`Test-QuotaPinPublishedGuardTransition -LocalState ${local} -PublishedState ${published}`), false);
+  }
+  const watcher = fs.readFileSync(path.join(root, "src", "auto-attach.ps1"), "utf8");
+  assert.match(watcher, /Get-QuotaPinRecoverableRuntime -SavedGuard \$PublishedGuard/);
+  assert.match(watcher, /\$PublishedRoot\.Count -eq 1/);
+  assert.match(watcher, /adopted verified hot-update runtime/);
+});
+
 test("renderer readiness is generation-bound and atomically persisted", () => {
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), "quotapin-ready-"));
   try {
@@ -112,6 +135,8 @@ test("watcher and launcher source enforce the single-flight transaction", () => 
   const launcher = fs.readFileSync(path.join(root, "src", "launch.ps1"), "utf8");
   assert.match(watcher, /budget=1\/1/);
   assert.match(watcher, /degraded-latched/);
+  assert.match(watcher, /Get-QuotaPinRecoverableRuntime/);
+  assert.match(watcher, /Start-QuotaPinRecoveredAgent/);
   assert.doesNotMatch(watcher, /RetryAfter|Dictionary\[int,int\]|attach retry scheduled/);
   assert.ok(launcher.indexOf("Test-QuotaPinAttachAuthorization $Package.InstallLocation") < launcher.indexOf("$Running = @(Find-CodexProcesses"));
   assert.ok(launcher.indexOf("Test-QuotaPinRendererReady") < launcher.indexOf("Write-QuotaPinJsonAtomic -Path $RuntimeStatePath"));

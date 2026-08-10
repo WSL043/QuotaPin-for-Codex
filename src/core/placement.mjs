@@ -2,6 +2,7 @@ export function createPlacementToolkit() {
   const primaryZones = Object.freeze([
     "account-row",
     "title-center",
+    "workspace-top-center",
     "workspace-bottom-start",
     "composer-center",
     "workspace-bottom-end",
@@ -146,6 +147,29 @@ export function createPlacementToolkit() {
     const titleRect = centeredRect(titleGap, titleBounds.top + 2, Math.min(28, titleBounds.height - 4), 260);
     zones["title-center"] = { available: Boolean(titleRect), passive: true, rect: titleRect };
 
+    const workspaceLeft = Math.max(8, (sidebar?.right ?? 0) + 8);
+    const workspaceTopBounds = cleanRect({
+      left: workspaceLeft,
+      top: titleHeight + 6,
+      width: Math.max(1, viewport.right - workspaceLeft - 8),
+      height: 30,
+    });
+    const workspaceTopGap = preferredGap(workspaceTopBounds, input.workspaceTopOccupied, {
+      minimumWidth: 120,
+      preferredCenter: (workspaceLeft + viewport.right) / 2,
+    });
+    const workspaceTopRect = centeredRect(
+      workspaceTopGap,
+      workspaceTopBounds.top,
+      workspaceTopBounds.height,
+      300,
+    );
+    zones["workspace-top-center"] = {
+      available: Boolean(workspaceTopRect),
+      passive: true,
+      rect: workspaceTopRect,
+    };
+
     if (composer) {
       const toolbarHeight = clamp(Number(input.composerToolbarHeight) || 34, 26, Math.min(48, composer.height));
       const toolbarTop = composer.bottom - toolbarHeight;
@@ -178,12 +202,15 @@ export function createPlacementToolkit() {
       const composerRect = centeredRect(composerGap, slotTop, slotHeight, 360);
       zones["composer-center"] = { available: Boolean(composerRect), passive: true, rect: composerRect };
 
-      const railRect = cleanRect({
-        left: composer.left + 10,
-        top: composer.bottom - 3,
-        width: Math.max(1, composer.width - 20),
-        height: 2,
-      });
+      const railTop = composer.bottom + 2;
+      const railRect = railTop + 2 <= viewport.bottom - 1
+        ? cleanRect({
+            left: composer.left + 10,
+            top: railTop,
+            width: Math.max(1, composer.width - 20),
+            height: 2,
+          })
+        : null;
       rails["composer-bottom"] = { available: Boolean(railRect), passive: true, rect: railRect };
     } else {
       for (const zone of ["workspace-bottom-start", "composer-center", "workspace-bottom-end"]) {

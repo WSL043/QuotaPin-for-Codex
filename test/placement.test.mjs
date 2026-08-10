@@ -12,6 +12,7 @@ test("placement configuration stays semantic and falls back only to the account 
   assert.deepEqual(PLACEMENT_ZONES, [
     "account-row",
     "title-center",
+    "workspace-top-center",
     "workspace-bottom-start",
     "composer-center",
     "workspace-bottom-end",
@@ -42,13 +43,17 @@ test("placement geometry exposes real gaps and rejects narrow side slots", () =>
     ],
   });
   assert.equal(geometry.zones["title-center"].available, true);
+  assert.equal(geometry.zones["workspace-top-center"].available, true);
   assert.equal(geometry.zones["workspace-bottom-start"].available, true);
   assert.equal(geometry.zones["composer-center"].available, true);
   assert.equal(geometry.zones["workspace-bottom-end"].available, true);
   assert.equal(geometry.rails["composer-bottom"].available, true);
+  assert.ok(geometry.zones["workspace-top-center"].rect.top > geometry.zones["title-center"].rect.bottom);
+  assert.equal(geometry.zones["workspace-top-center"].rect.top, 42);
   assert.ok(geometry.zones["composer-center"].rect.left >= 588);
   assert.ok(geometry.zones["composer-center"].rect.right <= 1002);
   assert.equal(geometry.rails["composer-bottom"].rect.width, 716);
+  assert.equal(geometry.rails["composer-bottom"].rect.top, 854);
 
   const narrow = placement.computePlacementGeometry({
     viewport: { width: 760, height: 700 },

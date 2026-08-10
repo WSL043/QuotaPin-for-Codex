@@ -118,6 +118,9 @@ const fixtureScript = `(() => {
   };
   window.__fixtureSetParts = (parts, valueColor = "#ff3366", dotColor = "#ff3366") => {
     view.parts = { ...view.parts, ...parts };
+    if (Array.isArray(view.runtimeWindows) && view.runtimeWindows.length === 1) {
+      Object.assign(view.runtimeWindows[0], parts);
+    }
     view.text = view.parts.value;
     view.valueColor = valueColor;
     view.dotColor = dotColor;
@@ -553,10 +556,21 @@ test("Quick placement uses semantic Codex slots, keeps identity native, and move
   assert.deepEqual(availability, {
     "account-row": true,
     "title-center": true,
+    "workspace-top-center": true,
     "workspace-bottom-start": true,
     "composer-center": true,
     "workspace-bottom-end": true,
   });
+
+  await client.evaluate(`document.querySelector('[data-placement-zone="workspace-top-center"]').click()`);
+  await waitFor(() => client.evaluate(`document.querySelector('[data-quotapin-placement-surface="primary"]')?.dataset.placementZone === 'workspace-top-center'`));
+  const lowerTop = await client.evaluate(`(() => {
+    const sidebar=document.querySelector('#sidebar').getBoundingClientRect();
+    const surface=document.querySelector('[data-quotapin-placement-surface="primary"]').getBoundingClientRect();
+    return {top:surface.top,center:surface.left+surface.width/2,workspaceCenter:(sidebar.right+document.documentElement.clientWidth)/2};
+  })()`);
+  assert.ok(lowerTop.top >= 40, JSON.stringify(lowerTop));
+  assert.ok(Math.abs(lowerTop.center - lowerTop.workspaceCenter) <= 1, JSON.stringify(lowerTop));
 
   await client.evaluate(`document.querySelector('[data-placement-zone="title-center"]').click()`);
   await waitFor(() => client.evaluate(`document.querySelector('[data-quotapin-placement-surface="primary"]')?.dataset.placementZone === 'title-center'`));
@@ -607,7 +621,7 @@ test("Quick placement uses semantic Codex slots, keeps identity native, and move
   })()`);
   assert.equal(rail.display, "block");
   assert.ok(rail.left > rail.composerLeft && rail.right < rail.composerRight, JSON.stringify(rail));
-  assert.ok(Math.abs(rail.top - (rail.composerBottom - 3)) <= 1, JSON.stringify(rail));
+  assert.ok(Math.abs(rail.top - (rail.composerBottom + 2)) <= 1, JSON.stringify(rail));
 
   await client.evaluate(`window.__quotaPinController.closeEditor(); true`);
   await waitFor(() => client.evaluate(`!document.querySelector('#quotapin-profile-editor')`));
@@ -617,6 +631,63 @@ test("Quick placement uses semantic Codex slots, keeps identity native, and move
     row.dispatchEvent(new PointerEvent('pointerup',{bubbles:true,cancelable:true,button:0,buttons:0,pointerId:91,pointerType:'mouse',isPrimary:true,clientX:24,clientY:700}));
   })()`);
   await waitFor(() => client.evaluate(`window.__fixtureNativeMenuDown === 1`));
+});
+
+test("a remote quota surface keeps stable nodes and carries editing plus hold interaction", { skip: !canRun }, async () => {
+  await client.call("Emulation.setDeviceMetricsOverride", { width: 1100, height: 720, deviceScaleFactor: 1, mobile: false });
+  await navigate("en");
+  await openPanel();
+  await client.evaluate(`document.querySelector('[data-toggle="Show status dot"]').click()`);
+  await waitFor(() => client.evaluate(`window.__quotaPinController.preferences.profiles[0].showDot === true`));
+  await client.evaluate(`document.querySelector('[data-placement-zone="title-center"]').click()`);
+  await waitFor(() => client.evaluate(`document.querySelector('[data-quotapin-placement-group="true"]')?.dataset.quotapinEditing === 'true'`));
+
+  const before = await client.evaluate(`(() => {
+    const group=document.querySelector('[data-quotapin-placement-group="true"]');
+    window.__stableRemoteValue=group.querySelector('[data-quotapin-remote-module="value"]');
+    return [...group.querySelectorAll('[data-quotapin-remote-module]')].map((node)=>node.dataset.quotapinRemoteModule);
+  })()`);
+  assert.deepEqual(before, ["value", "dot"]);
+  await client.evaluate(`window.__fixtureSetParts({value:'41%'})`);
+  await new Promise((resolve) => setTimeout(resolve, 250));
+  const refreshed = await client.evaluate(`(() => ({
+    remote:document.querySelector('[data-quotapin-remote-module="value"]')?.textContent,
+    source:document.querySelector('#quotapin-inline-badge [data-quotapin-module="value"]')?.textContent,
+    same:window.__stableRemoteValue === document.querySelector('[data-quotapin-remote-module="value"]'),
+    runtime:window.__quotaPinController.inspectLayoutRuntime(),
+  }))()`);
+  assert.equal(refreshed.remote, "41%", JSON.stringify(refreshed));
+  assert.equal(await client.evaluate(`window.__stableRemoteValue === document.querySelector('[data-quotapin-remote-module="value"]')`), true, "a quota refresh must update, not replace, the remote module node");
+
+  await client.evaluate(`(() => {
+    const value=document.querySelector('[data-quotapin-remote-module="value"]');
+    const dot=document.querySelector('[data-quotapin-remote-module="dot"]');
+    const from=value.getBoundingClientRect();
+    const to=dot.getBoundingClientRect();
+    const common={bubbles:true,cancelable:true,button:0,pointerId:121,pointerType:'mouse',isPrimary:true};
+    value.dispatchEvent(new PointerEvent('pointerdown',{...common,buttons:1,clientX:from.left+from.width/2,clientY:from.top+from.height/2}));
+    value.dispatchEvent(new PointerEvent('pointermove',{...common,buttons:1,clientX:to.right+18,clientY:to.top+to.height/2}));
+    value.dispatchEvent(new PointerEvent('pointerup',{...common,buttons:0,clientX:to.right+18,clientY:to.top+to.height/2}));
+  })()`);
+  await waitFor(() => client.evaluate(`(() => {const order=window.__quotaPinController.preferences.profiles[0].moduleOrder;return order.indexOf('dot') < order.indexOf('value');})()`));
+  const reordered = await client.evaluate(`[...document.querySelectorAll('[data-quotapin-placement-group="true"] [data-quotapin-remote-module]')].map((node)=>node.dataset.quotapinRemoteModule)`);
+  assert.deepEqual(reordered, ["dot", "value"]);
+
+  await client.evaluate(`window.__quotaPinController.closeEditor(); true`);
+  await waitFor(() => client.evaluate(`!document.querySelector('#quotapin-profile-editor')`));
+  await client.evaluate(`(() => {
+    const group=document.querySelector('[data-quotapin-placement-group="true"]');
+    const rect=group.getBoundingClientRect();
+    group.dispatchEvent(new PointerEvent('pointerdown',{bubbles:true,cancelable:true,button:0,buttons:1,pointerId:122,pointerType:'mouse',isPrimary:true,clientX:rect.left+rect.width/2,clientY:rect.top+rect.height/2}));
+  })()`);
+  await new Promise((resolve) => setTimeout(resolve, 520));
+  await client.evaluate(`(() => {
+    const group=document.querySelector('[data-quotapin-placement-group="true"]');
+    const rect=group.getBoundingClientRect();
+    group.dispatchEvent(new PointerEvent('pointerup',{bubbles:true,cancelable:true,button:0,buttons:0,pointerId:122,pointerType:'mouse',isPrimary:true,clientX:rect.left+rect.width/2,clientY:rect.top+rect.height/2}));
+  })()`);
+  await waitFor(() => client.evaluate(`Boolean(document.querySelector('#quotapin-profile-editor'))`));
+  assert.equal(await client.evaluate(`window.__fixtureNativeMenuDown`), 0, "holding the moved quota opens QuotaPin without replaying a Codex short click");
 });
 
 test("Legacy and Beta switch one reversible account-row and gesture contract", { skip: !canRun }, async () => {

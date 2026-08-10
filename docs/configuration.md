@@ -160,7 +160,7 @@ A compact valid document looks like this:
 | `showValue`, `showDot`, `showTodayTokens`, `showLifetimeTokens`, `showLabel`, `showCountdown`, `showRelative`, `showSeconds`, `showDate`, `showReset` | boolean | Independent inline module visibility. The token counters are optional; `countdown` is compact and universal; `relative` uses localized words. |
 | `showBar` | boolean | Optional quota line. Its color and fill use the same canonical percentage as the value module. |
 | `barScope` | `quota` \| `row` | Within the account surface, `quota` follows visible quota modules and `row` spans the usable row. Legacy stops before Codex Help; Beta uses the expanded row after Help is hidden. |
-| `placement` | semantic object | `primary` accepts `account-row`, `title-center`, `workspace-bottom-start`, `composer-center`, or `workspace-bottom-end`; `rail` accepts `account-row` or `composer-bottom`. `fallback` is currently fixed to `account-row`. |
+| `placement` | semantic object | `primary` accepts `account-row`, `title-center`, `workspace-top-center`, `workspace-bottom-start`, `composer-center`, or `workspace-bottom-end`; `rail` accepts `account-row` or `composer-bottom`. `fallback` is currently fixed to `account-row`. |
 | `moduleOrder` | one permutation of all twelve module ids | Fallback order when two modules are saved at the same horizontal point. |
 | `layoutMode` | `auto`, `free` | Stable semantic docking or exact normalized coordinates. Quick uses `auto`; `free` is an expert Code option. |
 | `snapThreshold` | integer `0`–`48` | Magnetic distance in pixels for `auto`; `0` requires an exact target hit. |
@@ -180,7 +180,9 @@ A compact valid document looks like this:
 
 ### Placement
 
-Quick exposes placement as a small map of the current Codex work surface. Saved settings contain semantic zone names rather than screen pixels, so resizing or moving the window does not corrupt a layout. Quota modules move as one group in the first 2.x beta; the native avatar, account name, and short/hold gesture remain in the account row.
+Quick exposes placement as a small map of the current Codex work surface. Saved settings contain semantic zone names rather than screen pixels, so resizing or moving the window does not corrupt a layout. The title-bar slot and the lower workspace-top slot are separate targets. `composer-bottom` paints immediately outside the input surface rather than over its content.
+
+Quota modules move as one stable group in the first 2.x beta. Their DOM nodes are updated in place, so live quota refreshes do not reset a drag. While Quick or Customize is open, the modules can be reordered directly at the selected surface. Holding the moved module group opens or closes QuotaPin at that location; a short press there is not replayed into a distant Codex control. The native account row remains the fallback and keeps its normal short-click menu contract.
 
 Each non-account zone is derived from current host geometry and is enabled only when a unique, painted safe slot exists. If the composer is absent, the window is too narrow, or Codex changes a surface that cannot be identified unambiguously, `fallback` returns the quota group to `account-row`. The quota rail is independent and may remain under the account row or span the verified bottom edge of the composer.
 

@@ -219,7 +219,8 @@ const installScript = String.raw`(() => {
   const panelRuntimeMetrics = { opens: 0, closes: 0, rebinds: 0, lastRebindReason: null };
   let panelReturnFocus = null;
   let editorMode = "quick";
-  let editorRowCleanup = null;
+  let editorLayoutCleanup = null;
+  let setLayoutEditing = () => {};
   let layoutDragActive = false;
   let activeLayoutDrag = null;
   let holdTimer = 0;
@@ -258,6 +259,7 @@ const installScript = String.raw`(() => {
   let accountResizePending = false;
   let placementLayer = null;
   let placementPrimarySurface = null;
+  let placementPrimaryGroup = null;
   let placementRailSurface = null;
   let observedPlacementComposer = null;
   let activePlacementZone = "account-row";
@@ -427,9 +429,13 @@ const installScript = String.raw`(() => {
       .filter((node) => !node.closest('#quotapin-profile-editor,#quotapin-placement-layer') && isPaintedElement(node))
       .map((node) => node.getBoundingClientRect())
       .filter((rect) => rect.top < 56 && rect.bottom > 0);
+    const workspaceTopOccupied = [...document.querySelectorAll('button,[role="button"],select,input')]
+      .filter((node) => !node.closest('#quotapin-profile-editor,#quotapin-placement-layer') && isPaintedElement(node))
+      .map((node) => node.getBoundingClientRect())
+      .filter((rect) => rect.top < 96 && rect.bottom > 32);
     return {
       composerNode,
-      geometry: computePlacementGeometry({ viewport, sidebar, composer, composerOccupied, titleOccupied }),
+      geometry: computePlacementGeometry({ viewport, sidebar, composer, composerOccupied, titleOccupied, workspaceTopOccupied }),
     };
   }
 
@@ -832,8 +838,9 @@ const installScript = String.raw`(() => {
   function closePanel(relockSecrets = true, restoreFocus = true, resumeProfileRefresh = true) {
     if (panel) panelRuntimeMetrics.closes += 1;
     const returnFocus = panelReturnFocus;
-    try { editorRowCleanup?.(); } catch {}
-    editorRowCleanup = null;
+    try { editorLayoutCleanup?.(); } catch {}
+    editorLayoutCleanup = null;
+    setLayoutEditing = () => {};
     try { panel?.remove(); } catch {}
     panel = null;
     clearProfileUsageTimer();
@@ -1494,8 +1501,8 @@ const installScript = String.raw`(() => {
   }
 
   function enableLiveRowEditing(badge, profile) {
-    try { editorRowCleanup?.(); } catch {}
-    editorRowCleanup = null;
+    try { editorLayoutCleanup?.(); } catch {}
+    editorLayoutCleanup = null;
     const row = findAccountRow();
     if (!(row instanceof Element) || !(badge instanceof Element)) return;
     const modules = findAccountModules(row, badge);
@@ -1719,7 +1726,7 @@ const installScript = String.raw`(() => {
         node.addEventListener("pointercancel", onPositionedPointerCancel);
         node.addEventListener("lostpointercapture", onPositionedLostPointerCapture);
       }
-      editorRowCleanup = () => {
+      editorLayoutCleanup = () => {
         endLayoutDrag();
         delete row.dataset.quotapinLayoutDragging;
         delete row.dataset.quotapinMagnetTarget;
@@ -1748,6 +1755,177 @@ const installScript = String.raw`(() => {
       };
       return;
     }
+  }
+
+  function enableRemoteSurfaceEditing(profile) {
+    try { editorLayoutCleanup?.(); } catch {}
+    editorLayoutCleanup = null;
+    const group = placementPrimaryGroup;
+    const surface = placementPrimarySurface;
+    if (!(group instanceof HTMLElement) || !(surface instanceof HTMLElement) || !group.isConnected) return;
+    const nodes = [...group.querySelectorAll('[data-quotapin-remote-module]')]
+      .filter((node) => node instanceof HTMLElement);
+    if (!nodes.length) return;
+
+    let order = cleanModuleOrder(profile.moduleOrder);
+    const original = new Map(nodes.map((node) => [node, {
+      cursor: node.style.cursor,
+      touchAction: node.style.touchAction,
+      zIndex: node.style.zIndex,
+      transform: node.style.transform,
+      title: node.getAttribute("title"),
+    }]));
+    group.dataset.quotapinEditing = "true";
+    panel.dataset.remoteEditing = "true";
+    for (const node of nodes) {
+      node.style.cursor = "grab";
+      node.style.touchAction = "none";
+      node.setAttribute("aria-grabbed", "false");
+      node.title = t("Drag modules to arrange this surface");
+    }
+
+    const arrange = (nextOrder, activeNode = null, animate = false) => {
+      const byModule = new Map(nodes.map((node) => [node.dataset.quotapinRemoteModule, node]));
+      const before = new Map(nodes.map((node) => [node, node.getBoundingClientRect()]));
+      if (activeNode instanceof HTMLElement) activeNode.style.transform = "none";
+      const ordered = cleanModuleOrder(nextOrder).map((module) => byModule.get(module)).filter(Boolean);
+      ordered.forEach((node, index) => {
+        const current = group.children[index];
+        if (current !== node) group.insertBefore(node, current ?? null);
+      });
+      if (animate) {
+        for (const node of nodes) {
+          if (node === activeNode || typeof node.animate !== "function") continue;
+          const previous = before.get(node);
+          const current = node.getBoundingClientRect();
+          const dx = previous.left - current.left;
+          if (Math.abs(dx) <= .5) continue;
+          for (const animation of node.getAnimations()) {
+            if (animation.id === "quotapin-remote-reorder") animation.cancel();
+          }
+          const animation = node.animate([
+            { transform: "translateX(" + dx + "px)" },
+            { transform: "translateX(0)" },
+          ], { duration: 92, easing: "cubic-bezier(.22,.82,.24,1.08)" });
+          animation.id = "quotapin-remote-reorder";
+        }
+      }
+    };
+
+    let drag = null;
+    const finish = (event, cancelled = false) => {
+      if (!drag || event.pointerId !== drag.pointerId) return;
+      const completed = drag;
+      drag = null;
+      endLayoutDrag();
+      try { completed.node.releasePointerCapture(event.pointerId); } catch {}
+      completed.node.style.transform = "none";
+      completed.node.style.cursor = "grab";
+      completed.node.style.zIndex = original.get(completed.node)?.zIndex ?? "";
+      completed.node.setAttribute("aria-grabbed", "false");
+      delete group.dataset.quotapinLayoutDragging;
+      if (cancelled) {
+        order = cleanModuleOrder(completed.previousOrder);
+        arrange(order);
+      } else if (completed.moved) {
+        profile.moduleOrder = cleanModuleOrder(order);
+        sendAction({ type: "updateProfile", id: profile.id, patch: { moduleOrder: profile.moduleOrder } }, {
+          onAck: (_ack, draft) => {
+            const saved = draft?.profiles?.find((candidate) => candidate.id === profile.id);
+            if (saved) Object.assign(profile, saved);
+            schedule(() => setLayoutEditing(isLayoutEditingMode()));
+          },
+        });
+      }
+      suppressBadgeClickUntil = Date.now() + 600;
+      schedule();
+    };
+    const onPointerDown = (event) => {
+      if (event.button !== 0 || panel?.dataset.remoteEditing !== "true") return;
+      const node = event.currentTarget;
+      const module = node.dataset.quotapinRemoteModule;
+      const rect = node.getBoundingClientRect();
+      const frozenRects = Object.fromEntries(nodes.map((candidate) => {
+        const box = candidate.getBoundingClientRect();
+        return [candidate.dataset.quotapinRemoteModule, {
+          left: box.left,
+          right: box.right,
+          width: Math.max(1, box.width),
+          height: Math.max(1, box.height),
+        }];
+      }));
+      beginLayoutDrag(group, node, event.pointerId);
+      group.dataset.quotapinLayoutDragging = "true";
+      drag = {
+        node,
+        module,
+        pointerId: event.pointerId,
+        startClientX: event.clientX,
+        startClientY: event.clientY,
+        pointerToCenter: rect.left + rect.width / 2 - event.clientX,
+        frozenRects,
+        previousOrder: cleanModuleOrder(order),
+        moved: false,
+      };
+      node.style.cursor = "grabbing";
+      node.style.zIndex = "3";
+      node.setAttribute("aria-grabbed", "true");
+      try { node.setPointerCapture(event.pointerId); } catch {}
+      event.preventDefault();
+      event.stopPropagation();
+    };
+    const onPointerMove = (event) => {
+      if (!drag || event.pointerId !== drag.pointerId) return;
+      const dx = event.clientX - drag.startClientX;
+      const dy = event.clientY - drag.startClientY;
+      if (!drag.moved && Math.hypot(dx, dy) < 5) return;
+      drag.moved = true;
+      const surfaceRect = surface.getBoundingClientRect();
+      const moduleWidth = drag.frozenRects[drag.module]?.width ?? drag.node.getBoundingClientRect().width;
+      const minimum = surfaceRect.left + moduleWidth / 2;
+      const maximum = surfaceRect.right - moduleWidth / 2;
+      const desiredCenter = Math.max(minimum, Math.min(maximum, event.clientX + drag.pointerToCenter));
+      const nextOrder = orderForPointer(order, drag.module, desiredCenter, drag.frozenRects);
+      const changed = nextOrder.some((module, index) => module !== order[index]);
+      order = nextOrder;
+      arrange(order, drag.node, changed);
+      const baseRect = drag.node.getBoundingClientRect();
+      drag.node.style.transform = "translateX(" + (desiredCenter - (baseRect.left + baseRect.width / 2)) + "px)";
+      event.preventDefault();
+      event.stopPropagation();
+    };
+    const onPointerUp = (event) => finish(event, false);
+    const onPointerCancel = (event) => finish(event, true);
+    const onLostPointerCapture = (event) => finish(event, true);
+    for (const node of nodes) {
+      node.addEventListener("pointerdown", onPointerDown);
+      node.addEventListener("pointermove", onPointerMove);
+      node.addEventListener("pointerup", onPointerUp);
+      node.addEventListener("pointercancel", onPointerCancel);
+      node.addEventListener("lostpointercapture", onLostPointerCapture);
+    }
+    editorLayoutCleanup = () => {
+      endLayoutDrag();
+      delete group.dataset.quotapinEditing;
+      delete group.dataset.quotapinLayoutDragging;
+      if (panel) delete panel.dataset.remoteEditing;
+      for (const node of nodes) {
+        const saved = original.get(node);
+        node.removeEventListener("pointerdown", onPointerDown);
+        node.removeEventListener("pointermove", onPointerMove);
+        node.removeEventListener("pointerup", onPointerUp);
+        node.removeEventListener("pointercancel", onPointerCancel);
+        node.removeEventListener("lostpointercapture", onLostPointerCapture);
+        node.style.cursor = saved.cursor;
+        node.style.touchAction = saved.touchAction;
+        node.style.zIndex = saved.zIndex;
+        node.style.transform = saved.transform;
+        if (saved.title == null) node.removeAttribute("title");
+        else node.setAttribute("title", saved.title);
+        node.removeAttribute("aria-grabbed");
+      }
+      schedule();
+    };
   }
 
   function openEditor(badge, preserveUnlock = false) {
@@ -2326,6 +2504,7 @@ const installScript = String.raw`(() => {
     const zoneVisuals = [
       { value: "account-row", label: "Account footer", css: { left: "13px", bottom: "13px", width: "54px", height: "24px" } },
       { value: "title-center", label: "Title center", css: { left: "50%", top: "8px", width: "76px", height: "24px", transform: "translateX(-50%)" } },
+      { value: "workspace-top-center", label: "Workspace top", css: { left: "57%", top: "39px", width: "86px", height: "24px", transform: "translateX(-50%)" } },
       { value: "workspace-bottom-start", label: "Bottom left", css: { left: "79px", bottom: "16px", width: "21px", height: "26px" } },
       { value: "composer-center", label: "Composer center", css: { left: "50%", bottom: "17px", width: "82px", height: "24px", transform: "translateX(-50%)" } },
       { value: "workspace-bottom-end", label: "Bottom right", css: { right: "10px", bottom: "16px", width: "39px", height: "26px" } },
@@ -2351,7 +2530,7 @@ const installScript = String.raw`(() => {
     const railButtons = new Map();
     for (const option of [
       { value: "account-row", label: "Account rail", css: { left: "13px", bottom: "9px", width: "54px" } },
-      { value: "composer-bottom", label: "Composer rail", css: { left: "110px", right: "61px", bottom: "8px" } },
+      { value: "composer-bottom", label: "Below composer", css: { left: "110px", right: "61px", bottom: "8px" } },
     ]) {
       const button = document.createElement("button");
       button.type = "button";
@@ -2398,7 +2577,7 @@ const installScript = String.raw`(() => {
       const requestedUnavailable = quickPlacement.primary !== context.primary;
       placementStatus.textContent = requestedUnavailable
         ? t("Unavailable in this window") + " · " + t("Using account footer")
-        : t(zoneVisuals.find((item) => item.value === context.primary)?.label ?? "Account footer") + " · " + t(context.rail === "composer-bottom" ? "Composer rail" : "Account rail");
+        : t(zoneVisuals.find((item) => item.value === context.primary)?.label ?? "Account footer") + " · " + t(context.rail === "composer-bottom" ? "Below composer" : "Account rail");
     };
     const placementBody = document.createElement("div");
     placementBody.append(placementMap, placementStatus);
@@ -2703,7 +2882,6 @@ const installScript = String.raw`(() => {
       arcadeWrap.style.overflowY = "auto";
       arcadeWrap.style.overflowX = "hidden";
     };
-    let setLayoutEditing = () => {};
     const nameInput = styleControl(document.createElement("input"));
     nameInput.dataset.configKey = "name";
     nameInput.value = profile.name;
@@ -3457,12 +3635,15 @@ const installScript = String.raw`(() => {
     setLayoutEditing = (active) => {
       const currentRow = findAccountRow();
       const resolved = currentRow ? resolvePlacementContext(currentRow, profile.placement).primary : "account-row";
-      const editAccountRow = Boolean(active) && resolved === "account-row";
+      try { editorLayoutCleanup?.(); } catch {}
+      editorLayoutCleanup = null;
+      const editing = Boolean(active);
+      const editAccountRow = editing && resolved === "account-row";
+      const editRemoteSurface = editing && resolved !== "account-row";
       panel.dataset.rowEditing = String(editAccountRow);
-      try { editorRowCleanup?.(); } catch {}
-      editorRowCleanup = null;
-      if (!editAccountRow) return;
-      enableLiveRowEditing(badge, profile);
+      panel.dataset.remoteEditing = String(editRemoteSurface);
+      if (editAccountRow) enableLiveRowEditing(badge, profile);
+      else if (editRemoteSurface) enableRemoteSurfaceEditing(profile);
     };
 
     arcadeWrap.id = "quotapin-mode-arcade";
@@ -3497,22 +3678,35 @@ const installScript = String.raw`(() => {
     lastLayoutPlan = null;
   }
 
-  function eventBadge(event) {
+  function eventBadgeContext(event) {
     if (!isActiveRenderer()) return null;
     const target = event.target;
     if (!(target instanceof Element)) return null;
     const badge = document.getElementById(badgeId);
     const accountRow = findAccountRow();
     if (!badge || !accountRow) return null;
+    if (placementPrimaryGroup instanceof HTMLElement
+      && placementPrimaryGroup.isConnected
+      && placementPrimarySurface?.style.display !== "none"
+      && placementPrimaryGroup.contains(target)) {
+      return { badge, remote: true, captureTarget: placementPrimaryGroup };
+    }
     const surface = accountRowMode() === "beta" ? findAccountSurface(accountRow) : accountRow;
-    return surface?.contains(target) ? badge : null;
+    return surface?.contains(target) ? { badge, remote: false, captureTarget: badge } : null;
+  }
+
+  function eventBadge(event) {
+    return eventBadgeContext(event)?.badge ?? null;
   }
 
   function onBadgePointerDown(event) {
     if (replayingCodexGesture) return;
-    const badge = eventBadge(event);
+    const context = eventBadgeContext(event);
+    const badge = context?.badge;
     if (!badge || event.button !== 0) return;
-    if (panel?.dataset.rowEditing === "true" && event.target instanceof Element && event.target.closest("[data-quotapin-module]")) return;
+    if (event.target instanceof Element
+      && ((panel?.dataset.rowEditing === "true" && event.target.closest("[data-quotapin-module]"))
+        || (panel?.dataset.remoteEditing === "true" && event.target.closest("[data-quotapin-remote-module]")))) return;
     event.preventDefault();
     event.stopImmediatePropagation();
     clearTimeout(holdTimer);
@@ -3525,9 +3719,11 @@ const installScript = String.raw`(() => {
       y: event.clientY,
       startedAt: performance.now(),
       closesPanel,
+      remote: context.remote,
+      captureTarget: context.captureTarget,
     });
     badge.dataset.quotapinGesture = closesPanel ? "panel-closing" : "holding";
-    try { badge.setPointerCapture(event.pointerId); } catch {}
+    try { context.captureTarget?.setPointerCapture(event.pointerId); } catch {}
     if (closesPanel) {
       closePanel();
       return;
@@ -3566,7 +3762,7 @@ const installScript = String.raw`(() => {
     const gesture = reduceGestureState(activeGesture, { type: "release", at: performance.now() }, { holdMs: 480, slop: 10 });
     activeGesture = null;
     suppressBadgeClickUntil = Date.now() + 800;
-    try { gesture.badge.releasePointerCapture(event.pointerId); } catch {}
+    try { gesture.captureTarget?.releasePointerCapture(event.pointerId); } catch {}
     if (gesture.closesPanel) {
       gesture.badge.dataset.quotapinGesture = "panel-close-release";
       return;
@@ -3589,6 +3785,10 @@ const installScript = String.raw`(() => {
       if (gesture.outcome === "cancelled") gesture.badge.dataset.quotapinGesture = "cancelled";
       else if (gesture.badge.dataset.quotapinGesture !== "long-error-release") gesture.badge.dataset.quotapinGesture = "long-release";
       ownedTimeout(() => { longPressHandled = false; }, 700);
+      return;
+    }
+    if (gesture.remote) {
+      gesture.badge.dataset.quotapinGesture = "remote-short-release";
       return;
     }
     const hostButton = gesture.badge.closest('button[aria-haspopup="menu"]');
@@ -4301,6 +4501,7 @@ const installScript = String.raw`(() => {
       observedPlacementComposer = null;
     }
     placementPrimarySurface = null;
+    placementPrimaryGroup = null;
     placementRailSurface = null;
     placementLayer?.remove();
     placementLayer = null;
@@ -4310,7 +4511,10 @@ const installScript = String.raw`(() => {
   }
 
   function ensurePlacementLayer() {
-    if (placementLayer?.isConnected && placementPrimarySurface?.isConnected && placementRailSurface?.isConnected) {
+    if (placementLayer?.isConnected
+      && placementPrimarySurface?.isConnected
+      && placementPrimaryGroup?.isConnected
+      && placementRailSurface?.isConnected) {
       return placementLayer;
     }
     placementLayer?.remove();
@@ -4327,20 +4531,34 @@ const installScript = String.raw`(() => {
     });
     placementPrimarySurface = document.createElement("div");
     placementPrimarySurface.dataset.quotapinPlacementSurface = "primary";
-    placementPrimarySurface.setAttribute("role", "status");
-    placementPrimarySurface.setAttribute("aria-live", "off");
     Object.assign(placementPrimarySurface.style, {
       position: "fixed",
       display: "flex",
       alignItems: "center",
       justifyContent: "center",
-      gap: "8px",
       overflow: "hidden",
+      whiteSpace: "nowrap",
+      pointerEvents: "none",
+      cursor: "default",
+      boxSizing: "border-box",
+    });
+    placementPrimaryGroup = document.createElement("div");
+    placementPrimaryGroup.dataset.quotapinPlacementGroup = "true";
+    placementPrimaryGroup.setAttribute("role", "status");
+    placementPrimaryGroup.setAttribute("aria-live", "off");
+    Object.assign(placementPrimaryGroup.style, {
+      display: "inline-flex",
+      alignItems: "center",
+      justifyContent: "center",
+      gap: "8px",
+      maxWidth: "100%",
+      overflow: "visible",
       whiteSpace: "nowrap",
       pointerEvents: "auto",
       cursor: "default",
       boxSizing: "border-box",
     });
+    placementPrimarySurface.append(placementPrimaryGroup);
     placementRailSurface = document.createElement("div");
     placementRailSurface.dataset.quotapinPlacementSurface = "rail";
     placementRailSurface.setAttribute("aria-hidden", "true");
@@ -4378,24 +4596,27 @@ const installScript = String.raw`(() => {
   }
 
   function syncRemoteQuotaModules(row, badge, view, context) {
-    if (!(placementPrimarySurface instanceof HTMLElement)) return;
+    if (!(placementPrimarySurface instanceof HTMLElement) || !(placementPrimaryGroup instanceof HTMLElement)) return;
     const rect = context.geometry?.zones?.[context.primary]?.rect;
     if (!context.primaryRemote || !paintFixedRect(placementPrimarySurface, rect)) {
       placementPrimarySurface.style.display = "none";
-      placementPrimarySurface.replaceChildren();
+      placementPrimaryGroup.replaceChildren();
       return;
     }
     const sourceModules = findAccountModules(row, badge);
     const remoteModules = cleanModuleOrder(view.layout?.moduleOrder)
       .filter((module) => !["avatar", "name"].includes(module));
-    const fragment = document.createDocumentFragment();
+    const existing = new Map([...placementPrimaryGroup.querySelectorAll('[data-quotapin-remote-module]')]
+      .map((node) => [node.dataset.quotapinRemoteModule, node]));
+    const desired = [];
     for (const module of remoteModules) {
       const source = sourceModules[module];
       if (!(source instanceof HTMLElement) || source.style.display === "none") continue;
-      const clone = document.createElement("span");
+      const clone = existing.get(module) ?? document.createElement("span");
+      existing.delete(module);
       clone.dataset.quotapinRemoteModule = module;
-      clone.textContent = source.textContent;
-      clone.title = source.title;
+      if (clone.textContent !== source.textContent) clone.textContent = source.textContent;
+      if (clone.title !== source.title) clone.title = source.title;
       clone.style.cssText = source.style.cssText;
       clone.style.position = "relative";
       clone.style.left = "0";
@@ -4405,18 +4626,28 @@ const installScript = String.raw`(() => {
       clone.style.maxWidth = "100%";
       clone.style.marginInline = "0";
       clone.style.flex = "0 0 auto";
+      clone.style.pointerEvents = "auto";
       if (module !== "dot") clone.style.width = "auto";
-      fragment.append(clone);
+      if (placementPrimaryGroup.dataset.quotapinEditing === "true") {
+        clone.style.cursor = "grab";
+        clone.style.touchAction = "none";
+        clone.title = t("Drag modules to arrange this surface");
+      }
+      desired.push(clone);
     }
-    placementPrimarySurface.replaceChildren(fragment);
+    for (const stale of existing.values()) stale.remove();
+    desired.forEach((node, index) => {
+      const current = placementPrimaryGroup.children[index];
+      if (current !== node) placementPrimaryGroup.insertBefore(node, current ?? null);
+    });
     placementPrimarySurface.dataset.placementZone = context.primary;
-    placementPrimarySurface.style.display = "flex";
+    placementPrimarySurface.style.display = desired.length ? "flex" : "none";
     placementPrimarySurface.style.fontFamily = getComputedStyle(row).fontFamily;
     placementPrimarySurface.style.fontSize = badge.style.fontSize;
     placementPrimarySurface.style.fontWeight = badge.style.fontWeight;
     placementPrimarySurface.style.lineHeight = badge.style.lineHeight;
-    placementPrimarySurface.title = badge.title;
-    placementPrimarySurface.setAttribute("aria-label", badge.getAttribute("aria-label") ?? t("Codex remaining quota"));
+    placementPrimaryGroup.title = badge.title;
+    placementPrimaryGroup.setAttribute("aria-label", badge.getAttribute("aria-label") ?? t("Codex remaining quota"));
   }
 
   function syncRemoteQuotaRail(row, badge, view, context, valueColor) {
@@ -4453,17 +4684,26 @@ const installScript = String.raw`(() => {
   }
 
   function syncPlacementPresentation(row, badge, view, context, valueColor) {
+    const editingSurfaceChanged = activePlacementZone !== context.primary;
     activePlacementZone = context.primary;
     activePlacementRail = context.rail;
+    const refreshEditingSurface = () => {
+      if (!editingSurfaceChanged || !panel || !isLayoutEditingMode()) return;
+      queueMicrotask(() => {
+        if (panel && isActiveRenderer()) setLayoutEditing(isLayoutEditingMode());
+      });
+    };
     if (!context.primaryRemote && !context.railRemote) {
       removePlacementLayer();
       observePlacementComposer(context.composerNode);
+      refreshEditingSurface();
       return;
     }
     ensurePlacementLayer();
     observePlacementComposer(context.composerNode);
     syncRemoteQuotaModules(row, badge, view, context);
     syncRemoteQuotaRail(row, badge, view, context, valueColor);
+    refreshEditingSurface();
   }
 
   function render() {
@@ -4478,8 +4718,8 @@ const installScript = String.raw`(() => {
       // React can replace the account subtree while Chromium still believes the
       // detached node owns pointer capture. Tear down that stale transaction so
       // the new host can be discovered instead of freezing all later renders.
-      try { editorRowCleanup?.(); } catch {}
-      editorRowCleanup = null;
+      try { editorLayoutCleanup?.(); } catch {}
+      editorLayoutCleanup = null;
       endLayoutDrag();
     }
     const row = findAccountRow();

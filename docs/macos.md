@@ -1,12 +1,12 @@
 # QuotaPin for macOS
 
-QuotaPin 1.1.2 includes the public macOS delivery path. The runtime is self-contained, per user, and does not modify the official Codex application. GitHub Actions validates the package lifecycle on native Apple silicon and Intel runners; the account-row adapter and Gatekeeper behavior still need evidence from a signed-in Mac before macOS can be listed as fully supported.
+QuotaPin 1.1.2 includes the public macOS delivery path. Current development builds install a thin native host plus an integrity-bound QuotaPin payload and use the signed Node runtime already inside official Codex; nothing is injected into or copied out of the Codex application. GitHub Actions validates the offline package lifecycle on native Apple silicon and Intel runners; launch through official Codex, the account-row adapter, and Gatekeeper behavior still need evidence from a signed-in Mac before macOS can be listed as fully supported.
 
 ## What is implemented
 
-- Native arm64 and x86_64 slices of one self-contained host that dispatches the shared Agent or the macOS launcher.
+- Native arm64 and x86_64 slices of a thin host that verifies the adjacent QuotaPin payload and the official Codex runtime before dispatch.
 - One universal package assembled from both independently tested slices.
-- Installation under `~/Library/Application Support/QuotaPin` without `sudo`, Homebrew, or a separately installed Node.js.
+- Installation under `~/Library/Application Support/QuotaPin` without `sudo`, Homebrew, or a separately installed Node.js. QuotaPin does not download a fallback runtime.
 - A user LaunchAgent at `~/Library/LaunchAgents/io.github.wsl043.quotapin.plist`.
 - Normal launching from the official Codex icon. The watcher ignores a Codex session that was already open during install or update.
 - A single generation-bound handoff for a fresh uninstrumented launch. PID, process start time, official bundle identifier, OpenAI Team ID, Agent PID, loopback port, and renderer receipt must all agree.
@@ -15,9 +15,9 @@ QuotaPin 1.1.2 includes the public macOS delivery path. The runtime is self-cont
 - Transactional reinstall/update with configuration and runtime receipt preservation.
 - Exact-identity Agent shutdown and complete QuotaPin removal on uninstall.
 
-The normal installer discovers one official app in `/Applications` or the current user's `Applications` directory. If both `ChatGPT.app` and `Codex.app` are present, pass `--codex-app /exact/path/Codex.app`; that selection is stored in the per-user install state and survives updates.
+The normal installer discovers one official app in `/Applications` or the current user's `Applications` directory, then falls back to Spotlight lookup by bundle identifier. A saved path that disappeared after an app rename does not block rediscovery. If two valid installations are present, pass `--codex-app /exact/path/Codex.app`; that selection is stored in the per-user install state and survives updates while it remains valid.
 
-The official app must have bundle identifier `com.openai.codex`, a strict-valid signature, and Team ID `2DC432GLL2`. The App Server executable must resolve inside that same bundle. CDP binds to `127.0.0.1` on a fresh ephemeral port.
+The official app must have bundle identifier `com.openai.codex`. The application, its main executable, and `Contents/Resources/cua_node/bin/node` must each have a strict-valid signature from Team ID `2DC432GLL2`; the runtime must be Node.js 20 or later. The App Server executable must resolve inside that same bundle. CDP binds to `127.0.0.1` on a fresh ephemeral port.
 
 ## Build and lifecycle verification
 
@@ -29,7 +29,7 @@ npm ci
 ./scripts/macos/test-lifecycle.sh dist/macos-native
 ```
 
-GitHub Actions runs that lifecycle independently on Apple silicon and Intel runners: build, signature check, install, LaunchAgent start, same-version update, rollback, configuration preservation, and uninstall. A second job combines the two verified slices into `QuotaPin-macOS-VERSION.dmg`, containing a double-clickable `QuotaPin Installer.app`. GitHub validates the artifact digest when the image moves between jobs, then fresh macOS 15 and macOS 26 runners on both architectures independently mount and exercise that exact final image again.
+GitHub Actions runs the offline lifecycle independently on Apple silicon and Intel runners: build, host signature and payload-integrity checks, install, staged LaunchAgent validation, same-version update, rollback, configuration preservation, and uninstall. A second job combines the two verified host slices into `QuotaPin-macOS-VERSION.dmg`, containing a double-clickable `QuotaPin Installer.app`. GitHub validates the artifact digest when the image moves between jobs, then fresh macOS 15 and macOS 26 runners on both architectures independently mount and exercise that exact final image again. Those runners do not contain official Codex, so they cannot replace the signed-in real-Mac runtime test.
 
 Development candidates are short-lived Actions artifacts. They are not GitHub Releases and do not enter the stable update channel. The stable remote bootstrap in `install-macos.sh` accepts only an immutable published release, verifies GitHub's SHA-256 digest, mounts the image read-only, validates the app bundle, and runs its embedded installer payload.
 

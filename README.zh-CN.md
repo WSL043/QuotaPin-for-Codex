@@ -164,7 +164,7 @@ Codex 的界面本身会继续变化。QuotaPin 在无法明确识别账户栏�
 
 ## macOS 当前状态
 
-通用 DMG 同时包含 Apple 芯片与 Intel 构建。GitHub Actions 已在 macOS 15 与 macOS 26 的原生 runner 上对最终镜像执行安装、更新、LaunchAgent 启动、配置保留和卸载测试。
+通用 DMG 同时包含 Apple 芯片与 Intel 构建。GitHub Actions 已在 macOS 15 与 macOS 26 的原生 runner 上对最终镜像执行安装、LaunchAgent 配置校验、更新、配置保留和卸载测试；通过官方签名 Codex 运行时启动仍需真机验收。
 
 CI 仍然无法替代两件事：当前 Codex 在登录状态下的真实账户栏，以及用户 Mac 上真实的 Gatekeeper 行为。这一步实机验收还没有完成。详细边界见 [macOS 说明](docs/macos.md)，也欢迎提交[脱敏兼容性报告](https://github.com/WSL043/QuotaPin-for-Codex/issues/new?template=macos-compatibility.yml)。
 

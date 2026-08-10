@@ -164,7 +164,7 @@ Codex の UI は今後も変わり得ます。QuotaPin はアカウント欄を�
 
 ## macOS の現在地
 
-Universal DMG には Apple シリコン版と Intel 版が含まれます。GitHub Actions では macOS 15 と macOS 26 のネイティブ runner を使い、最終イメージのインストール、更新、LaunchAgent 起動、設定保持、アンインストールまで確認しています。
+Universal DMG には Apple シリコン版と Intel 版が含まれます。GitHub Actions では macOS 15 と macOS 26 のネイティブ runner を使い、最終イメージのインストール、LaunchAgent 設定の検証、更新、設定保持、アンインストールまで確認しています。公式署名済み Codex ランタイム経由の起動は、実機受け入れ確認の対象です。
 
 一方で CI では、現在の Codex にサインインした状態での実際のアカウント欄と、ユーザー環境での Gatekeeper の挙動までは証明できません。この実機受け入れ確認はまだ残っています。詳しくは [macOS の実装と受け入れ境界](docs/macos.md)を参照するか、匿名化した[互換性レポート](https://github.com/WSL043/QuotaPin-for-Codex/issues/new?template=macos-compatibility.yml)を送ってください。
 

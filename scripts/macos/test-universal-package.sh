@@ -9,6 +9,8 @@ EXPECTED_ARCH="${2:-$(uname -m)}"
 [[ "$EXPECTED_ARCH" == "arm64" || "$EXPECTED_ARCH" == "x86_64" ]] || { echo "Unsupported expected architecture: $EXPECTED_ARCH" >&2; exit 2; }
 [[ "$(uname -m)" == "$EXPECTED_ARCH" ]] || { echo "Runner architecture mismatch: expected $EXPECTED_ARCH, got $(uname -m)." >&2; exit 2; }
 [[ -f "$IMAGE" && ! -L "$IMAGE" ]] || { echo "Universal package image is missing: $IMAGE" >&2; exit 2; }
+IMAGE_BYTES="$(stat -f %z "$IMAGE")"
+[[ "$IMAGE_BYTES" -lt $((16 * 1024 * 1024)) ]] || { echo "Universal package exceeds the 16 MiB delivery budget: $IMAGE_BYTES bytes" >&2; exit 2; }
 
 VERSION="$(tr -d '\r\n' < "$ROOT/VERSION")"
 TEMP_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/quotapin-universal.XXXXXX")"
@@ -39,8 +41,10 @@ for binary in QuotaPin.Mac; do
   codesign --verify --strict "$PACKAGE_ROOT/$binary"
 done
 
+[[ -f "$PACKAGE_ROOT/QuotaPin.runtime.cjs" && ! -L "$PACKAGE_ROOT/QuotaPin.runtime.cjs" ]]
+
 [[ "$("$PACKAGE_ROOT/QuotaPin.Mac" --launcher-version)" == "$VERSION" ]]
-[[ "$("$PACKAGE_ROOT/QuotaPin.Mac" --quotapin-agent-runtime --agent-version)" == "$VERSION" ]]
+"$PACKAGE_ROOT/QuotaPin.Mac" --wrapper-self-test >/dev/null
 
 "$ROOT/scripts/macos/test-lifecycle.sh" "$PACKAGE_ROOT"
 "$APP_ROOT/Contents/MacOS/QuotaPin Installer" --headless

@@ -184,12 +184,13 @@ test("release metadata imports the signing module from its active PowerShell hos
   assert.match(script, /release metadata cannot be trusted/);
 });
 
-test("platform builds retry transient upstream license downloads without changing the payload contract", () => {
+test("platform builds keep transient downloads bounded and macOS runtime-free", () => {
   const windowsBuild = fs.readFileSync(new URL("../scripts/build-agent.ps1", import.meta.url), "utf8");
   const macBuild = fs.readFileSync(new URL("../scripts/macos/build.sh", import.meta.url), "utf8");
   assert.match(windowsBuild, /foreach \(\$Attempt in 1\.\.4\)/);
   assert.match(windowsBuild, /Invoke-WebRequest[^\r\n]*-TimeoutSec 60/);
-  assert.match(macBuild, /--retry 4 --retry-all-errors/);
+  assert.doesNotMatch(macBuild, /curl|Invoke-WebRequest|npm view|npm pack|nodejs\.org/);
+  assert.match(macBuild, /official Codex runtime is validated and used in place/);
 });
 
 test("release identity checks normalize padded Windows version resources", () => {

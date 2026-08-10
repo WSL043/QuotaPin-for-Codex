@@ -36,7 +36,7 @@ npm ci
 ./scripts/macos/test-lifecycle.sh dist/macos-native
 ```
 
-`install-macos.sh` is the stable/default remote bootstrap for releases containing `QuotaPin-macOS-VERSION.dmg`. It verifies the immutable GitHub release and asset digest, mounts the image read-only, and runs the same payload as `QuotaPin Installer.app`. The installed universal package needs neither Node.js nor Homebrew, owns one user LaunchAgent, preserves `config.json` on update, and never interrupts a Codex session that was already open during installation.
+`install-macos.sh` is the stable/default remote bootstrap for releases containing `QuotaPin-macOS-VERSION.dmg`. It verifies the immutable GitHub release and asset digest, mounts the image read-only, and runs the same payload as `QuotaPin Installer.app`. The installed universal package needs neither a separately installed Node.js nor Homebrew: its thin native host verifies and uses the signed runtime inside the official Codex bundle in place, and never downloads a substitute. It owns one user LaunchAgent, preserves `config.json` on update, and never interrupts a Codex session that was already open during installation.
 
 Before reporting success, verify all of the following:
 
@@ -100,7 +100,7 @@ Useful source map:
 - `src/renderer/`: pure settings, layout, gesture, effect, experiment, and localization state;
 - `src/injector.mjs`: composition root plus the version-sensitive Windows DOM adapter;
 - `scripts/build-agent.ps1`: self-contained Windows Agent build;
-- `src/macos/` and `scripts/macos/`: fail-closed macOS watcher/launcher, universal self-contained build, transactional user LaunchAgent install, update, and uninstall lifecycle;
+- `src/macos/` and `scripts/macos/`: fail-closed macOS watcher/launcher, thin universal host plus integrity-bound runtime payload, transactional user LaunchAgent install, update, and uninstall lifecycle;
 - `src/launch.ps1`: official Codex activation with loopback CDP;
 - `src/tray/`: notification-area companion;
 - `scripts/`: install, uninstall, build, stop, and runtime verification;

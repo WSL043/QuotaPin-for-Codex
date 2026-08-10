@@ -45,7 +45,9 @@ APPLESCRIPT
     show_result false
     exit 4
   fi
-  if "$PAYLOAD/install.sh" --source "$PAYLOAD"; then
+  INSTALL_ARGUMENTS=(--source "$PAYLOAD")
+  if [[ "$HEADLESS" == true ]]; then INSTALL_ARGUMENTS+=(--no-start); fi
+  if "$PAYLOAD/install.sh" "${INSTALL_ARGUMENTS[@]}"; then
     show_result true
     exit 0
   else

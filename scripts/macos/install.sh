@@ -51,7 +51,7 @@ case "$TARGET" in
   *) echo "Refusing unresolved install target: $TARGET" >&2; exit 3 ;;
 esac
 
-for name in ARCH QuotaPin.Mac config.default.json install.sh uninstall.sh update.sh VERSION COMMIT LICENSE README.txt THIRD_PARTY_NOTICES.txt MANIFEST.sha256; do
+for name in ARCH QuotaPin.Mac QuotaPin.runtime.cjs config.default.json install.sh uninstall.sh update.sh VERSION COMMIT LICENSE README.txt THIRD_PARTY_NOTICES.txt MANIFEST.sha256; do
   [[ -f "$SOURCE/$name" && ! -L "$SOURCE/$name" ]] || {
     echo "The macOS package is incomplete: $name" >&2
     exit 4
@@ -72,7 +72,7 @@ VERSION="$(tr -d '\r\n' < "$SOURCE/VERSION")"
 )
 codesign --verify --strict "$SOURCE/QuotaPin.Mac"
 [[ "$($SOURCE/QuotaPin.Mac --launcher-version)" == "$VERSION" ]]
-[[ "$($SOURCE/QuotaPin.Mac --quotapin-agent-runtime --agent-version)" == "$VERSION" ]]
+"$SOURCE/QuotaPin.Mac" --wrapper-self-test >/dev/null
 
 if [[ -z "$CODEX_APP" && -f "$TARGET/install-state.json" ]]; then
   if SAVED_CODEX_APP="$(plutil -extract codexApp raw -o - "$TARGET/install-state.json" 2>/dev/null)"; then
@@ -85,6 +85,12 @@ if [[ -n "$CODEX_APP" ]]; then
     exit 4
   }
   CODEX_APP="$(cd "$CODEX_APP" && pwd -P)"
+fi
+
+if [[ "$START_SERVICE" == true ]]; then
+  PREFLIGHT_ARGUMENTS=(--runtime-preflight)
+  if [[ -n "$CODEX_APP" ]]; then PREFLIGHT_ARGUMENTS+=(--codex-app "$CODEX_APP"); fi
+  "$SOURCE/QuotaPin.Mac" "${PREFLIGHT_ARGUMENTS[@]}" >/dev/null
 fi
 
 xml_escape() {
@@ -112,7 +118,7 @@ $(if [[ -n "$CODEX_APP" ]]; then printf '    <string>--codex-app</string>\n    <
   </array>
   <key>RunAtLoad</key><true/>
   <key>KeepAlive</key><true/>
-  <key>ThrottleInterval</key><integer>10</integer>
+  <key>ThrottleInterval</key><integer>60</integer>
   <key>ProcessType</key><string>Background</string>
   <key>Nice</key><integer>10</integer>
   <key>LowPriorityIO</key><true/>
@@ -162,12 +168,13 @@ trap rollback ERR INT TERM
 mkdir -p "$TARGET_PARENT" "$LAUNCH_AGENTS"
 rm -rf "$STAGING" "$PREVIOUS"
 mkdir -p "$STAGING/logs"
-for name in ARCH QuotaPin.Mac LICENSE README.txt THIRD_PARTY_NOTICES.txt VERSION COMMIT MANIFEST.sha256 config.default.json update.sh; do
+for name in ARCH QuotaPin.Mac QuotaPin.runtime.cjs LICENSE README.txt THIRD_PARTY_NOTICES.txt VERSION COMMIT MANIFEST.sha256 config.default.json update.sh; do
   cp "$SOURCE/$name" "$STAGING/$name"
 done
 cp "$SOURCE/install.sh" "$STAGING/install.sh"
 cp "$SOURCE/uninstall.sh" "$STAGING/uninstall.sh"
 chmod 755 "$STAGING/QuotaPin.Mac" "$STAGING/install.sh" "$STAGING/uninstall.sh" "$STAGING/update.sh"
+chmod 644 "$STAGING/QuotaPin.runtime.cjs"
 
 if [[ -f "$TARGET/config.json" && ! -L "$TARGET/config.json" ]]; then
   cp "$TARGET/config.json" "$STAGING/config.json"

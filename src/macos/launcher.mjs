@@ -17,7 +17,9 @@ import {
   macosLaunchPlan,
   matchesRendererReceipt,
   resolveCodexBundle,
+  resolveCodexNodeRuntime,
   validateOfficialCodexIdentity,
+  validateOfficialCodexRuntimeIdentity,
 } from "./launcher-runtime.mjs";
 
 const VERSION = "1.1.2";
@@ -73,26 +75,39 @@ function plistValue(infoPath, key) {
   return result.status === 0 ? result.stdout.trim() : "";
 }
 
+function signedComponentIdentity(componentPath) {
+  const verification = spawnSync("/usr/bin/codesign", ["--verify", "--strict", componentPath], { encoding: "utf8" });
+  const details = spawnSync("/usr/bin/codesign", ["-dv", "--verbose=4", componentPath], { encoding: "utf8" });
+  const signatureText = `${details.stdout ?? ""}\n${details.stderr ?? ""}`;
+  return {
+    signatureValid: verification.status === 0 && details.status === 0,
+    teamIdentifier: /^TeamIdentifier=(.+)$/m.exec(signatureText)?.[1]?.trim() ?? "",
+  };
+}
+
 function inspectOfficialBundle(bundlePath) {
   const infoPath = path.join(bundlePath, "Contents", "Info.plist");
   const bundleIdentifier = plistValue(infoPath, "CFBundleIdentifier");
   const executableName = plistValue(infoPath, "CFBundleExecutable");
   const appVersion = plistValue(infoPath, "CFBundleShortVersionString");
-  const verification = spawnSync("/usr/bin/codesign", ["--verify", "--deep", "--strict", bundlePath], { encoding: "utf8" });
-  const details = spawnSync("/usr/bin/codesign", ["-dv", "--verbose=4", bundlePath], { encoding: "utf8" });
-  const signatureText = `${details.stdout ?? ""}\n${details.stderr ?? ""}`;
-  const teamIdentifier = /^TeamIdentifier=(.+)$/m.exec(signatureText)?.[1]?.trim() ?? "";
+  const appIdentity = signedComponentIdentity(bundlePath);
   const verified = validateOfficialCodexIdentity({
     bundleIdentifier,
-    teamIdentifier,
-    signatureValid: verification.status === 0 && details.status === 0,
+    teamIdentifier: appIdentity.teamIdentifier,
+    signatureValid: appIdentity.signatureValid,
   });
   if (!executableName || executableName.includes("/") || executableName.includes("\\")) {
     throw new Error("Codex.app has no valid CFBundleExecutable");
   }
   const executablePath = path.join(bundlePath, "Contents", "MacOS", executableName);
   if (!fs.existsSync(executablePath)) throw new Error(`Codex executable was not found: ${executablePath}`);
-  return { ...verified, bundlePath, executablePath, appVersion };
+  const nodePath = resolveCodexNodeRuntime(bundlePath);
+  validateOfficialCodexRuntimeIdentity({
+    app: appIdentity,
+    executable: signedComponentIdentity(executablePath),
+    node: signedComponentIdentity(nodePath),
+  });
+  return { ...verified, bundlePath, executablePath, nodePath, appVersion };
 }
 
 function parseProcessLine(line) {
@@ -127,14 +142,34 @@ function processIdentityForPid(pid, executablePath = "") {
   return { ...candidate, executablePath };
 }
 
-function agentIdentityForPid(pid, agentPath) {
-  const identity = processIdentityForPid(pid, agentPath);
-  if (!identity || !identity.command.includes(` ${AGENT_MODE_ARGUMENT}`)) return null;
-  return identity;
-}
-
 function agentPathFor(paths) {
   return path.join(paths.installRoot, "QuotaPin.Mac");
+}
+
+function runtimePathFor(paths) {
+  return path.join(paths.installRoot, "QuotaPin.runtime.cjs");
+}
+
+function agentRuntimeIdentity(paths, bundleIdentity) {
+  return { nodePath: bundleIdentity.nodePath, runtimePath: runtimePathFor(paths) };
+}
+
+function agentIdentityForPid(pid, runtimeIdentity) {
+  const identity = processTable().find((item) => item.pid === Number(pid));
+  if (!identity) return null;
+  const prefix = `${runtimeIdentity.nodePath} ${runtimeIdentity.runtimePath} `;
+  if (!identity.command.startsWith(prefix) || !identity.command.includes(` ${AGENT_MODE_ARGUMENT}`)) return null;
+  return { ...identity, executablePath: runtimeIdentity.nodePath, runtimePath: runtimeIdentity.runtimePath };
+}
+
+async function waitForAgentIdentity(pid, runtimeIdentity, timeoutMs = 2_000) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    const identity = agentIdentityForPid(pid, runtimeIdentity);
+    if (identity) return identity;
+    await sleep(50);
+  }
+  return null;
 }
 
 function agentArguments(args) {
@@ -220,9 +255,12 @@ function recoverManagedRuntime(paths, bundleIdentity, roots = null, expected = {
   const successor = currentRoots.find((item) => item.pid === Number(receipt.successorPid));
   if (!successor || successor.startedAt !== String(receipt.successorStartedAt ?? "")) return null;
   const agentPath = agentPathFor(paths);
-  const agent = agentIdentityForPid(receipt.agentPid, agentPath);
+  const runtimeIdentity = agentRuntimeIdentity(paths, bundleIdentity);
+  if (receipt.agentNodePath && receipt.agentNodePath !== runtimeIdentity.nodePath) return null;
+  if (receipt.agentRuntimePath && receipt.agentRuntimePath !== runtimeIdentity.runtimePath) return null;
+  const agent = agentIdentityForPid(receipt.agentPid, runtimeIdentity);
   const verifiedAgent = agent && agent.startedAt === String(receipt.agentStartedAt ?? "") ? agent : null;
-  return { receipt, successor, agent: verifiedAgent, agentPath };
+  return { receipt, successor, agent: verifiedAgent, agentPath, runtimeIdentity };
 }
 
 async function mainTargetAvailable(port, fetchImpl = globalThis.fetch) {
@@ -271,7 +309,7 @@ async function resumeManagedAgent(paths, bundleIdentity, recovered) {
   } finally {
     fs.closeSync(logHandle);
   }
-  const identity = processIdentityForPid(agent.pid, recovered.agentPath);
+  const identity = await waitForAgentIdentity(agent.pid, recovered.runtimeIdentity);
   if (!identity) {
     stopAgent(agent);
     return "failed";
@@ -280,6 +318,8 @@ async function resumeManagedAgent(paths, bundleIdentity, recovered) {
     ...recovered.receipt,
     agentPid: agent.pid,
     agentStartedAt: identity.startedAt,
+    agentNodePath: recovered.runtimeIdentity.nodePath,
+    agentRuntimePath: recovered.runtimeIdentity.runtimePath,
     resumedAt: new Date().toISOString(),
   });
   agent.unref();
@@ -313,6 +353,8 @@ async function launchOnce() {
   const configPath = path.join(paths.installRoot, "config.json");
   const agentPath = agentPathFor(paths);
   if (!fs.existsSync(agentPath)) throw new Error(`QuotaPin Agent was not found: ${agentPath}`);
+  const runtimeIdentity = agentRuntimeIdentity(paths, bundleIdentity);
+  if (!fs.existsSync(runtimeIdentity.runtimePath)) throw new Error(`QuotaPin runtime was not found: ${runtimeIdentity.runtimePath}`);
   const port = await allocateLoopbackPort();
   const plan = macosLaunchPlan({ port, bundleOverride: bundlePath, env: process.env, installRoot: paths.installRoot });
   const readyPath = path.join(paths.logRoot, `attach-ready.${generation}.json`);
@@ -339,7 +381,7 @@ async function launchOnce() {
       stdio: ["ignore", logHandle, logHandle],
     });
     fs.closeSync(logHandle);
-    const agentIdentity = processIdentityForPid(agent.pid, agentPath);
+    const agentIdentity = await waitForAgentIdentity(agent.pid, runtimeIdentity);
     if (!agentIdentity) throw new Error("The spawned QuotaPin Agent identity could not be verified");
 
     const opener = spawn("/usr/bin/open", plan.openArguments, { stdio: "ignore" });
@@ -362,6 +404,8 @@ async function launchOnce() {
       successorStartedAt: successor.startedAt,
       agentPid: agent.pid,
       agentStartedAt: agentIdentity.startedAt,
+      agentNodePath: runtimeIdentity.nodePath,
+      agentRuntimePath: runtimeIdentity.runtimePath,
       port,
       generation,
       attachedAt: ready.writtenAt,
@@ -470,7 +514,7 @@ async function watch() {
         };
         writeGuard(paths, guard);
         appendLog(paths.watcherLogPath, `fresh official launch accepted generation=${generation} sourcePid=${source.pid} budget=1/1`);
-        const result = spawnSync(process.execPath, [
+        const result = spawnSync(agentPathFor(paths), [
           "launch",
           "--codex-app", bundleIdentity.bundlePath,
           "--source-pid", String(source.pid),
@@ -484,8 +528,8 @@ async function watch() {
           sourcePid: source.pid,
           sourceStartedAt: source.startedAt,
         }) ? currentRoots.find((item) => item.pid === Number(receipt.successorPid)) : null;
-        const agentPath = agentPathFor(paths);
-        const agent = receipt ? agentIdentityForPid(receipt.agentPid, agentPath) : null;
+        const runtimeIdentity = agentRuntimeIdentity(paths, bundleIdentity);
+        const agent = receipt ? agentIdentityForPid(receipt.agentPid, runtimeIdentity) : null;
         if (result.status === 0 && successor && successor.startedAt === receipt.successorStartedAt
             && agent && agent.startedAt === receipt.agentStartedAt) {
           guard = {
@@ -532,8 +576,14 @@ async function stopRecordedAgent() {
   const paths = guardPaths();
   const receipt = readJson(paths.launchReceiptPath);
   if (!receipt || Number(receipt.agentPid) <= 0) return;
-  const agentPath = agentPathFor(paths);
-  const actual = agentIdentityForPid(receipt.agentPid, agentPath);
+  const runtimeIdentity = {
+    nodePath: String(receipt.agentNodePath ?? ""),
+    runtimePath: String(receipt.agentRuntimePath ?? ""),
+  };
+  if (!runtimeIdentity.nodePath || !runtimeIdentity.runtimePath) {
+    throw new Error("Recorded Agent runtime identity is incomplete; refusing to signal it");
+  }
+  const actual = agentIdentityForPid(receipt.agentPid, runtimeIdentity);
   if (!actual) return;
   if (actual.startedAt !== String(receipt.agentStartedAt ?? "")) {
     throw new Error("Recorded Agent PID is live but its start identity differs; refusing to signal it");
@@ -541,7 +591,7 @@ async function stopRecordedAgent() {
   process.kill(actual.pid, "SIGTERM");
   const deadline = Date.now() + 5_000;
   while (Date.now() < deadline) {
-    if (!agentIdentityForPid(actual.pid, agentPath)) return;
+    if (!agentIdentityForPid(actual.pid, runtimeIdentity)) return;
     await sleep(100);
   }
   throw new Error("QuotaPin Agent did not exit after SIGTERM; installation was preserved");

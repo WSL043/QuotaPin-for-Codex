@@ -18,17 +18,23 @@ import {
   matchesRendererReceipt,
   resolveCodexBundle,
   resolveCodexCommand,
+  resolveCodexNodeRuntime,
   validateOfficialCodexIdentity,
+  validateOfficialCodexRuntimeIdentity,
 } from "../src/macos/launcher-runtime.mjs";
 
 function macFixture() {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "quotapin-macos-"));
   const bundle = path.join(root, "Codex.app");
   const command = path.join(bundle, "Contents", "Resources", "app", "bin", "codex");
+  const node = path.join(bundle, "Contents", "Resources", "cua_node", "bin", "node");
   fs.mkdirSync(path.dirname(command), { recursive: true });
+  fs.mkdirSync(path.dirname(node), { recursive: true });
   fs.writeFileSync(command, "#!/bin/sh\nexit 0\n", "utf8");
+  fs.writeFileSync(node, "#!/bin/sh\nexit 0\n", "utf8");
   fs.chmodSync(command, 0o755);
-  return { root, bundle, command };
+  fs.chmodSync(node, 0o755);
+  return { root, bundle, command, node };
 }
 
 test("macOS adapter resolves one explicit Codex bundle and one executable inside it", (t) => {
@@ -36,8 +42,16 @@ test("macOS adapter resolves one explicit Codex bundle and one executable inside
   t.after(() => fs.rmSync(fixture.root, { recursive: true, force: true }));
   assert.equal(resolveCodexBundle({ candidates: [fixture.bundle] }), fs.realpathSync(fixture.bundle));
   assert.equal(resolveCodexCommand(fixture.bundle), fs.realpathSync(fixture.command));
+  assert.equal(resolveCodexNodeRuntime(fixture.bundle), fs.realpathSync(fixture.node));
   assert.equal(isPathInsideBundle(fixture.bundle, fixture.command), true);
   assert.equal(isPathInsideBundle(fixture.bundle, path.join(fixture.root, "codex")), false);
+});
+
+test("macOS adapter refuses to download or substitute a runtime when official Codex has no bundled Node", (t) => {
+  const fixture = macFixture();
+  t.after(() => fs.rmSync(fixture.root, { recursive: true, force: true }));
+  fs.rmSync(fixture.node);
+  assert.throws(() => resolveCodexNodeRuntime(fixture.bundle), /signed Node\.js runtime.*not found/i);
 });
 
 test("macOS adapter fails closed on ambiguous bundles and commands outside Codex.app", (t) => {
@@ -77,6 +91,16 @@ test("macOS adapter accepts only the official bundle identity and a generation-b
   }), { bundleIdentifier: "com.openai.codex", teamIdentifier: "2DC432GLL2", signatureValid: true });
   assert.throws(() => validateOfficialCodexIdentity({ bundleIdentifier: "com.openai.codex", teamIdentifier: "OTHER", signatureValid: true }), /signing team/);
   assert.throws(() => validateOfficialCodexIdentity({ bundleIdentifier: "com.openai.codex", teamIdentifier: "2DC432GLL2", signatureValid: false }), /strict code signature/);
+  assert.deepEqual(validateOfficialCodexRuntimeIdentity({
+    app: { signatureValid: true, teamIdentifier: "2DC432GLL2" },
+    executable: { signatureValid: true, teamIdentifier: "2DC432GLL2" },
+    node: { signatureValid: true, teamIdentifier: "2DC432GLL2" },
+  }), { teamIdentifier: "2DC432GLL2", signatureValid: true });
+  assert.throws(() => validateOfficialCodexRuntimeIdentity({
+    app: { signatureValid: true, teamIdentifier: "2DC432GLL2" },
+    executable: { signatureValid: true, teamIdentifier: "OTHER" },
+    node: { signatureValid: true, teamIdentifier: "2DC432GLL2" },
+  }), /main executable signing team/);
   const expected = { generation: "a".repeat(32), agentPid: 77, port: 43124 };
   assert.equal(matchesRendererReceipt({ schema: 1, state: "renderer-attached", ...expected }, expected), true);
   assert.equal(matchesRendererReceipt({ schema: 1, state: "renderer-attached", ...expected, generation: "b".repeat(32) }, expected), false);
@@ -142,13 +166,22 @@ test("macOS production package owns a user LaunchAgent and a bounded uninstall p
   const bootstrap = fs.readFileSync(new URL("../install-macos.sh", import.meta.url), "utf8");
   const launcher = fs.readFileSync(new URL("../src/macos/launcher.mjs", import.meta.url), "utf8");
   const entry = fs.readFileSync(new URL("../src/macos/runtime-entry.mjs", import.meta.url), "utf8");
+  const thinHost = fs.readFileSync(new URL("../src/macos/QuotaPinHost.swift", import.meta.url), "utf8");
   const injector = fs.readFileSync(new URL("../src/injector.mjs", import.meta.url), "utf8");
   const buildOrigin = fs.readFileSync(new URL("../src/core/build-origin.mjs", import.meta.url), "utf8");
-  assert.match(build, /--macho-segment-name NODE_SEA/);
+  assert.match(build, /QuotaPin\.runtime\.cjs/);
+  assert.match(build, /swiftc/);
+  assert.doesNotMatch(build, /postject|NODE_SEA|cp "\$\(command -v node\)"/);
   assert.match(build, /codesign --force --sign -/);
   assert.match(build, /update\.sh/);
   assert.match(build, /src\/macos\/runtime-entry\.mjs/);
   assert.doesNotMatch(build, /build_sea .*QuotaPin\.Agent/);
+  assert.match(thinHost, /Contents\/Resources\/cua_node\/bin\/node/);
+  assert.match(thinHost, /2DC432GLL2/);
+  assert.match(thinHost, /\/usr\/bin\/mdfind/);
+  assert.match(thinHost, /kMDItemCFBundleIdentifier/);
+  assert.match(thinHost, /--runtime-preflight/);
+  assert.doesNotMatch(thinHost, /URLSession|curl|Homebrew|brew install|npm install/);
   assert.match(entry, /--quotapin-agent-runtime/);
   assert.match(buildOrigin, /__QUOTAPIN_BUILD_COMMIT__/);
   assert.doesNotMatch(injector, /__QUOTAPIN_BUILD_COMMIT__/);
@@ -172,6 +205,8 @@ test("macOS production package owns a user LaunchAgent and a bounded uninstall p
   assert.doesNotMatch(install, /plutil -create json -o/);
   assert.doesNotMatch(bootstrap, /plutil -create json -o/);
   assert.match(install, /config\.json/);
+  assert.match(install, /QuotaPin\.runtime\.cjs/);
+  assert.match(install, /--runtime-preflight/);
   assert.match(uninstall, /stop-agent/);
   assert.match(uninstall, /official Codex app was not modified/);
   assert.match(bootstrap, /releases\/latest/);

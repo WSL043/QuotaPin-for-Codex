@@ -164,7 +164,7 @@ Codex can change its UI over time. QuotaPin deliberately refuses to render when 
 
 ## macOS status
 
-The universal DMG contains Apple silicon and Intel builds. GitHub Actions exercises the final image on native runners under macOS 15 and macOS 26, including install, update, LaunchAgent startup, configuration preservation, and uninstall paths.
+The universal DMG contains Apple silicon and Intel builds. GitHub Actions exercises the final image on native runners under macOS 15 and macOS 26, including install, staged LaunchAgent validation, update, configuration preservation, and uninstall paths. Launch through the signed official Codex runtime remains part of real-Mac acceptance.
 
 What CI cannot prove is the current signed-in Codex account row and real Gatekeeper behavior on a user's Mac. That acceptance step is still open. See [the macOS implementation and acceptance boundary](docs/macos.md), or send a sanitized [compatibility report](https://github.com/WSL043/QuotaPin-for-Codex/issues/new?template=macos-compatibility.yml).
 

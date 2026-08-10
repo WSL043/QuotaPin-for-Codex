@@ -54,7 +54,7 @@ jobs:
         run: |
           test "$(uname -m)" = "${{ matrix.arch }}"
           ./scripts/macos/build.sh
-      - name: Exercise install, update, LaunchAgent, and uninstall
+      - name: Exercise install, update, staged LaunchAgent, and uninstall
         run: ./scripts/macos/test-lifecycle.sh dist/macos-native
       - name: Upload native macOS slice
         id: upload-native
@@ -71,7 +71,7 @@ jobs:
             echo "- Runner: \`${{ matrix.runner }}\`"
             echo "- Architecture: \`${{ matrix.arch }}\`"
             echo "- Artifact digest: \`${{ steps.upload-native.outputs.artifact-digest }}\`"
-            echo "- Result: build, self-check, install, LaunchAgent, transactional repair, config preservation, uninstall"
+            echo "- Result: build, self-check, install, staged LaunchAgent, transactional repair, config preservation, uninstall"
           } >> "$GITHUB_STEP_SUMMARY"
 
   macos-universal-package:
@@ -166,7 +166,7 @@ jobs:
             echo "### macOS final package acceptance"
             echo "- Native architecture: \`${{ matrix.arch }}\`"
             echo "- Artifact handoff: GitHub digest validated on download"
-            echo "- Result: safe extraction, universal slices, code integrity, install, LaunchAgent, rollback, update, uninstall"
+            echo "- Result: safe extraction, universal slices, code integrity, install, staged LaunchAgent, rollback, update, uninstall"
           } >> "$GITHUB_STEP_SUMMARY"
 
   validate:

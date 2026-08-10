@@ -22,7 +22,7 @@ for source in "$ARM_SOURCE" "$X64_SOURCE"; do
   (cd "$source" && shasum -a 256 -c MANIFEST.sha256 >/dev/null)
 done
 
-for name in VERSION COMMIT LICENSE README.txt THIRD_PARTY_NOTICES.txt config.default.json install.sh uninstall.sh update.sh; do
+for name in VERSION COMMIT LICENSE README.txt THIRD_PARTY_NOTICES.txt QuotaPin.runtime.cjs config.default.json install.sh uninstall.sh update.sh; do
   cmp "$ARM_SOURCE/$name" "$X64_SOURCE/$name"
 done
 [[ "$(tr -d '\r\n' < "$ARM_SOURCE/ARCH")" == "arm64" ]]
@@ -30,7 +30,7 @@ done
 
 rm -rf "$OUTPUT_ROOT"
 mkdir -p "$OUTPUT_ROOT"
-for name in VERSION COMMIT LICENSE README.txt THIRD_PARTY_NOTICES.txt config.default.json install.sh uninstall.sh update.sh; do
+for name in VERSION COMMIT LICENSE README.txt THIRD_PARTY_NOTICES.txt QuotaPin.runtime.cjs config.default.json install.sh uninstall.sh update.sh; do
   cp "$ARM_SOURCE/$name" "$OUTPUT_ROOT/$name"
 done
 printf 'universal\n' > "$OUTPUT_ROOT/ARCH"
@@ -50,14 +50,16 @@ BUNDLE_SHORT_VERSION="${VERSION%%-*}"
 BUNDLE_VERSION="$BUNDLE_SHORT_VERSION"
 if [[ "$VERSION" =~ -beta\.([0-9]+)$ ]]; then BUNDLE_VERSION="$BUNDLE_SHORT_VERSION.${BASH_REMATCH[1]}"; fi
 [[ "$($OUTPUT_ROOT/QuotaPin.Mac --launcher-version)" == "$VERSION" ]]
-[[ "$($OUTPUT_ROOT/QuotaPin.Mac --quotapin-agent-runtime --agent-version)" == "$VERSION" ]]
-node -e 'const value=JSON.parse(process.argv[1]); if(!value.ok||!value.oneHandoffBudget) process.exit(1)' "$($OUTPUT_ROOT/QuotaPin.Mac --self-test)"
-node -e 'const value=JSON.parse(process.argv[1]); if(!value.ok) process.exit(1)' "$($OUTPUT_ROOT/QuotaPin.Mac --quotapin-agent-runtime --renderer-self-test)"
+node -e 'const value=JSON.parse(process.argv[1]); if(!value.ok||!value.runtimeVerified||value.downloadsRuntime) process.exit(1)' "$($OUTPUT_ROOT/QuotaPin.Mac --wrapper-self-test)"
+[[ "$(node "$OUTPUT_ROOT/QuotaPin.runtime.cjs" --launcher-version)" == "$VERSION" ]]
+[[ "$(node "$OUTPUT_ROOT/QuotaPin.runtime.cjs" --quotapin-agent-runtime --agent-version)" == "$VERSION" ]]
+node -e 'const value=JSON.parse(process.argv[1]); if(!value.ok||!value.oneHandoffBudget) process.exit(1)' "$(node "$OUTPUT_ROOT/QuotaPin.runtime.cjs" --self-test)"
+node -e 'const value=JSON.parse(process.argv[1]); if(!value.ok) process.exit(1)' "$(node "$OUTPUT_ROOT/QuotaPin.runtime.cjs" --quotapin-agent-runtime --renderer-self-test)"
 
 (
   cd "$OUTPUT_ROOT"
   shasum -a 256 ARCH COMMIT LICENSE README.txt THIRD_PARTY_NOTICES.txt VERSION \
-    QuotaPin.Mac config.default.json install.sh uninstall.sh update.sh > MANIFEST.sha256
+    QuotaPin.Mac QuotaPin.runtime.cjs config.default.json install.sh uninstall.sh update.sh > MANIFEST.sha256
 )
 
 IMAGE_ROOT="$ROOT/dist/macos-image"

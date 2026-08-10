@@ -15,40 +15,33 @@ trap cleanup EXIT
 cleanup
 
 INSTALL_TRACE="$(mktemp "${TMPDIR:-/tmp}/quotapin-install-trace.XXXXXX")"
-if ! bash -x "$SOURCE/install.sh" --source "$SOURCE" >"$INSTALL_TRACE" 2>&1; then
+if ! bash -x "$SOURCE/install.sh" --source "$SOURCE" --no-start >"$INSTALL_TRACE" 2>&1; then
   cat "$INSTALL_TRACE" >&2
   rm -f "$INSTALL_TRACE"
   exit 1
 fi
 rm -f "$INSTALL_TRACE"
-[[ -x "$TARGET/QuotaPin.Mac" && -x "$TARGET/update.sh" ]]
+[[ -x "$TARGET/QuotaPin.Mac" && -f "$TARGET/QuotaPin.runtime.cjs" && -x "$TARGET/update.sh" ]]
 [[ "$(tr -d '\r\n' < "$TARGET/VERSION")" == "$(tr -d '\r\n' < "$SOURCE/VERSION")" ]]
 [[ "$("$TARGET/QuotaPin.Mac" --launcher-version)" == "$(tr -d '\r\n' < "$SOURCE/VERSION")" ]]
-[[ "$("$TARGET/QuotaPin.Mac" --quotapin-agent-runtime --agent-version)" == "$(tr -d '\r\n' < "$SOURCE/VERSION")" ]]
+"$TARGET/QuotaPin.Mac" --wrapper-self-test >/dev/null
 plutil -lint "$PLIST" >/dev/null
-launchctl print "$DOMAIN/$LABEL" >/dev/null
 
 plutil -replace locale -string ja "$TARGET/config.json"
 BEFORE="$(shasum -a 256 "$TARGET/config.json" | awk '{print $1}')"
-FIRST_PID="$(launchctl print "$DOMAIN/$LABEL" | awk '/^[[:space:]]*pid = [0-9]+/{print $3; exit}')"
-[[ -n "$FIRST_PID" ]]
-
 for fault in after-stage after-target-move after-plist-replace; do
   BEFORE_FAULT="$(shasum -a 256 "$TARGET/config.json" | awk '{print $1}')"
-  if QUOTAPIN_TEST_FAULT_AT="$fault" "$SOURCE/install.sh" --source "$SOURCE" >/dev/null 2>&1; then
+  if QUOTAPIN_TEST_FAULT_AT="$fault" "$SOURCE/install.sh" --source "$SOURCE" --no-start >/dev/null 2>&1; then
     echo "Injected installer fault unexpectedly succeeded: $fault" >&2
     exit 1
   fi
-  [[ -x "$TARGET/QuotaPin.Mac" && -x "$TARGET/update.sh" ]]
+  [[ -x "$TARGET/QuotaPin.Mac" && -f "$TARGET/QuotaPin.runtime.cjs" && -x "$TARGET/update.sh" ]]
   [[ "$(shasum -a 256 "$TARGET/config.json" | awk '{print $1}')" == "$BEFORE_FAULT" ]]
-  launchctl print "$DOMAIN/$LABEL" >/dev/null
 done
 
-"$SOURCE/install.sh" --source "$SOURCE"
+"$SOURCE/install.sh" --source "$SOURCE" --no-start
 AFTER="$(shasum -a 256 "$TARGET/config.json" | awk '{print $1}')"
 [[ "$BEFORE" == "$AFTER" ]]
-SECOND_PID="$(launchctl print "$DOMAIN/$LABEL" | awk '/^[[:space:]]*pid = [0-9]+/{print $3; exit}')"
-[[ -n "$SECOND_PID" && "$SECOND_PID" != "$FIRST_PID" ]]
 [[ "$(plutil -extract locale raw -o - "$TARGET/config.json")" == "ja" ]]
 
 "$TARGET/uninstall.sh"
@@ -58,4 +51,4 @@ if launchctl print "$DOMAIN/$LABEL" >/dev/null 2>&1; then
   exit 1
 fi
 trap - EXIT
-echo "macOS install, update, configuration preservation, LaunchAgent, and uninstall: OK"
+echo "macOS install, update, configuration preservation, staged LaunchAgent, and uninstall: OK"

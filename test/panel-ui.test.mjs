@@ -1370,13 +1370,17 @@ test("high-frequency stale client states cannot flash disabled modules", { skip:
       await Promise.resolve();
       sample(index, 'microtask');
       if (index % 16 === 0) {
-        await new Promise((resolve) => requestAnimationFrame(resolve));
-        sample(index, 'frame');
+        // A background headless page may throttle requestAnimationFrame for an
+        // unbounded period on a shared runner. A zero-delay task still crosses
+        // the renderer's microtask and MutationObserver boundary, which is the
+        // boundary this stale-delivery regression needs to probe.
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        sample(index, 'task');
       }
     }
     sequence += 1;
     window.__quotaPinController.update(state(staleView, stalePreferences, sequence, 'detector-control'));
-    await new Promise((resolve) => requestAnimationFrame(resolve));
+    await new Promise((resolve) => setTimeout(resolve, 0));
     const detectorControl = {
       value: document.querySelector('[data-quotapin-module="value"]')?.textContent?.trim(),
       visible: disabled.filter((module) => {
@@ -1388,7 +1392,7 @@ test("high-frequency stale client states cannot flash disabled modules", { skip:
     };
     sequence += 1;
     window.__quotaPinController.update(state(currentView, currentPreferences, sequence, 'restore-current'));
-    await new Promise((resolve) => requestAnimationFrame(resolve));
+    await new Promise((resolve) => setTimeout(resolve, 0));
     const delivery = window.__quotaPinController.inspectDeliveryRuntime();
     return { flashes, detectorControl, delivery, value: document.querySelector('[data-quotapin-module="value"]')?.textContent?.trim() };
   })()`);

@@ -181,6 +181,7 @@ test("macOS production package owns a user LaunchAgent and a bounded uninstall p
   assert.match(thinHost, /\/usr\/bin\/mdfind/);
   assert.match(thinHost, /kMDItemCFBundleIdentifier/);
   assert.match(thinHost, /--runtime-preflight/);
+  assert.doesNotMatch(thinHost, /--deep/);
   assert.doesNotMatch(thinHost, /URLSession|curl|Homebrew|brew install|npm install/);
   assert.match(entry, /--quotapin-agent-runtime/);
   assert.match(buildOrigin, /__QUOTAPIN_BUILD_COMMIT__/);

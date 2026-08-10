@@ -54,7 +54,7 @@ Latest stable: **v1.1.2**.
 | Windows 11 x64 | ✅ Stable / verified on a signed-in machine |
 | Windows 10 x64 (2004+) | ⚠️ Best effort |
 | Windows ARM64 | ❌ Not supported |
-| macOS Apple silicon / Intel | 🧪 Public package / CI validated; signed-in real-Mac acceptance still pending |
+| macOS 13+ · Apple silicon / Intel | 🧪 Public package / CI validated; signed-in real-Mac acceptance still pending |
 
 ## Install
 

@@ -54,7 +54,7 @@ QuotaPin 做的事情很简单：把真正有用的信息留在账户栏里。�
 | Windows 11 x64 | ✅ 稳定 / 已在登录状态实机验证 |
 | Windows 10 x64（2004+） | ⚠️ 尽力兼容 |
 | Windows ARM64 | ❌ 暂不支持 |
-| macOS Apple 芯片 / Intel | 🧪 已公开安装包 / CI 已验证；仍等待登录状态 Mac 实机验收 |
+| macOS 13+ · Apple 芯片 / Intel | 🧪 已公开安装包 / CI 已验证；仍等待登录状态 Mac 实机验收 |
 
 ## 安装
 

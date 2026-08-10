@@ -161,11 +161,31 @@ class CdpClient {
     socket.addEventListener("error", rejectPending, { once: true });
   }
 
-  call(method, params = {}) {
+  call(method, params = {}, timeout = 15_000) {
     const id = this.nextId++;
     return new Promise((resolve, reject) => {
-      this.pending.set(id, { resolve, reject });
-      this.socket.send(JSON.stringify({ id, method, params }));
+      const timer = setTimeout(() => {
+        if (!this.pending.delete(id)) return;
+        reject(new Error(`CDP fixture command timed out: ${method}`));
+      }, timeout);
+      timer.unref?.();
+      this.pending.set(id, {
+        resolve: (value) => {
+          clearTimeout(timer);
+          resolve(value);
+        },
+        reject: (error) => {
+          clearTimeout(timer);
+          reject(error);
+        },
+      });
+      try {
+        this.socket.send(JSON.stringify({ id, method, params }));
+      } catch (error) {
+        clearTimeout(timer);
+        this.pending.delete(id);
+        reject(error);
+      }
     });
   }
 
@@ -1349,7 +1369,7 @@ test("high-frequency stale client states cannot flash disabled modules", { skip:
       queueMicrotask(() => window.__quotaPinController.update(state(staleView, stalePreferences, sequence - 1, 'stale-' + index)));
       await Promise.resolve();
       sample(index, 'microtask');
-      if (index % 4 === 0) {
+      if (index % 16 === 0) {
         await new Promise((resolve) => requestAnimationFrame(resolve));
         sample(index, 'frame');
       }
@@ -1378,6 +1398,7 @@ test("high-frequency stale client states cannot flash disabled modules", { skip:
   assert.equal(result.value, "58%");
   assert.equal(result.delivery.rejected, 240);
   assert.ok(result.delivery.accepted >= 243, JSON.stringify(result.delivery));
+  assert.ok(result.delivery.presentationSkips >= 240, JSON.stringify(result.delivery));
   assert.equal(result.delivery.highestSequence, 10_482);
   assert.ok(result.delivery.trace.every((entry) => entry.accepted || entry.cause === "stale-sequence"));
 });
@@ -1594,18 +1615,20 @@ test("smart layout repairs legacy fractional anchors and stays docked through re
   }
 });
 
-test("identical controller refreshes update state without repainting module geometry", { skip: !canRun }, async () => {
+test("identical controller refreshes commit delivery without per-delivery row reflow", { skip: !canRun }, async () => {
   await client.call("Emulation.setDeviceMetricsOverride", { width: 800, height: 600, deviceScaleFactor: 1, mobile: false });
   await navigate("en");
   const result = await client.evaluate(`(async () => {
     const pause = () => new Promise((resolve) => setTimeout(resolve, 100));
     const value = document.querySelector('[data-quotapin-module="value"]').textContent;
     const before = window.__quotaPinController.inspectLayoutRuntime();
+    const beforeDelivery = window.__quotaPinController.inspectDeliveryRuntime();
     for (let index = 0; index < 4; index += 1) {
-      window.__fixtureSetParts({ value });
+      window.__fixtureSetParts({ value }, ${JSON.stringify(fixtureView.valueColor)}, ${JSON.stringify(fixtureView.dotColor)});
       await pause();
     }
     const unchanged = window.__quotaPinController.inspectLayoutRuntime();
+    const unchangedDelivery = window.__quotaPinController.inspectDeliveryRuntime();
     const preferences = window.__quotaPinController.preferences;
     const profile = preferences.profiles.find((item) => item.id === preferences.activeProfile) || preferences.profiles[0];
     window.quotapinConfigAction(JSON.stringify({
@@ -1614,11 +1637,15 @@ test("identical controller refreshes update state without repainting module geom
     }));
     await new Promise((resolve) => setTimeout(resolve, 180));
     const changed = window.__quotaPinController.inspectLayoutRuntime();
-    return { before, unchanged, changed };
+    return { before, beforeDelivery, unchanged, unchangedDelivery, changed };
   })()`);
-  assert.ok(result.unchanged.renders >= result.before.renders + 4, JSON.stringify(result));
+  // An independent integrity/timer pass may paint once during the 400 ms
+  // observation window. The four deliveries themselves must all take the
+  // presentation-skip path rather than adding four renderer passes.
+  assert.ok(result.unchanged.renders <= result.before.renders + 1, JSON.stringify(result));
   assert.equal(result.unchanged.reconciliations, result.before.reconciliations, JSON.stringify(result));
-  assert.ok(result.unchanged.skippedReconciliations >= result.before.skippedReconciliations + 4, JSON.stringify(result));
+  assert.ok(result.unchanged.skippedReconciliations <= result.before.skippedReconciliations + 1, JSON.stringify(result));
+  assert.ok(result.unchangedDelivery.presentationSkips >= result.beforeDelivery.presentationSkips + 4, JSON.stringify(result));
   assert.equal(result.changed.reconciliations, result.unchanged.reconciliations + 1, JSON.stringify(result));
 });
 

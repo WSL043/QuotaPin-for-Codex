@@ -123,7 +123,7 @@ const installScript = String.raw`(() => {
 
   const badgeId = "quotapin-inline-badge";
   let state = { status: "loading", view: { text: "--%", parts: { value: "--%", todayTokens: "—", lifetimeTokens: "—", label: "", countdown: "--", relative: "--", seconds: "--:--:--", date: "--", reset: "--" }, runtimeWindows: [], tooltipWindows: [], renderTemplate: "{remaining}%", renderHoverTemplate: "", renderSeparator: " · ", tooltip: "QuotaPin is loading", severity: "unavailable", profileId: "glance", availableWindowCount: 0, showValue: true, showDot: false, showBar: false, barScope: "quota", remainingPercent: null, showLabel: false, showCountdown: false, showRelative: false, showSeconds: false, showDate: false, showReset: false, showTodayTokens: false, showLifetimeTokens: false, displayMode: "modules", valueColor: "muted", dotColor: "muted", identityColor: "inherit", valueColorMode: "muted", dotColorMode: "muted", identityColorMode: "inherit", effect: "none", effectTarget: "dot", effectAt: "critical", overdriveEgg: false, overdriveAlways: false, overdriveEffect: "menuFire", accountRowMode: "legacy", layout: { moduleOrder: defaultModuleOrder, layoutMode: "auto", snapThreshold: 16, snapTargets: ["edges", "center", "modules"], moduleAnchors: defaultModuleAnchors, identity: "show", avatarShape: "native", fontSize: 14, barScope: "quota" } }, preferences: null };
-  const deliveryRuntime = { highestSequence: 0, accepted: 0, rejected: 0, lastReason: null, lastAcceptedAt: 0, stale: false, staleTransitions: 0, recoveries: 0, trace: [] };
+  const deliveryRuntime = { highestSequence: 0, accepted: 0, rejected: 0, presentationSkips: 0, lastReason: null, lastAcceptedAt: 0, stale: false, staleTransitions: 0, recoveries: 0, trace: [] };
   const deliverySummary = (nextState, sequence, accepted, cause) => {
     const view = nextState?.view ?? {};
     const visible = ["value", "dot", "bar", "label", "countdown", "relative", "seconds", "date", "reset", "todayTokens", "lifetimeTokens"]
@@ -169,6 +169,18 @@ const installScript = String.raw`(() => {
     deliverySummary(nextState, sequence, true, "accepted");
     return true;
   };
+  const presentationStateSignature = (nextState) => {
+    if (!nextState || typeof nextState !== "object") return null;
+    try {
+      const { delivery: _delivery, ...presentation } = nextState;
+      return JSON.stringify(presentation);
+    } catch {
+      // Renderer states are JSON payloads in production. A non-serializable
+      // fixture or future adapter must fail open to a render, never suppress it.
+      return null;
+    }
+  };
+  let lastPresentationStateSignature = presentationStateSignature(state);
   let frame = 0;
   let immediateRenderQueued = false;
   let disposed = false;
@@ -4432,7 +4444,19 @@ const installScript = String.raw`(() => {
       const wasStale = deliveryRuntime.stale === true;
       if (!acceptDeliveredState(nextState)) return false;
       if (nextState?.delivery?.reason === "heartbeat" && !wasStale) return true;
-      state = nextState && typeof nextState === "object" ? nextState : { status: "error", view: { text: "--%" } };
+      const nextRenderableState = nextState && typeof nextState === "object" ? nextState : { status: "error", view: { text: "--%" } };
+      const nextPresentationStateSignature = presentationStateSignature(nextRenderableState);
+      const presentationUnchanged = !wasStale
+        && nextPresentationStateSignature !== null
+        && nextPresentationStateSignature === lastPresentationStateSignature;
+      state = nextRenderableState;
+      lastPresentationStateSignature = nextPresentationStateSignature;
+      if (presentationUnchanged) {
+        // Sequence and freshness were still committed above. Skip only the DOM
+        // work when the complete user-visible payload is byte-for-byte equal.
+        deliveryRuntime.presentationSkips += 1;
+        return true;
+      }
       if (state.preferences) settingsState = syncSettingsPreferences(settingsState, state.preferences);
       if (state.settingsAck) acceptSettingsAck(state.settingsAck, document.getElementById(badgeId));
       paintUpdateState?.();
@@ -4481,6 +4505,7 @@ const installScript = String.raw`(() => {
         highestSequence: deliveryRuntime.highestSequence,
         accepted: deliveryRuntime.accepted,
         rejected: deliveryRuntime.rejected,
+        presentationSkips: deliveryRuntime.presentationSkips,
         lastReason: deliveryRuntime.lastReason,
         lastAcceptedAt: deliveryRuntime.lastAcceptedAt,
         stale: deliveryRuntime.stale,

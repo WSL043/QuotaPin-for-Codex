@@ -20,6 +20,7 @@ const bootstrap = read("install.ps1");
 const sourceInstaller = read("scripts/install.ps1");
 const sourceUninstaller = read("scripts/uninstall.ps1");
 const commandUpdater = read("scripts/update.ps1");
+const updateLauncher = read("scripts/update-launcher.ps1");
 const updateRuntime = read("src/agent/update-runtime.mjs");
 const runtimeTrust = read("src/runtime-trust.ps1");
 const stopScript = read("scripts/stop.ps1");
@@ -150,6 +151,7 @@ has(sourceInstaller, "Stop-Process -Id $ProcessId", "a failed watcher handshake 
 has(autoAttach, "StartTime.ToUniversalTime()", "watcher state must bind to the PowerShell process creation time");
 has(sourceInstaller, "QuotaPin.Agent.exe", "source install must use the self-contained agent");
 has(sourceInstaller, "'update.ps1'", "source install must carry the command-path updater");
+has(sourceInstaller, "'update-launcher.ps1'", "source install must carry the Windows update launch handshake");
 has(sourceInstaller, "'ui.ps1'", "source install must carry localized lifecycle UI");
 has(sourceInstaller, "'auto-attach-policy.ps1'", "source install must carry the fail-closed attach policy");
 has(sourceInstaller, "'codex-process.ps1'", "source install must carry verified process identity helpers");
@@ -340,6 +342,10 @@ lacks(read("scripts/build-tray.ps1"), "/reference:System.Management.dll", "tray 
 has(read("scripts/build-tray.ps1"), "Updater.cs", "tray build must include the in-place updater");
 has(updater, "ReleaseDownloadPrefix", "updates must accept only the project release asset origin");
 has(commandUpdater, "Get-FileHash -Algorithm SHA256", "the shared update transaction must verify the downloaded installer before launch");
+has(updateLauncher, "Start-Process -FilePath $PowerShellPath", "the Windows Agent must delegate update survival to an attached PowerShell launcher");
+has(updateLauncher, "did not publish its launch receipt", "the Windows update launcher must fail closed without a fresh updater receipt");
+has(updateRuntime, 'launcherName = this.platform === "win32" ? "update-launcher.ps1"', "the panel update path must use the Windows launch handshake");
+lacks(updateRuntime, 'detached: true, stdio: "ignore", windowsHide: this.platform === "win32"', "the panel must not use Node detached mode for Windows PowerShell");
 has(tray, 'Path.Combine(installRoot, "update.ps1")', "the tray must delegate to the same resumable update transaction as the panel");
 lacks(tray, "DownloadedUpdate", "the tray must not retain a second package downloader and installer");
 lacks(tray, "releases/latest", "the update action must not send users to a release web page");

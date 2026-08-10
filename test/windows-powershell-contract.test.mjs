@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
@@ -47,7 +48,7 @@ $AsDate = ConvertTo-QuotaPinInstant ([DateTime]::Parse('2026-08-06T00:28:37.4510
 });
 
 test("update PowerShell sources parse in Windows PowerShell 5.1", { skip: process.platform !== "win32" }, () => {
-  const files = ["scripts/update.ps1", "scripts/installer-handoff.ps1", "src/runtime-trust.ps1", "src/lifecycle.ps1"]
+  const files = ["scripts/update.ps1", "scripts/update-launcher.ps1", "scripts/installer-handoff.ps1", "src/runtime-trust.ps1", "src/lifecycle.ps1"]
     .map((relative) => path.join(root, relative).replaceAll("'", "''"));
   const script = String.raw`
 $ErrorActionPreference = 'Stop'
@@ -63,6 +64,36 @@ Write-Output 'parsed'
   const result = spawnSync(powershell, ["-NoLogo", "-NoProfile", "-EncodedCommand", encoded], { encoding: "utf8" });
   assert.equal(result.status, 0, result.stderr || result.stdout);
   assert.match(result.stdout, /parsed/);
+});
+
+test("Windows update launcher hands off to a child that survives the launcher", { skip: process.platform !== "win32" }, async (t) => {
+  const fixture = fs.mkdtempSync(path.join(os.tmpdir(), "quotapin-update-launcher-"));
+  t.after(() => fs.rmSync(fixture, { recursive: true, force: true }));
+  const launcher = path.join(root, "scripts", "update-launcher.ps1");
+  const resultPath = path.join(fixture, "logs", "update-result.json");
+  const survivedPath = path.join(fixture, "child-survived.txt");
+  fs.writeFileSync(path.join(fixture, "update.ps1"), String.raw`param([string]$Version)
+$LogRoot = Join-Path $PSScriptRoot 'logs'
+New-Item -ItemType Directory -Path $LogRoot -Force | Out-Null
+[IO.File]::WriteAllText((Join-Path $LogRoot 'update-result.json'), (@{
+  schema = 2
+  status = 'started'
+  phase = 'preparing'
+  version = $Version
+  writtenAt = [DateTimeOffset]::Now.ToString('o')
+} | ConvertTo-Json -Compress))
+Start-Sleep -Milliseconds 750
+[IO.File]::WriteAllText((Join-Path $PSScriptRoot 'child-survived.txt'), 'yes')
+`, "utf8");
+  const result = spawnSync(powershell, [
+    "-NoLogo", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", launcher,
+    "-Version", "9.8.7", "-InstallRoot", fixture,
+  ], { encoding: "utf8", timeout: 10_000 });
+  assert.equal(result.status, 0, result.stderr || result.stdout);
+  assert.equal(JSON.parse(fs.readFileSync(resultPath, "utf8")).status, "started");
+  const deadline = Date.now() + 4_000;
+  while (!fs.existsSync(survivedPath) && Date.now() < deadline) await new Promise((resolve) => setTimeout(resolve, 50));
+  assert.equal(fs.readFileSync(survivedPath, "utf8"), "yes");
 });
 
 test("installer handoff publishes one exact hot-resume completion receipt", { skip: process.platform !== "win32" }, () => {
@@ -209,6 +240,73 @@ $Strict = Get-QuotaPinResumableRuntime -InstallRoot 'C:\fixture' -AgentPath 'C:\
     fallbackCalls: [true, false],
     strictPort: 43125,
     strictCalls: [true],
+  });
+});
+
+test("runtime handoff waits for a setup-started Agent instead of launching a duplicate", { skip: process.platform !== "win32" }, () => {
+  const trustPath = path.join(root, "src", "runtime-trust.ps1").replaceAll("'", "''");
+  const script = String.raw`
+$ErrorActionPreference = 'Stop'
+. '${trustPath}'
+$Root = Join-Path ([IO.Path]::GetTempPath()) ('QuotaPin-resume-race-test-' + [Guid]::NewGuid().ToString('N'))
+try {
+    $LogRoot = Join-Path $Root 'logs'
+    New-Item -ItemType Directory -Path $LogRoot -Force | Out-Null
+    $Generation = ('c' * 32)
+    $StartedAt = '2026-08-10T00:00:00Z'
+    $script:LiveCandidate = [pscustomobject]@{
+        generation = $Generation
+        codexPid = 4242
+        codexCreationTimeUtc = $StartedAt
+        agentPid = 4343
+        port = 43124
+    }
+    [IO.File]::WriteAllText(
+        (Join-Path $LogRoot 'lifecycle.json'),
+        ([ordered]@{ agentPid = 4343; codexPid = 4242; state = 'quota-ready' } | ConvertTo-Json -Compress)
+    )
+    $script:LookupCount = 0
+    $script:StartedDuplicate = $false
+    $script:Published = 0
+    function Get-QuotaPinTrustedRuntime([string]$InstallRoot, [switch]$RequireAgent, [string]$AgentPath = '') {
+        $script:LookupCount++
+        if ($RequireAgent -and $script:LookupCount -eq 1) { return $null }
+        return $script:LiveCandidate
+    }
+    function Start-Sleep { param([int]$Milliseconds) }
+    function Start-Process {
+        $script:StartedDuplicate = $true
+        throw 'A duplicate Agent must not be launched.'
+    }
+    function Publish-QuotaPinResumedAutoAttachGuard {
+        param([string]$InstallRoot, $Runtime, [int]$AgentPid)
+        $script:Published++
+        return 'published'
+    }
+    $Expected = [pscustomobject]@{
+        generation = $Generation
+        codexPid = 4242
+        codexCreationTimeUtc = $StartedAt
+        port = 43124
+    }
+    $Result = Invoke-QuotaPinTrustedRuntimeResumeLocked -InstallRoot $Root -ExpectedRuntime $Expected -AgentPath (Join-Path $Root 'QuotaPin.Agent.exe')
+    [ordered]@{
+        result = $Result
+        lookups = $script:LookupCount
+        startedDuplicate = $script:StartedDuplicate
+        published = $script:Published
+    } | ConvertTo-Json -Compress
+}
+finally { Remove-Item -LiteralPath $Root -Recurse -Force -ErrorAction SilentlyContinue }
+`;
+  const encoded = Buffer.from(script, "utf16le").toString("base64");
+  const result = spawnSync(powershell, ["-NoLogo", "-NoProfile", "-EncodedCommand", encoded], { encoding: "utf8" });
+  assert.equal(result.status, 0, result.stderr || result.stdout);
+  assert.deepEqual(JSON.parse(result.stdout.trim().split(/\r?\n/).at(-1)), {
+    result: "quota-ready",
+    lookups: 2,
+    startedDuplicate: false,
+    published: 1,
   });
 });
 

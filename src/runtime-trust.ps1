@@ -184,10 +184,17 @@ function Invoke-QuotaPinTrustedRuntimeResumeLocked(
     # Setup may have already started the replacement tray while the updater is
     # completing its handoff.  A live, verified Agent for the same immutable
     # Codex process wins; wait for it instead of starting a duplicate Agent.
-    $LiveRuntime = Get-QuotaPinTrustedRuntime -InstallRoot $ResolvedRoot -RequireAgent -AgentPath $ResolvedAgentPath
-    $SameLiveCodex = $LiveRuntime -and
-        [int]$LiveRuntime.codexPid -eq [int]$ExpectedRuntime.codexPid -and
-        [string]$LiveRuntime.codexCreationTimeUtc -ceq [string]$ExpectedRuntime.codexCreationTimeUtc
+    $LiveRuntime = $null
+    foreach ($Attempt in 1..40) {
+        $Candidate = Get-QuotaPinTrustedRuntime -InstallRoot $ResolvedRoot -RequireAgent -AgentPath $ResolvedAgentPath
+        $SameLiveCodex = $Candidate -and
+            [int]$Candidate.codexPid -eq [int]$ExpectedRuntime.codexPid -and
+            [string]$Candidate.codexCreationTimeUtc -ceq [string]$ExpectedRuntime.codexCreationTimeUtc -and
+            [string]$Candidate.generation -ceq [string]$ExpectedRuntime.generation
+        if ($SameLiveCodex) { $LiveRuntime = $Candidate; break }
+        Start-Sleep -Milliseconds 250
+    }
+    $SameLiveCodex = $null -ne $LiveRuntime
     if ($SameLiveCodex) {
         foreach ($Attempt in 1..60) {
             $QuotaReady = $false

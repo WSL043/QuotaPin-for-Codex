@@ -464,6 +464,7 @@ try {
         Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'uninstall.ps1') -Destination $InstallRoot -Force
         Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'stop.ps1') -Destination $InstallRoot -Force
         Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'update.ps1') -Destination $InstallRoot -Force
+        Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'update-launcher.ps1') -Destination $InstallRoot -Force
         $LegacyGeneratedIcon = Join-Path $InstallRoot 'quotapin.ico'
         if (Test-Path -LiteralPath $LegacyGeneratedIcon) { Remove-Item -LiteralPath $LegacyGeneratedIcon -Force }
 

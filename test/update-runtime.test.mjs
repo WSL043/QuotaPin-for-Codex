@@ -130,8 +130,10 @@ test("update runtime checks without installing and launches only an eligible sel
   assert.equal(runtime.clientState().status, "installing");
   assert.equal(runtime.clientState().selectedDirection, "repair");
   assert.equal(launches.length, 1);
+  assert.match(launches[0].args.join(" "), /update-launcher\.ps1/i);
   assert.ok(launches[0].args.includes("Bypass"));
   assert.ok(launches[0].args.includes("0.3.0-alpha.25"));
+  assert.equal(launches[0].options.detached, false);
   assert.equal(runtime.install("0.3.0-alpha.24"), false, "a known-unsafe version never enters the picker");
   assert.equal(runtime.install("9.9.9"), false);
   assert.ok(changes.includes("checking") && changes.includes("available"));
@@ -158,6 +160,7 @@ test("macOS update runtime selects the universal asset and the installed bash up
   assert.equal(launches.length, 1);
   assert.equal(launches[0].file, "/bin/bash");
   assert.deepEqual(launches[0].args, [`${root}/update.sh`, "--version", "0.3.0-alpha.26", "--write-result"]);
+  assert.equal(launches[0].options.detached, true);
   assert.equal(launches[0].options.windowsHide, false);
 });
 
@@ -575,6 +578,39 @@ test("an updater early exit consumes its matching started receipt", async () => 
   child.emit("exit", 1);
   assert.equal(runtime.clientState().status, "error");
   assert.equal(result, null);
+});
+
+test("a successful Windows launcher handoff leaves the updater monitor active", async () => {
+  const root = "C:\\Users\\Test\\AppData\\Local\\QuotaPin";
+  const resultPath = `${root}\\logs\\update-result.json`;
+  const child = new EventEmitter();
+  let result = null;
+  const scheduled = [];
+  const runtime = windowsRuntime({
+    currentVersion: "0.3.0-alpha.25",
+    installRoot: root,
+    autoCheck: false,
+    now: () => 1_000_000,
+    setTimeoutImpl(callback, delay) {
+      scheduled.push({ callback, delay });
+      return { unref() {} };
+    },
+    fsImpl: {
+      existsSync: () => true,
+      readFileSync(filePath) {
+        if (filePath === resultPath && result) return JSON.stringify(result);
+        throw new Error("missing");
+      },
+    },
+    fetchImpl: async () => jsonResponse([release("0.3.0-alpha.26")]),
+    spawnImpl: () => child,
+  });
+  await runtime.check(true);
+  assert.equal(runtime.install("0.3.0-alpha.26"), true);
+  result = { schema: 2, status: "started", phase: "downloading", version: "0.3.0-alpha.26", writtenAt: new Date(1_000_000).toISOString() };
+  child.emit("exit", 0);
+  assert.equal(runtime.clientState().status, "installing");
+  assert.deepEqual(scheduled.map((item) => item.delay), [250]);
 });
 
 test("future update results and caches never suppress a fresh check", () => {

@@ -457,8 +457,10 @@ export class UpdateRuntime {
       return false;
     }
     const updaterName = this.platform === "darwin" ? "update.sh" : this.platform === "win32" ? "update.ps1" : "";
+    const launcherName = this.platform === "win32" ? "update-launcher.ps1" : updaterName;
     const updater = this.installRoot && updaterName ? this.pathImpl.join(this.installRoot, updaterName) : "";
-    if (!updater || !this.fsImpl.existsSync(updater)) {
+    const launcher = this.installRoot && launcherName ? this.pathImpl.join(this.installRoot, launcherName) : "";
+    if (!updater || !launcher || !this.fsImpl.existsSync(updater) || !this.fsImpl.existsSync(launcher)) {
       this.#publish({ status: "error", message: "The QuotaPin update helper is unavailable. Run the install command once to repair it." });
       return false;
     }
@@ -468,8 +470,12 @@ export class UpdateRuntime {
         : this.pathImpl.join(process.env.SystemRoot || process.env.WINDIR || "C:\\Windows", "System32", "WindowsPowerShell", "v1.0", "powershell.exe");
       const args = this.platform === "darwin"
         ? [updater, "--version", requested, "--write-result"]
-        : ["-NoLogo", "-NoProfile", "-ExecutionPolicy", "Bypass", "-WindowStyle", "Hidden", "-File", updater, "-Version", requested];
-      const child = this.spawnImpl(executable, args, { detached: true, stdio: "ignore", windowsHide: this.platform === "win32" });
+        : ["-NoLogo", "-NoProfile", "-ExecutionPolicy", "Bypass", "-WindowStyle", "Hidden", "-File", launcher, "-Version", requested];
+      const child = this.spawnImpl(executable, args, {
+        detached: this.platform === "darwin",
+        stdio: "ignore",
+        windowsHide: this.platform === "win32",
+      });
       const failLaunch = (error) => {
         if (this.state.status !== "installing" || this.state.selectedVersion !== requested) return;
         const startedResult = this.#readUpdateResult();
@@ -494,9 +500,13 @@ export class UpdateRuntime {
           this.#scheduleAutoCheck(this.postInstallCheckMs, true);
           return;
         }
+        if (code === 0 && result?.version === requested && result.status === "started") {
+          this.log(`update launcher handoff confirmed version=${requested}`);
+          return;
+        }
         failLaunch({ code: Number.isInteger(code) ? `EXIT_${code}` : "EARLY_EXIT" });
       });
-      child.unref?.();
+      if (this.platform === "darwin") child.unref?.();
       this.#publish({ status: "installing", phase: "preparing", checkError: false, message: "", selectedVersion: requested, selectedDirection: selectedRelease.direction });
       this.#monitorUpdateResult(requested, this.now());
       this.log(`update helper launched version=${requested}`);

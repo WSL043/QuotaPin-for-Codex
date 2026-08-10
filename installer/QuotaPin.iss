@@ -70,6 +70,7 @@ Source: "..\config.default.json"; DestDir: "{app}"; DestName: "config.json"; Fla
 Source: "..\VERSION"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\scripts\stop.ps1"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\scripts\update.ps1"; DestDir: "{app}"; Flags: ignoreversion
+Source: "..\scripts\update-launcher.ps1"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\scripts\stop.ps1"; Flags: dontcopy
 Source: "..\scripts\check-prerequisites.ps1"; Flags: dontcopy
 Source: "..\scripts\installer-handoff.ps1"; Flags: dontcopy

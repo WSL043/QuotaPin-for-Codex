@@ -1215,7 +1215,20 @@ const installScript = String.raw`(() => {
     }
     bar.dataset.quotapinBarScope = scope;
     bar.style.left = targetLeft - bounds.rowRect.left + "px";
-    bar.style.right = bounds.rowRect.right - targetRight + "px";
+    if (scope === "row") {
+      // A row rail intentionally follows the host width immediately, including
+      // the Beta account surface that replaces the native help-button space.
+      bar.style.right = bounds.rowRect.right - targetRight + "px";
+      bar.style.width = "auto";
+    } else {
+      // Quota modules are positioned from the left edge. Keep their rail on the
+      // same physical coordinate system: a left/right rail stretches for one
+      // frame as soon as the sidebar grows, before ResizeObserver can reflow it.
+      // A fixed span remains attached to the modules even when that callback is
+      // delayed by a busy renderer or a slower CI runner.
+      bar.style.right = "auto";
+      bar.style.width = Math.max(0, targetRight - targetLeft) + "px";
+    }
   }
 
   function paintPositionedModuleLayout(row, badge, layout = {}, options = {}) {

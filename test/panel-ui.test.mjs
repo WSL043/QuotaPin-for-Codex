@@ -1249,6 +1249,16 @@ test("free layout keeps its physical composition during a live sidebar resize", 
     }));
     const before = centers();
     row.style.width = '408px';
+    // Read the first painted frame before ResizeObserver gets a chance to run.
+    // A quota-scoped rail must stay attached to its modules instead of stretching
+    // with the row and snapping back later.
+    const immediateBarRect = document.querySelector('#quotapin-inline-badge [data-part="bar"]').getBoundingClientRect();
+    const immediateDateRect = node('date').getBoundingClientRect();
+    const immediateResetRect = node('reset').getBoundingClientRect();
+    const immediateRail = {
+      left: Math.abs(immediateBarRect.left - Math.min(immediateDateRect.left, immediateResetRect.left)),
+      right: Math.abs(immediateBarRect.right - Math.max(immediateDateRect.right, immediateResetRect.right)),
+    };
     await new Promise((resolve) => setTimeout(resolve, 260));
     const after = centers();
     const bar = document.querySelector('#quotapin-inline-badge [data-part="bar"]');
@@ -1257,6 +1267,7 @@ test("free layout keeps its physical composition during a live sidebar resize", 
     const resetRect = node('reset').getBoundingClientRect();
     const rowRect = row.getBoundingClientRect();
     return {
+      immediateRail,
       drift: Object.fromEntries(ids.map((id) => [id, Math.abs(after[id] - before[id])])),
       transitionDurations: ids.map((id) => getComputedStyle(node(id)).transitionDuration),
       barInsets: { left: barRect.left - rowRect.left, right: rowRect.right - barRect.right },
@@ -1267,6 +1278,8 @@ test("free layout keeps its physical composition during a live sidebar resize", 
       },
     };
   })()`);
+  assert.ok(result.immediateRail.left <= .5, JSON.stringify(result.immediateRail));
+  assert.ok(result.immediateRail.right <= .5, JSON.stringify(result.immediateRail));
   assert.ok(Object.values(result.drift).every((value) => value <= 1), JSON.stringify(result.drift));
   assert.deepEqual(new Set(result.transitionDurations), new Set(["0s"]));
   assert.ok(result.barInsets.left > 8, JSON.stringify(result.barInsets));

@@ -65,7 +65,9 @@ jobs:
               *) tests+=("$file") ;;
             esac
           done
-          node --test "${tests[@]}"
+          # Keep the release gate deterministic on the lower-throughput Intel
+          # runner without weakening any fixture command timeout or assertion.
+          node --test --test-concurrency=1 "${tests[@]}"
           bash -n install-macos.sh
           for file in scripts/macos/*.sh; do bash -n "$file"; done
 

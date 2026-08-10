@@ -46,7 +46,10 @@ jobs:
               *) tests+=("$file") ;;
             esac
           done
-          node --test "${tests[@]}"
+          # Intel runners can starve the shared Chromium fixture when Node runs
+          # every test file in parallel.  Serialize files so a real 15-second
+          # CDP timeout remains meaningful instead of cascading from host load.
+          node --test --test-concurrency=1 "${tests[@]}"
       - name: Check macOS lifecycle scripts
         run: |
           bash -n install-macos.sh

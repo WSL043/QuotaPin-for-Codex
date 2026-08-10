@@ -10,7 +10,7 @@ const VERSION_PATTERN = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-([0-9A-Za-
 const COMMIT_PATTERN = /^[0-9a-f]{40}$/;
 const HASH_PATTERN = /^[0-9a-f]{64}$/;
 export const WINDOWS_PACKAGE_MAX_BYTES = 160 * 1024 * 1024;
-export const MAC_PACKAGE_MAX_BYTES = 192 * 1024 * 1024;
+export const MAC_PACKAGE_MAX_BYTES = 128 * 1024 * 1024;
 
 export function publicAssetSizeIsValid(name, size, version) {
   const maximum = name === packageNameForVersion(version)

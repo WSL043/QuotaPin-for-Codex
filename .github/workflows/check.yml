@@ -104,8 +104,6 @@ jobs:
           VERSION="$(tr -d '\r\n' < VERSION)"
           PACKAGE="dist/QuotaPin-macOS-$VERSION.dmg"
           test -s "$PACKAGE"
-          lipo -archs dist/macos-universal/QuotaPin.Agent | grep -q arm64
-          lipo -archs dist/macos-universal/QuotaPin.Agent | grep -q x86_64
           lipo -archs dist/macos-universal/QuotaPin.Mac | grep -q arm64
           lipo -archs dist/macos-universal/QuotaPin.Mac | grep -q x86_64
           echo "package-sha256=$(shasum -a 256 "$PACKAGE" | awk '{print $1}')" >> "$GITHUB_OUTPUT"

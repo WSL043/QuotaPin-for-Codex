@@ -8,7 +8,7 @@ $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'
 $OfficialRepository = 'https://github.com/WSL043/QuotaPin-for-Codex'
 $WindowsPackageMaximumBytes = 160MB
-$MacPackageMaximumBytes = 192MB
+$MacPackageMaximumBytes = 128MB
 $VersionPattern = '^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$'
 if ($Version -notmatch $VersionPattern) { throw 'QuotaPin update version is invalid.' }
 

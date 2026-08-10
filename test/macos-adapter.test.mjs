@@ -141,9 +141,13 @@ test("macOS production package owns a user LaunchAgent and a bounded uninstall p
   const uninstall = fs.readFileSync(new URL("../scripts/macos/uninstall.sh", import.meta.url), "utf8");
   const bootstrap = fs.readFileSync(new URL("../install-macos.sh", import.meta.url), "utf8");
   const launcher = fs.readFileSync(new URL("../src/macos/launcher.mjs", import.meta.url), "utf8");
+  const entry = fs.readFileSync(new URL("../src/macos/runtime-entry.mjs", import.meta.url), "utf8");
   assert.match(build, /--macho-segment-name NODE_SEA/);
   assert.match(build, /codesign --force --sign -/);
   assert.match(build, /update\.sh/);
+  assert.match(build, /src\/macos\/runtime-entry\.mjs/);
+  assert.doesNotMatch(build, /build_sea .*QuotaPin\.Agent/);
+  assert.match(entry, /--quotapin-agent-runtime/);
   assert.match(install, /Library\/LaunchAgents/);
   assert.match(install, /io\.github\.wsl043\.quotapin/);
   assert.match(install, /--ignore-existing/);
@@ -171,6 +175,7 @@ test("macOS production package owns a user LaunchAgent and a bounded uninstall p
   assert.match(bootstrap, /INSTALL_ARGUMENTS\+\=\(--codex-app/);
   assert.match(bootstrap, /--write-result/);
   assert.match(install, /update\.sh/);
+  assert.match(install, /"\$TARGET\/QuotaPin\.Mac" stop-agent/);
   assert.match(launcher, /budget=1\/1/);
   assert.match(launcher, /"--codex-app", bundleIdentity\.bundlePath/);
   assert.match(launcher, /degraded-latched/);

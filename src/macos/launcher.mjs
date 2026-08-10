@@ -3,6 +3,7 @@ import net from "node:net";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
 import { spawn, spawnSync } from "node:child_process";
+import { readBoundedJsonResponse } from "../core/http-json.mjs";
 import {
   macAgentResumeDelayMs,
   macAutoAttachDecision,
@@ -23,6 +24,7 @@ const SOURCE_REPOSITORY = "https://github.com/WSL043/QuotaPin-for-Codex";
 const BUILD_COMMIT = "__QUOTAPIN_BUILD_COMMIT__";
 const POLL_MS = 1_000;
 const DISCOVERY_RETRY_MS = 5_000;
+const AGENT_MODE_ARGUMENT = "--quotapin-agent-runtime";
 
 function argumentValue(name) {
   const index = process.argv.indexOf(name);
@@ -126,7 +128,17 @@ function processIdentityForPid(pid, executablePath = "") {
 }
 
 function agentIdentityForPid(pid, agentPath) {
-  return processIdentityForPid(pid, agentPath);
+  const identity = processIdentityForPid(pid, agentPath);
+  if (!identity || !identity.command.includes(` ${AGENT_MODE_ARGUMENT}`)) return null;
+  return identity;
+}
+
+function agentPathFor(paths) {
+  return path.join(paths.installRoot, "QuotaPin.Mac");
+}
+
+function agentArguments(args) {
+  return [AGENT_MODE_ARGUMENT, ...args];
 }
 
 function waitForExit(child) {
@@ -207,7 +219,7 @@ function recoverManagedRuntime(paths, bundleIdentity, roots = null, expected = {
   const currentRoots = Array.isArray(roots) ? roots : codexRootProcesses(bundleIdentity);
   const successor = currentRoots.find((item) => item.pid === Number(receipt.successorPid));
   if (!successor || successor.startedAt !== String(receipt.successorStartedAt ?? "")) return null;
-  const agentPath = path.join(paths.installRoot, "QuotaPin.Agent");
+  const agentPath = agentPathFor(paths);
   const agent = agentIdentityForPid(receipt.agentPid, agentPath);
   const verifiedAgent = agent && agent.startedAt === String(receipt.agentStartedAt ?? "") ? agent : null;
   return { receipt, successor, agent: verifiedAgent, agentPath };
@@ -217,11 +229,15 @@ async function mainTargetAvailable(port, fetchImpl = globalThis.fetch) {
   if (!Number.isInteger(Number(port)) || Number(port) < 1024 || Number(port) > 65535) return false;
   try {
     const response = await fetchImpl(`http://127.0.0.1:${Number(port)}/json/list`, {
+      redirect: "error",
       signal: AbortSignal.timeout(1_500),
     });
     if (!response.ok) return false;
-    const targets = await response.json();
-    return Array.isArray(targets) && targets.some((target) => target?.url === "app://-/index.html");
+    const targets = await readBoundedJsonResponse(response, { maximumBytes: 256 * 1024 });
+    return Array.isArray(targets)
+      && targets.length <= 64
+      && targets.some((target) => target && typeof target === "object" && !Array.isArray(target)
+        && typeof target.url === "string" && target.url.length <= 4096 && target.url === "app://-/index.html");
   } catch {
     return false;
   }
@@ -242,12 +258,12 @@ async function resumeManagedAgent(paths, bundleIdentity, recovered) {
   const logHandle = fs.openSync(paths.launcherLogPath, "a");
   let agent;
   try {
-    agent = spawn(recovered.agentPath, [
+    agent = spawn(recovered.agentPath, agentArguments([
       "--port", String(recovered.receipt.port),
       "--config", path.join(paths.installRoot, "config.json"),
       "--log", paths.launcherLogPath,
       "--attach-generation", recovered.receipt.generation,
-    ], {
+    ]), {
       env: { ...process.env, QUOTAPIN_CODEX_COMMAND: plan.commandPath },
       detached: true,
       stdio: ["ignore", logHandle, logHandle],
@@ -295,7 +311,7 @@ async function launchOnce() {
   }
 
   const configPath = path.join(paths.installRoot, "config.json");
-  const agentPath = path.join(paths.installRoot, "QuotaPin.Agent");
+  const agentPath = agentPathFor(paths);
   if (!fs.existsSync(agentPath)) throw new Error(`QuotaPin Agent was not found: ${agentPath}`);
   const port = await allocateLoopbackPort();
   const plan = macosLaunchPlan({ port, bundleOverride: bundlePath, env: process.env, installRoot: paths.installRoot });
@@ -312,12 +328,12 @@ async function launchOnce() {
     if (!sourceClosed) throw new Error("Codex did not quit within 10 seconds; no force-quit was attempted");
 
     const logHandle = fs.openSync(paths.launcherLogPath, "a");
-    agent = spawn(agentPath, [
+    agent = spawn(agentPath, agentArguments([
       "--port", String(port),
       "--config", configPath,
       "--log", paths.launcherLogPath,
       "--attach-generation", generation,
-    ], {
+    ]), {
       env: { ...process.env, QUOTAPIN_CODEX_COMMAND: plan.commandPath },
       detached: true,
       stdio: ["ignore", logHandle, logHandle],
@@ -468,7 +484,7 @@ async function watch() {
           sourcePid: source.pid,
           sourceStartedAt: source.startedAt,
         }) ? currentRoots.find((item) => item.pid === Number(receipt.successorPid)) : null;
-        const agentPath = path.join(paths.installRoot, "QuotaPin.Agent");
+        const agentPath = agentPathFor(paths);
         const agent = receipt ? agentIdentityForPid(receipt.agentPid, agentPath) : null;
         if (result.status === 0 && successor && successor.startedAt === receipt.successorStartedAt
             && agent && agent.startedAt === receipt.agentStartedAt) {
@@ -516,7 +532,7 @@ async function stopRecordedAgent() {
   const paths = guardPaths();
   const receipt = readJson(paths.launchReceiptPath);
   if (!receipt || Number(receipt.agentPid) <= 0) return;
-  const agentPath = path.join(paths.installRoot, "QuotaPin.Agent");
+  const agentPath = agentPathFor(paths);
   const actual = agentIdentityForPid(receipt.agentPid, agentPath);
   if (!actual) return;
   if (actual.startedAt !== String(receipt.agentStartedAt ?? "")) {

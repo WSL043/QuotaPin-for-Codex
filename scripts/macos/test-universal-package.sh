@@ -33,11 +33,14 @@ fi
 plutil -lint "$APP_ROOT/Contents/Info.plist" >/dev/null
 codesign --verify --strict --deep "$APP_ROOT"
 
-for binary in QuotaPin.Agent QuotaPin.Mac; do
+for binary in QuotaPin.Mac; do
   ARCHS="$(lipo -archs "$PACKAGE_ROOT/$binary")"
   [[ "$ARCHS" == *arm64* && "$ARCHS" == *x86_64* ]] || { echo "$binary is not universal: $ARCHS" >&2; exit 4; }
   codesign --verify --strict "$PACKAGE_ROOT/$binary"
 done
+
+[[ "$("$PACKAGE_ROOT/QuotaPin.Mac" --launcher-version)" == "$VERSION" ]]
+[[ "$("$PACKAGE_ROOT/QuotaPin.Mac" --quotapin-agent-runtime --agent-version)" == "$VERSION" ]]
 
 "$ROOT/scripts/macos/test-lifecycle.sh" "$PACKAGE_ROOT"
 "$APP_ROOT/Contents/MacOS/QuotaPin Installer" --headless

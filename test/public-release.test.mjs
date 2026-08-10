@@ -39,10 +39,10 @@ test("semantic release versions map to exact numeric Windows file versions", () 
 
 test("public package size policy keeps platform-specific anomaly ceilings", () => {
   assert.equal(WINDOWS_PACKAGE_MAX_BYTES, 160 * 1024 * 1024);
-  assert.equal(MAC_PACKAGE_MAX_BYTES, 192 * 1024 * 1024);
+  assert.equal(MAC_PACKAGE_MAX_BYTES, 128 * 1024 * 1024);
   assert.equal(publicAssetSizeIsValid(PACKAGE, WINDOWS_PACKAGE_MAX_BYTES, VERSION), true);
   assert.equal(publicAssetSizeIsValid(PACKAGE, WINDOWS_PACKAGE_MAX_BYTES + 1, VERSION), false);
-  assert.equal(publicAssetSizeIsValid(MAC_PACKAGE, 168_216_058, VERSION), true);
+  assert.equal(publicAssetSizeIsValid(MAC_PACKAGE, 96 * 1024 * 1024, VERSION), true);
   assert.equal(publicAssetSizeIsValid(MAC_PACKAGE, MAC_PACKAGE_MAX_BYTES + 1, VERSION), false);
   assert.equal(publicAssetSizeIsValid("unexpected.zip", 1, VERSION), false);
 });

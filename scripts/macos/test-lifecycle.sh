@@ -21,10 +21,10 @@ if ! bash -x "$SOURCE/install.sh" --source "$SOURCE" >"$INSTALL_TRACE" 2>&1; the
   exit 1
 fi
 rm -f "$INSTALL_TRACE"
-[[ -x "$TARGET/QuotaPin.Agent" && -x "$TARGET/QuotaPin.Mac" && -x "$TARGET/update.sh" ]]
+[[ -x "$TARGET/QuotaPin.Mac" && -x "$TARGET/update.sh" ]]
 [[ "$(tr -d '\r\n' < "$TARGET/VERSION")" == "$(tr -d '\r\n' < "$SOURCE/VERSION")" ]]
-[[ "$("$TARGET/QuotaPin.Agent" --agent-version)" == "$(tr -d '\r\n' < "$SOURCE/VERSION")" ]]
 [[ "$("$TARGET/QuotaPin.Mac" --launcher-version)" == "$(tr -d '\r\n' < "$SOURCE/VERSION")" ]]
+[[ "$("$TARGET/QuotaPin.Mac" --quotapin-agent-runtime --agent-version)" == "$(tr -d '\r\n' < "$SOURCE/VERSION")" ]]
 plutil -lint "$PLIST" >/dev/null
 launchctl print "$DOMAIN/$LABEL" >/dev/null
 
@@ -39,7 +39,7 @@ for fault in after-stage after-target-move after-plist-replace; do
     echo "Injected installer fault unexpectedly succeeded: $fault" >&2
     exit 1
   fi
-  [[ -x "$TARGET/QuotaPin.Agent" && -x "$TARGET/QuotaPin.Mac" && -x "$TARGET/update.sh" ]]
+  [[ -x "$TARGET/QuotaPin.Mac" && -x "$TARGET/update.sh" ]]
   [[ "$(shasum -a 256 "$TARGET/config.json" | awk '{print $1}')" == "$BEFORE_FAULT" ]]
   launchctl print "$DOMAIN/$LABEL" >/dev/null
 done

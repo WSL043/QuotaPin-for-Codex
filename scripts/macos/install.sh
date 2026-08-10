@@ -51,14 +51,14 @@ case "$TARGET" in
   *) echo "Refusing unresolved install target: $TARGET" >&2; exit 3 ;;
 esac
 
-for name in ARCH QuotaPin.Agent QuotaPin.Mac config.default.json install.sh uninstall.sh update.sh VERSION COMMIT LICENSE README.txt THIRD_PARTY_NOTICES.txt MANIFEST.sha256; do
+for name in ARCH QuotaPin.Mac config.default.json install.sh uninstall.sh update.sh VERSION COMMIT LICENSE README.txt THIRD_PARTY_NOTICES.txt MANIFEST.sha256; do
   [[ -f "$SOURCE/$name" && ! -L "$SOURCE/$name" ]] || {
     echo "The macOS package is incomplete: $name" >&2
     exit 4
   }
 done
-[[ -x "$SOURCE/QuotaPin.Agent" && -x "$SOURCE/QuotaPin.Mac" ]] || {
-  echo "The macOS executables are not runnable." >&2
+[[ -x "$SOURCE/QuotaPin.Mac" ]] || {
+  echo "The macOS executable is not runnable." >&2
   exit 4
 }
 VERSION="$(tr -d '\r\n' < "$SOURCE/VERSION")"
@@ -70,10 +70,9 @@ VERSION="$(tr -d '\r\n' < "$SOURCE/VERSION")"
   cd "$SOURCE"
   shasum -a 256 -c MANIFEST.sha256 >/dev/null
 )
-codesign --verify --strict "$SOURCE/QuotaPin.Agent"
 codesign --verify --strict "$SOURCE/QuotaPin.Mac"
-[[ "$($SOURCE/QuotaPin.Agent --agent-version)" == "$VERSION" ]]
 [[ "$($SOURCE/QuotaPin.Mac --launcher-version)" == "$VERSION" ]]
+[[ "$($SOURCE/QuotaPin.Mac --quotapin-agent-runtime --agent-version)" == "$VERSION" ]]
 
 if [[ -z "$CODEX_APP" && -f "$TARGET/install-state.json" ]]; then
   if SAVED_CODEX_APP="$(plutil -extract codexApp raw -o - "$TARGET/install-state.json" 2>/dev/null)"; then
@@ -163,12 +162,12 @@ trap rollback ERR INT TERM
 mkdir -p "$TARGET_PARENT" "$LAUNCH_AGENTS"
 rm -rf "$STAGING" "$PREVIOUS"
 mkdir -p "$STAGING/logs"
-for name in ARCH QuotaPin.Agent QuotaPin.Mac LICENSE README.txt THIRD_PARTY_NOTICES.txt VERSION COMMIT MANIFEST.sha256 config.default.json update.sh; do
+for name in ARCH QuotaPin.Mac LICENSE README.txt THIRD_PARTY_NOTICES.txt VERSION COMMIT MANIFEST.sha256 config.default.json update.sh; do
   cp "$SOURCE/$name" "$STAGING/$name"
 done
 cp "$SOURCE/install.sh" "$STAGING/install.sh"
 cp "$SOURCE/uninstall.sh" "$STAGING/uninstall.sh"
-chmod 755 "$STAGING/QuotaPin.Agent" "$STAGING/QuotaPin.Mac" "$STAGING/install.sh" "$STAGING/uninstall.sh" "$STAGING/update.sh"
+chmod 755 "$STAGING/QuotaPin.Mac" "$STAGING/install.sh" "$STAGING/uninstall.sh" "$STAGING/update.sh"
 
 if [[ -f "$TARGET/config.json" && ! -L "$TARGET/config.json" ]]; then
   cp "$TARGET/config.json" "$STAGING/config.json"
@@ -194,6 +193,9 @@ if launchctl print "$DOMAIN/$LABEL" >/dev/null 2>&1; then OLD_SERVICE_ACTIVE=tru
 if [[ -f "$PLIST" ]]; then cp "$PLIST" "$PLIST_BACKUP"; fi
 CUTOVER_STARTED=true
 bootout_service
+if [[ -x "$TARGET/QuotaPin.Mac" ]]; then
+  "$TARGET/QuotaPin.Mac" stop-agent
+fi
 if [[ -e "$TARGET" ]]; then
   mv "$TARGET" "$PREVIOUS"
   PREVIOUS_MOVED=true

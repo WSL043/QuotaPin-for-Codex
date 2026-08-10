@@ -36,7 +36,7 @@ done
 printf 'universal\n' > "$OUTPUT_ROOT/ARCH"
 chmod 755 "$OUTPUT_ROOT/install.sh" "$OUTPUT_ROOT/uninstall.sh" "$OUTPUT_ROOT/update.sh"
 
-for binary in QuotaPin.Agent QuotaPin.Mac; do
+for binary in QuotaPin.Mac; do
   lipo -create "$ARM_SOURCE/$binary" "$X64_SOURCE/$binary" -output "$OUTPUT_ROOT/$binary"
   chmod 755 "$OUTPUT_ROOT/$binary"
   codesign --force --sign - "$OUTPUT_ROOT/$binary"
@@ -49,14 +49,15 @@ VERSION="$(tr -d '\r\n' < "$OUTPUT_ROOT/VERSION")"
 BUNDLE_SHORT_VERSION="${VERSION%%-*}"
 BUNDLE_VERSION="$BUNDLE_SHORT_VERSION"
 if [[ "$VERSION" =~ -beta\.([0-9]+)$ ]]; then BUNDLE_VERSION="$BUNDLE_SHORT_VERSION.${BASH_REMATCH[1]}"; fi
-[[ "$($OUTPUT_ROOT/QuotaPin.Agent --agent-version)" == "$VERSION" ]]
 [[ "$($OUTPUT_ROOT/QuotaPin.Mac --launcher-version)" == "$VERSION" ]]
+[[ "$($OUTPUT_ROOT/QuotaPin.Mac --quotapin-agent-runtime --agent-version)" == "$VERSION" ]]
 node -e 'const value=JSON.parse(process.argv[1]); if(!value.ok||!value.oneHandoffBudget) process.exit(1)' "$($OUTPUT_ROOT/QuotaPin.Mac --self-test)"
+node -e 'const value=JSON.parse(process.argv[1]); if(!value.ok) process.exit(1)' "$($OUTPUT_ROOT/QuotaPin.Mac --quotapin-agent-runtime --renderer-self-test)"
 
 (
   cd "$OUTPUT_ROOT"
   shasum -a 256 ARCH COMMIT LICENSE README.txt THIRD_PARTY_NOTICES.txt VERSION \
-    QuotaPin.Agent QuotaPin.Mac config.default.json install.sh uninstall.sh update.sh > MANIFEST.sha256
+    QuotaPin.Mac config.default.json install.sh uninstall.sh update.sh > MANIFEST.sha256
 )
 
 IMAGE_ROOT="$ROOT/dist/macos-image"

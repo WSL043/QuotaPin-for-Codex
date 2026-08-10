@@ -218,14 +218,14 @@ test("release asset ceilings distinguish the compact Windows installer from the 
   const updateRuntime = fs.readFileSync(new URL("../src/agent/update-runtime.mjs", import.meta.url), "utf8");
   for (const source of [verifier, updateRuntime]) {
     assert.match(source, /WINDOWS_PACKAGE_MAX_BYTES = 160 \* 1024 \* 1024/);
-    assert.match(source, /MAC_PACKAGE_MAX_BYTES = 192 \* 1024 \* 1024/);
+    assert.match(source, /MAC_PACKAGE_MAX_BYTES = 128 \* 1024 \* 1024/);
   }
   for (const source of [bootstrap, commandUpdater]) {
     assert.match(source, /\$WindowsPackageMaximumBytes = 160MB/);
-    assert.match(source, /\$MacPackageMaximumBytes = 192MB/);
+    assert.match(source, /\$MacPackageMaximumBytes = 128MB/);
   }
   assert.match(macBootstrap, /WINDOWS_ASSET_MAX_BYTES=167772160/);
-  assert.match(macBootstrap, /MAC_ASSET_MAX_BYTES=201326592/);
+  assert.match(macBootstrap, /MAC_ASSET_MAX_BYTES=134217728/);
 });
 
 test("the self-contained agent carries source origin and command install records it", () => {

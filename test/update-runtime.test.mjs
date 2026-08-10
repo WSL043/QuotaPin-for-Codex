@@ -5,6 +5,7 @@ import path from "node:path";
 import { compareVersions, MINIMUM_SAFE_VERSION, normalizeReleases, updateDirection, UpdateRuntime } from "../src/agent/update-runtime.mjs";
 
 const DIGEST = "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
+const jsonResponse = (value) => new Response(JSON.stringify(value));
 
 const release = (version, options = {}) => {
   const tag = `v${version}`;
@@ -74,10 +75,10 @@ test("release normalization rejects missing, renamed, or extra public assets", (
   }
 });
 
-test("release normalization accepts the verified universal DMG without weakening asset ceilings", () => {
-  const verifiedSize = release("1.1.2", { macSize: 168_216_058 });
+test("release normalization accepts the compact universal DMG without weakening asset ceilings", () => {
+  const verifiedSize = release("1.1.2", { macSize: 96 * 1024 * 1024 });
   assert.deepEqual(normalizeReleases([verifiedSize], "1.1.1", MINIMUM_SAFE_VERSION, "darwin").map((item) => item.version), ["1.1.2"]);
-  assert.deepEqual(normalizeReleases([release("1.1.2", { macSize: 192 * 1024 * 1024 + 1 })], "1.1.1", MINIMUM_SAFE_VERSION, "darwin"), []);
+  assert.deepEqual(normalizeReleases([release("1.1.2", { macSize: 128 * 1024 * 1024 + 1 })], "1.1.1", MINIMUM_SAFE_VERSION, "darwin"), []);
   assert.deepEqual(normalizeReleases([release("1.1.2", { windowsSize: 160 * 1024 * 1024 + 1 })], "1.1.1", MINIMUM_SAFE_VERSION, "darwin"), []);
 });
 
@@ -109,7 +110,7 @@ test("update runtime checks without installing and launches only an eligible sel
     installRoot: "C:\\Users\\Test\\AppData\\Local\\QuotaPin",
     fetchImpl: async (url, options) => {
       requests.push({ url, options });
-      return { ok: true, json: async () => [release("0.3.0-alpha.26"), release("0.3.0-alpha.25"), release("0.3.0-alpha.24")] };
+      return jsonResponse([release("0.3.0-alpha.26"), release("0.3.0-alpha.25"), release("0.3.0-alpha.24")]);
     },
     fsImpl: { existsSync: () => true },
     spawnImpl: (file, args, options) => {
@@ -146,7 +147,7 @@ test("macOS update runtime selects the universal asset and the installed bash up
     pathImpl: path.posix,
     autoCheck: false,
     fsImpl: { existsSync: (value) => value === `${root}/update.sh` },
-    fetchImpl: async () => ({ ok: true, json: async () => [release("0.3.0-alpha.26")] }),
+    fetchImpl: async () => jsonResponse([release("0.3.0-alpha.26")]),
     spawnImpl: (file, args, options) => {
       launches.push({ file, args, options });
       return { unref() {} };
@@ -341,7 +342,7 @@ test("a restored update remains single-flight until its terminal result arrives"
     },
     fetchImpl: async () => {
       fetches += 1;
-      return { ok: true, json: async () => [release("0.3.0-alpha.26")] };
+      return jsonResponse([release("0.3.0-alpha.26")]);
     },
   });
   assert.equal(runtime.clientState().status, "installing");
@@ -425,7 +426,7 @@ test("automatic update discovery schedules one bounded check and never installs"
     fsImpl: { readFileSync() { throw new Error("missing"); } },
     fetchImpl: async () => {
       checks += 1;
-      return { ok: true, json: async () => [release("0.3.0-alpha.26")] };
+      return jsonResponse([release("0.3.0-alpha.26")]);
     },
     spawnImpl: () => { throw new Error("automatic check must not spawn"); },
   });
@@ -492,7 +493,7 @@ test("manual refresh bypasses an otherwise fresh release cache", async () => {
     },
     fetchImpl: async () => {
       fetches += 1;
-      return { ok: true, json: async () => [release("0.3.0-alpha.26")] };
+      return jsonResponse([release("0.3.0-alpha.26")]);
     },
   });
   await runtime.check(false);
@@ -521,7 +522,7 @@ test("an install cannot race an in-flight release check", async () => {
   assert.equal(runtime.clientState().status, "checking");
   assert.equal(runtime.install("0.3.0-alpha.25"), false);
   assert.equal(launched.length, 0);
-  releaseFetch({ ok: true, json: async () => [release("0.3.0-alpha.25")] });
+  releaseFetch(jsonResponse([release("0.3.0-alpha.25")]));
   await checking;
   assert.equal(runtime.clientState().status, "current");
 });
@@ -534,7 +535,7 @@ test("an asynchronous spawn error leaves installing immediately", async () => {
     installRoot: "C:\\Users\\Test\\AppData\\Local\\QuotaPin",
     autoCheck: false,
     fsImpl: { existsSync: () => true },
-    fetchImpl: async () => ({ ok: true, json: async () => [release("0.3.0-alpha.26")] }),
+    fetchImpl: async () => jsonResponse([release("0.3.0-alpha.26")]),
     spawnImpl: () => child,
   });
   await runtime.check(true);
@@ -565,7 +566,7 @@ test("an updater early exit consumes its matching started receipt", async () => 
         if (filePath === resultPath) result = null;
       },
     },
-    fetchImpl: async () => ({ ok: true, json: async () => [release("0.3.0-alpha.25")] }),
+    fetchImpl: async () => jsonResponse([release("0.3.0-alpha.25")]),
     spawnImpl: () => child,
   });
   await runtime.check(true);

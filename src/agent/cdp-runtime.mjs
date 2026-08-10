@@ -1,3 +1,5 @@
+import { readBoundedJsonResponse } from "../core/http-json.mjs";
+
 export const DEFAULT_MAIN_TARGET_URL = "app://-/index.html";
 
 export class CdpSession {
@@ -187,9 +189,22 @@ export function selectMainTargets(list, mainTargetUrl = DEFAULT_MAIN_TARGET_URL)
 }
 
 export async function fetchCdpTargets(port, fetchImpl = globalThis.fetch) {
-  const response = await fetchImpl(`http://127.0.0.1:${port}/json/list`, { signal: AbortSignal.timeout(1500) });
+  const response = await fetchImpl(`http://127.0.0.1:${port}/json/list`, {
+    redirect: "error",
+    signal: AbortSignal.timeout(1500),
+  });
   if (!response.ok) throw new Error(`CDP HTTP ${response.status}`);
-  return response.json();
+  const targets = await readBoundedJsonResponse(response, { maximumBytes: 256 * 1024 });
+  if (!Array.isArray(targets) || targets.length > 64) throw new Error("CDP target list has an invalid shape");
+  for (const target of targets) {
+    if (!target || typeof target !== "object" || Array.isArray(target)) throw new Error("CDP target entry has an invalid shape");
+    for (const [key, maximum] of [["id", 512], ["type", 64], ["url", 4096], ["webSocketDebuggerUrl", 4096]]) {
+      if (target[key] !== undefined && (typeof target[key] !== "string" || target[key].length > maximum)) {
+        throw new Error(`CDP target ${key} is invalid`);
+      }
+    }
+  }
+  return targets;
 }
 
 export class CdpTargetRuntime {

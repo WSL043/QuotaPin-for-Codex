@@ -8,6 +8,8 @@ import { CdpSession, CdpTargetRuntime, selectMainTargets } from "../src/agent/cd
 import { ConfigRuntime } from "../src/agent/config-runtime.mjs";
 import { createLifecycleStateWriter } from "../src/agent/lifecycle-state.mjs";
 
+const jsonResponse = (value) => new Response(JSON.stringify(value));
+
 test("CDP target selection fails closed to the main Codex page and supported target types", () => {
   const selected = selectMainTargets([
     { id: "main", url: "app://-/index.html", type: "page", webSocketDebuggerUrl: "ws://main" },
@@ -31,7 +33,7 @@ test("CDP target runtime installs one payload, updates it, and closes stale sess
     rendererInstanceId: "agent-runtime-fixture",
     getClientState: () => ({ status: "ready" }),
     reloadConfig: () => { events.push("reload"); return false; },
-    fetchImpl: async () => ({ ok: true, json: async () => targets }),
+    fetchImpl: async () => jsonResponse(targets),
     createSession: (_url, id) => {
       const session = {
         install: async (source) => events.push(["install", id, source]),
@@ -84,7 +86,7 @@ test("CDP target runtime replaces a disconnected session even when the target id
     installSource: "single-payload",
     rendererInstanceId: "agent-runtime-reconnect",
     getClientState: () => ({ status: "ready" }),
-    fetchImpl: async () => ({ ok: true, json: async () => [target] }),
+    fetchImpl: async () => jsonResponse([target]),
     createSession: (_url, id, _configHandler, _updateHandler, onClosed) => {
       let alive = true;
       const session = {

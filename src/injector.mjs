@@ -277,6 +277,20 @@ const installScript = String.raw`(() => {
   };
   const sealedSignalCopy = ["NS42IFNvbA==", "VWx0cmE=", "RmFzdA=="];
 
+  function isPaintedElement(node, rect = null) {
+    if (!(node instanceof Element) || !node.isConnected) return false;
+    const box = rect ?? node.getBoundingClientRect();
+    if (!(box.width > 0 && box.height > 0)) return false;
+    const style = getComputedStyle(node);
+    if (style.display === "none" || ["hidden", "collapse"].includes(style.visibility)
+        || style.contentVisibility === "hidden" || Number(style.opacity || 1) <= 0) return false;
+    try {
+      if (typeof node.checkVisibility === "function"
+          && !node.checkVisibility({ checkOpacity: true, checkVisibilityCSS: true })) return false;
+    } catch {}
+    return true;
+  }
+
   function findAccountRow() {
     const viewport = {
       width: document.documentElement.clientWidth || window.innerWidth,
@@ -286,7 +300,7 @@ const installScript = String.raw`(() => {
     const candidates = [...document.querySelectorAll('button[aria-haspopup="menu"]')]
       .map((node) => ({ node, rect: node.getBoundingClientRect() }))
       .filter(({ node, rect }) => {
-        if (node.closest('#quotapin-profile-editor') || !isAccountRowGeometry(rect, viewport)) return false;
+        if (node.closest('#quotapin-profile-editor') || !isPaintedElement(node, rect) || !isAccountRowGeometry(rect, viewport)) return false;
         const knownHost = node === observedAccountRow || Boolean(currentBadge && node.contains(currentBadge));
         return knownHost || Boolean(node.querySelector('img, [data-quotapin-module="avatar"]'));
       });
@@ -3638,9 +3652,7 @@ const installScript = String.raw`(() => {
     return leaves
       .filter((node) => node.children.length === 0)
       .filter((node) => {
-        const rect = node.getBoundingClientRect();
-        const style = getComputedStyle(node);
-        return rect.width > 0 && rect.height > 0 && style.display !== "none" && style.visibility !== "hidden" && Number(style.opacity || 1) > 0;
+        return isPaintedElement(node);
       })
       .map((node) => node.textContent?.trim() ?? "")
       .filter(Boolean)
@@ -3777,10 +3789,7 @@ const installScript = String.raw`(() => {
   }
 
   function visibleElement(node) {
-    if (!(node instanceof Element)) return false;
-    const rect = node.getBoundingClientRect();
-    const style = getComputedStyle(node);
-    return rect.width > 0 && rect.height > 0 && style.display !== "none" && style.visibility !== "hidden" && Number(style.opacity || 1) > 0;
+    return isPaintedElement(node);
   }
 
   function findSidebarSurface() {

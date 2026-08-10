@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { spawn } from "node:child_process";
+import { readBoundedJsonResponse } from "../core/http-json.mjs";
 
 const RELEASES_API = "https://api.github.com/repos/WSL043/QuotaPin-for-Codex/releases?per_page=20";
 const VERSION_PATTERN = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?$/;
@@ -15,7 +16,7 @@ const DEFAULT_ERROR_RETRY_MAX_MS = 6 * 60 * 60 * 1000;
 const DEFAULT_POST_INSTALL_CHECK_MS = 60 * 1000;
 const OFFICIAL_REPOSITORY = "https://github.com/WSL043/QuotaPin-for-Codex";
 const WINDOWS_PACKAGE_MAX_BYTES = 160 * 1024 * 1024;
-const MAC_PACKAGE_MAX_BYTES = 192 * 1024 * 1024;
+const MAC_PACKAGE_MAX_BYTES = 128 * 1024 * 1024;
 export const MINIMUM_SAFE_VERSION = "0.3.0-alpha.25";
 
 function windowsPackageName(version) {
@@ -404,10 +405,13 @@ export class UpdateRuntime {
             "User-Agent": `QuotaPin/${this.currentVersion}`,
             "X-GitHub-Api-Version": "2026-03-10",
           },
+          redirect: "error",
           signal: AbortSignal.timeout(8000),
         });
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
-        const releases = normalizeReleases(await response.json(), this.currentVersion, MINIMUM_SAFE_VERSION, this.platform);
+        const releaseDocument = await readBoundedJsonResponse(response, { maximumBytes: 1024 * 1024 });
+        if (!Array.isArray(releaseDocument) || releaseDocument.length > 20) throw new Error("Release response has an invalid shape");
+        const releases = normalizeReleases(releaseDocument, this.currentVersion, MINIMUM_SAFE_VERSION, this.platform);
         const latest = releases[0]?.version ?? null;
         const available = latest && compareVersions(latest, this.currentVersion) === 1;
         this.lastCheckedAt = this.now();

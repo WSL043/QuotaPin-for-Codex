@@ -129,7 +129,7 @@ jobs:
           VERSION="$(tr -d '\r\n' < VERSION)"
           PACKAGE="dist/QuotaPin-macOS-$VERSION.dmg"
           test -s "$PACKAGE"
-          for binary in QuotaPin.Agent QuotaPin.Mac; do
+          for binary in QuotaPin.Mac; do
             ARCHS="$(lipo -archs "dist/macos-universal/$binary")"
             [[ "$ARCHS" == *arm64* && "$ARCHS" == *x86_64* ]]
           done

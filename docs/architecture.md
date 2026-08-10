@@ -164,7 +164,7 @@ The moving remote bootstrap chooses GitHub's immutable latest stable release unl
 
 ## macOS lifecycle
 
-The macOS package contains two self-contained universal Mach-O executables: the shared Agent and a platform launcher. End-user machines do not need Node.js, Homebrew, `sudo`, or a modified Codex bundle. Installation is per user under `~/Library/Application Support/QuotaPin`; one LaunchAgent owns the background watcher, while the user continues to open the official Codex icon normally.
+The macOS package contains one self-contained universal Mach-O host. It dispatches either the platform launcher or the shared Agent inside the same verified executable, while process arguments keep the watcher and Agent identities distinct. End-user machines do not need Node.js, Homebrew, `sudo`, or a modified Codex bundle. Installation is per user under `~/Library/Application Support/QuotaPin`; one LaunchAgent owns the background watcher, while the user continues to open the official Codex icon normally.
 
 The launcher accepts only a strict-valid `com.openai.codex` bundle signed with the expected OpenAI Team ID. Its App Server command must resolve inside that same bundle, and CDP listens only on an ephemeral `127.0.0.1` port. A fresh uninstrumented Codex generation receives at most one bounded handoff. The successor PID, start time, executable, source generation, renderer receipt, Agent PID, and loopback endpoint must agree. Ambiguity or failure latches the generation until Codex has been completely closed for the rearm interval, preventing restart loops.
 

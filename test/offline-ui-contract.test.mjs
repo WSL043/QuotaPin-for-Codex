@@ -21,6 +21,10 @@ test("the layout fixture preserves omitted width, scale, and anchor parameters",
 
 test("host discovery and event interception remain fail closed", () => {
   assert.match(renderer, /return candidates\.length === 1 \? candidates\[0\]\.node : null/);
+  assert.match(renderer, /!node\.isConnected/);
+  assert.match(renderer, /style\.contentVisibility === "hidden"/);
+  assert.match(renderer, /node\.checkVisibility\(\{ checkOpacity: true, checkVisibilityCSS: true \}\)/);
+  assert.match(renderer, /!isPaintedElement\(node, rect\) \|\| !isAccountRowGeometry\(rect, viewport\)/);
   assert.match(renderer, /isAccountRowGeometry\(rect, viewport\)/);
   assert.match(renderer, /const knownHost = node === observedAccountRow \|\| Boolean\(currentBadge && node\.contains\(currentBadge\)\)/);
   assert.doesNotMatch(renderer, /rect\.right < 340/);

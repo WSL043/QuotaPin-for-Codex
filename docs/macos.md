@@ -4,7 +4,7 @@ QuotaPin 1.1.2 includes the public macOS delivery path. The runtime is self-cont
 
 ## What is implemented
 
-- Native arm64 and x86_64 builds of the same Agent and renderer used on Windows.
+- Native arm64 and x86_64 slices of one self-contained host that dispatches the shared Agent or the macOS launcher.
 - One universal package assembled from both independently tested slices.
 - Installation under `~/Library/Application Support/QuotaPin` without `sudo`, Homebrew, or a separately installed Node.js.
 - A user LaunchAgent at `~/Library/LaunchAgents/io.github.wsl043.quotapin.plist`.

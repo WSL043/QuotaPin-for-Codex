@@ -3,6 +3,7 @@ import net from "node:net";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
 import { spawn, spawnSync } from "node:child_process";
+import { BUILD_COMMIT } from "../core/build-origin.mjs";
 import { readBoundedJsonResponse } from "../core/http-json.mjs";
 import {
   macAgentResumeDelayMs,
@@ -21,7 +22,6 @@ import {
 
 const VERSION = "1.1.2";
 const SOURCE_REPOSITORY = "https://github.com/WSL043/QuotaPin-for-Codex";
-const BUILD_COMMIT = "__QUOTAPIN_BUILD_COMMIT__";
 const POLL_MS = 1_000;
 const DISCOVERY_RETRY_MS = 5_000;
 const AGENT_MODE_ARGUMENT = "--quotapin-agent-runtime";

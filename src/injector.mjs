@@ -19,10 +19,10 @@ import { createTimeStateToolkit } from "./renderer/time-state.mjs";
 import { createCodeConfigStateToolkit } from "./renderer/code-config-state.mjs";
 import { createProfileUsageStateToolkit } from "./renderer/profile-usage-state.mjs";
 import { createDeliveryStateToolkit } from "./renderer/delivery-state.mjs";
+import { BUILD_COMMIT } from "./core/build-origin.mjs";
 
 const VERSION = "1.1.2";
 const SOURCE_REPOSITORY = "https://github.com/WSL043/QuotaPin-for-Codex";
-const BUILD_COMMIT = "__QUOTAPIN_BUILD_COMMIT__";
 const MAIN_TARGET_URL = "app://-/index.html";
 const portIndex = process.argv.indexOf("--port");
 const logIndex = process.argv.indexOf("--log");

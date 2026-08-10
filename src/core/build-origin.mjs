@@ -1,0 +1,1 @@
+export const BUILD_COMMIT = "__QUOTAPIN_BUILD_COMMIT__";

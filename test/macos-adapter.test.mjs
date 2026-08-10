@@ -142,12 +142,17 @@ test("macOS production package owns a user LaunchAgent and a bounded uninstall p
   const bootstrap = fs.readFileSync(new URL("../install-macos.sh", import.meta.url), "utf8");
   const launcher = fs.readFileSync(new URL("../src/macos/launcher.mjs", import.meta.url), "utf8");
   const entry = fs.readFileSync(new URL("../src/macos/runtime-entry.mjs", import.meta.url), "utf8");
+  const injector = fs.readFileSync(new URL("../src/injector.mjs", import.meta.url), "utf8");
+  const buildOrigin = fs.readFileSync(new URL("../src/core/build-origin.mjs", import.meta.url), "utf8");
   assert.match(build, /--macho-segment-name NODE_SEA/);
   assert.match(build, /codesign --force --sign -/);
   assert.match(build, /update\.sh/);
   assert.match(build, /src\/macos\/runtime-entry\.mjs/);
   assert.doesNotMatch(build, /build_sea .*QuotaPin\.Agent/);
   assert.match(entry, /--quotapin-agent-runtime/);
+  assert.match(buildOrigin, /__QUOTAPIN_BUILD_COMMIT__/);
+  assert.doesNotMatch(injector, /__QUOTAPIN_BUILD_COMMIT__/);
+  assert.doesNotMatch(launcher, /__QUOTAPIN_BUILD_COMMIT__/);
   assert.match(install, /Library\/LaunchAgents/);
   assert.match(install, /io\.github\.wsl043\.quotapin/);
   assert.match(install, /--ignore-existing/);

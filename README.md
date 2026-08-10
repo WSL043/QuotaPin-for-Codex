@@ -196,5 +196,3 @@ QuotaPin removes its own files and shortcuts. Codex stays untouched.
 ## License
 
 QuotaPin is released under the [MIT License](LICENSE).
-
-Community acknowledgement: QuotaPin recognizes and appreciates the [LINUX DO](https://linux.do/) developer community.

@@ -7,6 +7,7 @@ import { macPackageNameForVersion, packageNameForVersion, publicReleaseAssets } 
 
 const workflowsRoot = new URL("../.github/workflows/", import.meta.url);
 const VERSION = fs.readFileSync(new URL("../VERSION", import.meta.url), "utf8").trim();
+const STABLE_VERSION = fs.readFileSync(new URL("../STABLE_VERSION", import.meta.url), "utf8").trim();
 const PUBLIC_PACKAGE = packageNameForVersion(VERSION);
 const PUBLIC_MAC_PACKAGE = macPackageNameForVersion(VERSION);
 
@@ -100,7 +101,7 @@ test("public entrypoints default to stable while the remote bootstrap fails clos
   for (const relative of ["AGENTS.md", "docs/configuration.md"]) {
     const source = fs.readFileSync(new URL(`../${relative}`, import.meta.url), "utf8");
     assert.ok(source.includes(expected), `${relative} lost the stable bootstrap URL`);
-    assert.ok(source.includes(`-Version '${VERSION}'`));
+    assert.ok(source.includes(`-Version '${STABLE_VERSION}'`));
   }
   const bootstrap = fs.readFileSync(new URL("../install.ps1", import.meta.url), "utf8");
   assert.doesNotMatch(bootstrap, /\[string\]\$(?:ArchiveUrl|AgentUrl)/);

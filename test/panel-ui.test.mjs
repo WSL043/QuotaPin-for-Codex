@@ -16,6 +16,7 @@ import { createTimeStateToolkit } from "../src/renderer/time-state.mjs";
 import { createCodeConfigStateToolkit } from "../src/renderer/code-config-state.mjs";
 import { createProfileUsageStateToolkit } from "../src/renderer/profile-usage-state.mjs";
 import { createDeliveryStateToolkit } from "../src/renderer/delivery-state.mjs";
+import { createPlacementToolkit } from "../src/core/placement.mjs";
 import { DEFAULT_CONFIG, sanitizeConfig } from "../src/core/config.mjs";
 import { formatQuota } from "../src/core/format.mjs";
 import { normalizeRateLimits } from "../src/core/model.mjs";
@@ -44,7 +45,8 @@ const renderer = `globalThis.__quotaPinRendererToolkits = {
   time: ${createTimeStateToolkit.toString()},
   codeConfig: ${createCodeConfigStateToolkit.toString()},
   profileUsage: ${createProfileUsageStateToolkit.toString()},
-  delivery: ${createDeliveryStateToolkit.toString()}
+  delivery: ${createDeliveryStateToolkit.toString()},
+  placement: ${createPlacementToolkit.toString()}
 };\n${loadRendererSource()}`;
 const fixtureNow = Date.now();
 const fixturePreferences = sanitizeConfig(DEFAULT_CONFIG);
@@ -85,7 +87,7 @@ const fixtureScript = `(() => {
     view.profileId = profile.id;
     view.profileName = profile.name;
     view.accountRowMode = preferences.accountRowMode;
-    view.layout = { moduleOrder: [...profile.moduleOrder], layoutMode: profile.layoutMode, snapThreshold: profile.snapThreshold, snapTargets: [...profile.snapTargets], moduleAnchors: { ...profile.moduleAnchors }, identity: profile.identity, avatarShape: profile.avatarShape, fontSize: profile.fontSize };
+    view.layout = { moduleOrder: [...profile.moduleOrder], layoutMode: profile.layoutMode, snapThreshold: profile.snapThreshold, snapTargets: [...profile.snapTargets], moduleAnchors: { ...profile.moduleAnchors }, identity: profile.identity, avatarShape: profile.avatarShape, fontSize: profile.fontSize, placement: { ...profile.placement } };
   }
   function publish(extra = {}) {
     window.__quotaPinController.update({ status: "ready", view, preferences, update, ...extra });
@@ -136,7 +138,10 @@ html,body{height:100%;margin:0;background:#050505;color:#eee;font:14px system-ui
 #account{position:absolute;left:8px;bottom:8px;width:212px;height:40px;display:flex;align-items:center;gap:8px;padding:0 8px;border:0;border-radius:8px;background:#111;color:#ddd;text-align:left}
 #account img{width:18px;height:18px;border-radius:50%;object-fit:cover}.name{min-width:0;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 #native-help{position:absolute;right:8px;bottom:12px;width:32px;height:32px;border:0;background:transparent;color:#888}
-</style></head><body><aside id="sidebar"><div id="account-footer"><button id="account" aria-haspopup="menu"><img src="/avatar.png" alt=""><span class="name">Aster</span></button><button id="native-help" aria-label="Help">?</button></div></aside><script src="/renderer.js"></script><script src="/fixture.js"></script></body></html>`;
+#composer{position:fixed;left:380px;right:140px;bottom:14px;height:92px;border-radius:16px;background:#111}
+#composer textarea{position:absolute;left:18px;right:18px;top:14px;width:calc(100% - 36px);height:30px;resize:none;background:transparent;color:#ddd;border:0}
+#composer .tool{position:absolute;bottom:12px;width:26px;height:26px;border:0;border-radius:50%;background:#222;color:#aaa}.tool.left{left:14px}.tool.right{right:14px}
+</style></head><body><aside id="sidebar"><div id="account-footer"><button id="account" aria-haspopup="menu"><img src="/avatar.png" alt=""><span class="name">Aster</span></button><button id="native-help" aria-label="Help">?</button></div></aside><main><div id="composer"><textarea aria-label="Message"></textarea><button class="tool left">+</button><button class="tool right">↗</button></div></main><script src="/renderer.js"></script><script src="/fixture.js"></script></body></html>`;
 const avatar = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=", "base64");
 
 class CdpClient {
@@ -537,6 +542,81 @@ test("Customize separates global and view settings and disables inactive alert d
   });
   assert.deepEqual(result.after, { targetDisabled: false, levelDisabled: false });
   assert.deepEqual(result.headings, ["Account row", "Current view"]);
+});
+
+test("Quick placement uses semantic Codex slots, keeps identity native, and moves the rail independently", { skip: !canRun }, async () => {
+  await client.call("Emulation.setDeviceMetricsOverride", { width: 1100, height: 720, deviceScaleFactor: 1, mobile: false });
+  await navigate("en");
+  await openPanel();
+  await client.evaluate(`window.__placementPanel = document.querySelector('#quotapin-profile-editor')`);
+  const availability = await client.evaluate(`(() => Object.fromEntries([...document.querySelectorAll('[data-placement-zone]')].map((node)=>[node.dataset.placementZone,!node.disabled])))()`);
+  assert.deepEqual(availability, {
+    "account-row": true,
+    "title-center": true,
+    "workspace-bottom-start": true,
+    "composer-center": true,
+    "workspace-bottom-end": true,
+  });
+
+  await client.evaluate(`document.querySelector('[data-placement-zone="title-center"]').click()`);
+  await waitFor(() => client.evaluate(`document.querySelector('[data-quotapin-placement-surface="primary"]')?.dataset.placementZone === 'title-center'`));
+  const placementPanelStable = await client.evaluate(`({same:window.__placementPanel === document.querySelector('#quotapin-profile-editor'),runtime:window.__quotaPinController.inspectPanelRuntime()})`);
+  assert.equal(placementPanelStable.same, true, "changing a placement must not rebuild the panel: " + JSON.stringify(placementPanelStable.runtime));
+  const remote = await client.evaluate(`(() => {
+    const row=document.querySelector('#account');
+    const badge=document.querySelector('#quotapin-inline-badge');
+    const surface=document.querySelector('[data-quotapin-placement-surface="primary"]');
+    const rect=surface.getBoundingClientRect();
+    return {
+      badgeOwnedByRow:badge.parentElement===row,
+      badgeDisplay:getComputedStyle(badge).display,
+      avatarVisible:getComputedStyle(row.querySelector('img')).display!=='none',
+      nameVisible:getComputedStyle(row.querySelector('.name')).display!=='none',
+      surfaceTop:rect.top,
+      surfaceCenter:rect.left+rect.width/2,
+      viewportCenter:document.documentElement.clientWidth/2,
+      modules:[...surface.querySelectorAll('[data-quotapin-remote-module]')].map((node)=>node.dataset.quotapinRemoteModule),
+      saved:window.__quotaPinController.preferences.profiles[0].placement,
+    };
+  })()`);
+  assert.equal(remote.badgeOwnedByRow, true);
+  assert.equal(remote.badgeDisplay, "none");
+  assert.equal(remote.avatarVisible, true);
+  assert.equal(remote.nameVisible, true);
+  assert.ok(remote.surfaceTop < 40, JSON.stringify(remote));
+  assert.ok(Math.abs(remote.surfaceCenter - remote.viewportCenter) <= 1, JSON.stringify(remote));
+  assert.ok(remote.modules.includes("value"), JSON.stringify(remote));
+  assert.deepEqual(remote.saved, { primary: "title-center", fallback: "account-row", rail: "account-row" });
+
+  const quietBefore = await client.evaluate(`window.__quotaPinController.inspectLayoutRuntime()`);
+  await new Promise((resolve) => setTimeout(resolve, 250));
+  const quietAfter = await client.evaluate(`window.__quotaPinController.inspectLayoutRuntime()`);
+  assert.equal(quietAfter.integrityRepairs, quietBefore.integrityRepairs, "a remote placement must not repair its hidden source row in a loop");
+  assert.equal(quietAfter.reconciliations, quietBefore.reconciliations, "a remote placement must stay still between real host changes");
+
+  await client.evaluate(`document.querySelector('[data-toggle="Show full-width quota bar"]').click()`);
+  await waitFor(() => client.evaluate(`window.__quotaPinController.preferences.profiles[0].showBar === true`));
+  await client.evaluate(`document.querySelector('[data-placement-rail="composer-bottom"]').click()`);
+  await waitFor(() => client.evaluate(`document.querySelector('[data-quotapin-placement-surface="rail"]')?.dataset.placementRail === 'composer-bottom'`));
+  assert.equal(await client.evaluate(`window.__placementPanel === document.querySelector('#quotapin-profile-editor')`), true, "changing the rail must not rebuild the panel");
+  const rail = await client.evaluate(`(() => {
+    const composer=document.querySelector('#composer').getBoundingClientRect();
+    const node=document.querySelector('[data-quotapin-placement-surface="rail"]');
+    const rect=node.getBoundingClientRect();
+    return { display:getComputedStyle(node).display, left:rect.left, right:rect.right, top:rect.top, composerLeft:composer.left, composerRight:composer.right, composerBottom:composer.bottom };
+  })()`);
+  assert.equal(rail.display, "block");
+  assert.ok(rail.left > rail.composerLeft && rail.right < rail.composerRight, JSON.stringify(rail));
+  assert.ok(Math.abs(rail.top - (rail.composerBottom - 3)) <= 1, JSON.stringify(rail));
+
+  await client.evaluate(`window.__quotaPinController.closeEditor(); true`);
+  await waitFor(() => client.evaluate(`!document.querySelector('#quotapin-profile-editor')`));
+  await client.evaluate(`(() => {
+    const row=document.querySelector('#account');
+    row.dispatchEvent(new PointerEvent('pointerdown',{bubbles:true,cancelable:true,button:0,buttons:1,pointerId:91,pointerType:'mouse',isPrimary:true,clientX:24,clientY:700}));
+    row.dispatchEvent(new PointerEvent('pointerup',{bubbles:true,cancelable:true,button:0,buttons:0,pointerId:91,pointerType:'mouse',isPrimary:true,clientX:24,clientY:700}));
+  })()`);
+  await waitFor(() => client.evaluate(`window.__fixtureNativeMenuDown === 1`));
 });
 
 test("Legacy and Beta switch one reversible account-row and gesture contract", { skip: !canRun }, async () => {

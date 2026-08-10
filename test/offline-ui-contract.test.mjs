@@ -75,7 +75,7 @@ test("the update surface uses complete versions, explicit intents, and inline co
 
 test("the account row exposes twelve independently ordered modules", () => {
   assert.deepEqual(createLayoutStateToolkit().modules, ["avatar", "name", "value", "label", "dot", "countdown", "relative", "seconds", "date", "reset", "todayTokens", "lifetimeTokens"]);
-  assert.match(renderer, /badge\.style\.display = "contents"/);
+  assert.match(renderer, /badge\.style\.display = options\.primaryRemote === true \? "none" : "contents"/);
   assert.match(renderer, /\["dot", "value", "todayTokens", "lifetimeTokens", "label", "countdown", "relative", "seconds", "date", "reset"\]\.map/);
   assert.match(renderer, /solveFreeLayout/);
   assert.match(renderer, /moduleAnchors/);
@@ -232,7 +232,7 @@ test("Quick, Customize, and Code keep one coherent settings chain without duplic
   assert.match(renderer, /accountGroup\.section\.dataset\.settingsScope = "global"/);
   assert.match(renderer, /detailGroup\.section\.dataset\.settingsScope = "profile"/);
   assert.match(renderer, /syncAlertDependencies/);
-  assert.match(renderer, /configuration-json-schema-17/);
+  assert.match(renderer, /configuration-json-schema-18/);
   assert.doesNotMatch(renderer, /configuration-json-schema-15/);
 });
 

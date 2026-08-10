@@ -4,7 +4,7 @@ import test from "node:test";
 
 const root = new URL("../", import.meta.url);
 const read = (relativePath) => fs.readFileSync(new URL(relativePath, root), "utf8");
-const version = read("VERSION").trim();
+const stableVersion = read("STABLE_VERSION").trim();
 
 test("the moving bootstrap defaults to immutable stable and accepts an explicit published version", () => {
   const source = read("install.ps1");
@@ -42,7 +42,7 @@ test("advanced maintenance retains exact stable version selection outside Quick 
     const source = read(relativePath);
     assert.match(source, /raw\.githubusercontent\.com\/WSL043\/QuotaPin-for-Codex\/main\/install\.ps1/);
     assert.match(source, /\[scriptblock\]::Create/);
-    assert.ok(source.includes(`-Version '${version}'`));
+    assert.ok(source.includes(`-Version '${stableVersion}'`));
   }
 });
 

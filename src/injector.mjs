@@ -19,9 +19,10 @@ import { createTimeStateToolkit } from "./renderer/time-state.mjs";
 import { createCodeConfigStateToolkit } from "./renderer/code-config-state.mjs";
 import { createProfileUsageStateToolkit } from "./renderer/profile-usage-state.mjs";
 import { createDeliveryStateToolkit } from "./renderer/delivery-state.mjs";
+import { createPlacementToolkit } from "./core/placement.mjs";
 import { BUILD_COMMIT } from "./core/build-origin.mjs";
 
-const VERSION = "1.2.0";
+const VERSION = "2.0.0-beta.1";
 const SOURCE_REPOSITORY = "https://github.com/WSL043/QuotaPin-for-Codex";
 const MAIN_TARGET_URL = "app://-/index.html";
 const portIndex = process.argv.indexOf("--port");
@@ -73,7 +74,8 @@ const rendererToolkitScript = `globalThis.__quotaPinRendererToolkits = {
   time: ${createTimeStateToolkit.toString()},
   codeConfig: ${createCodeConfigStateToolkit.toString()},
   profileUsage: ${createProfileUsageStateToolkit.toString()},
-  delivery: ${createDeliveryStateToolkit.toString()}
+  delivery: ${createDeliveryStateToolkit.toString()},
+  placement: ${createPlacementToolkit.toString()}
 };\n`;
 
 const rendererInstanceId = randomUUID();
@@ -113,8 +115,17 @@ const installScript = String.raw`(() => {
     nextRefreshDelay, shouldRefreshProfileUsage
   } = rendererToolkits.profileUsage();
   const { markDeliveryAccepted, evaluateDeliveryFreshness } = rendererToolkits.delivery();
+  const {
+    primaryZones: placementZones,
+    railZones: placementRailZones,
+    defaultPlacement,
+    cleanPlacement,
+    computePlacementGeometry,
+    resolvePrimaryZone,
+    resolveRailZone
+  } = rendererToolkits.placement();
   delete globalThis.__quotaPinRendererToolkits;
-  const version = "1.2.0";
+  const version = "2.0.0-beta.1";
   const instanceId = "__QUOTAPIN_RENDERER_INSTANCE_ID__";
   const sourceRepository = "https://github.com/WSL043/QuotaPin-for-Codex";
   const previous = window.__quotaPinController;
@@ -122,7 +133,7 @@ const installScript = String.raw`(() => {
   try { previous?.cleanup?.(); } catch {}
 
   const badgeId = "quotapin-inline-badge";
-  let state = { status: "loading", view: { text: "--%", parts: { value: "--%", todayTokens: "—", lifetimeTokens: "—", label: "", countdown: "--", relative: "--", seconds: "--:--:--", date: "--", reset: "--" }, runtimeWindows: [], tooltipWindows: [], renderTemplate: "{remaining}%", renderHoverTemplate: "", renderSeparator: " · ", tooltip: "QuotaPin is loading", severity: "unavailable", profileId: "glance", availableWindowCount: 0, showValue: true, showDot: false, showBar: false, barScope: "quota", remainingPercent: null, showLabel: false, showCountdown: false, showRelative: false, showSeconds: false, showDate: false, showReset: false, showTodayTokens: false, showLifetimeTokens: false, displayMode: "modules", valueColor: "muted", dotColor: "muted", identityColor: "inherit", valueColorMode: "muted", dotColorMode: "muted", identityColorMode: "inherit", effect: "none", effectTarget: "dot", effectAt: "critical", overdriveEgg: false, overdriveAlways: false, overdriveEffect: "menuFire", accountRowMode: "legacy", layout: { moduleOrder: defaultModuleOrder, layoutMode: "auto", snapThreshold: 16, snapTargets: ["edges", "center", "modules"], moduleAnchors: defaultModuleAnchors, identity: "show", avatarShape: "native", fontSize: 14, barScope: "quota" } }, preferences: null };
+  let state = { status: "loading", view: { text: "--%", parts: { value: "--%", todayTokens: "—", lifetimeTokens: "—", label: "", countdown: "--", relative: "--", seconds: "--:--:--", date: "--", reset: "--" }, runtimeWindows: [], tooltipWindows: [], renderTemplate: "{remaining}%", renderHoverTemplate: "", renderSeparator: " · ", tooltip: "QuotaPin is loading", severity: "unavailable", profileId: "glance", availableWindowCount: 0, showValue: true, showDot: false, showBar: false, barScope: "quota", remainingPercent: null, showLabel: false, showCountdown: false, showRelative: false, showSeconds: false, showDate: false, showReset: false, showTodayTokens: false, showLifetimeTokens: false, displayMode: "modules", valueColor: "muted", dotColor: "muted", identityColor: "inherit", valueColorMode: "muted", dotColorMode: "muted", identityColorMode: "inherit", effect: "none", effectTarget: "dot", effectAt: "critical", overdriveEgg: false, overdriveAlways: false, overdriveEffect: "menuFire", accountRowMode: "legacy", layout: { moduleOrder: defaultModuleOrder, layoutMode: "auto", snapThreshold: 16, snapTargets: ["edges", "center", "modules"], moduleAnchors: defaultModuleAnchors, identity: "show", avatarShape: "native", fontSize: 14, barScope: "quota", placement: defaultPlacement } }, preferences: null };
   const deliveryRuntime = { highestSequence: 0, accepted: 0, rejected: 0, presentationSkips: 0, lastReason: null, lastAcceptedAt: 0, stale: false, staleTransitions: 0, recoveries: 0, trace: [] };
   const deliverySummary = (nextState, sequence, accepted, cause) => {
     const view = nextState?.view ?? {};
@@ -205,6 +216,7 @@ const installScript = String.raw`(() => {
   let panelBadge = null;
   let panelBinding = null;
   let panelRebindQueued = false;
+  const panelRuntimeMetrics = { opens: 0, closes: 0, rebinds: 0, lastRebindReason: null };
   let panelReturnFocus = null;
   let editorMode = "quick";
   let editorRowCleanup = null;
@@ -244,6 +256,13 @@ const installScript = String.raw`(() => {
   let accountResizeFrame = 0;
   let accountResizeSettleTimer = 0;
   let accountResizePending = false;
+  let placementLayer = null;
+  let placementPrimarySurface = null;
+  let placementRailSurface = null;
+  let observedPlacementComposer = null;
+  let activePlacementZone = "account-row";
+  let activePlacementRail = "account-row";
+  let lastPlacementContext = null;
   let responsiveFreeLayout = null;
   let lastLayoutBinding = null;
   let lastLayoutSignature = "";
@@ -269,6 +288,11 @@ const installScript = String.raw`(() => {
   const effectMonitorMetrics = { targetedInvalidations: 0, watchdogWakeups: 0 };
   const accountResizeObserver = typeof ResizeObserver === "function"
     ? new ResizeObserver(handleAccountResize)
+    : null;
+  const placementResizeObserver = typeof ResizeObserver === "function"
+    ? new ResizeObserver(() => {
+        if (isActiveRenderer()) schedule();
+      })
     : null;
   const moduleStyleSnapshots = new WeakMap();
   const rowStyleSnapshots = new WeakMap();
@@ -341,6 +365,105 @@ const installScript = String.raw`(() => {
     }
     candidates.sort((left, right) => left.area - right.area);
     return candidates[0]?.node ?? row;
+  }
+
+  function findComposerSurface() {
+    const viewportWidth = document.documentElement.clientWidth || window.innerWidth;
+    const viewportHeight = document.documentElement.clientHeight || window.innerHeight;
+    const editables = [...document.querySelectorAll('textarea,[contenteditable="true"]')]
+      .map((node) => ({ node, rect: node.getBoundingClientRect() }))
+      .filter(({ node, rect }) => isPaintedElement(node, rect)
+        && rect.width >= 100
+        && rect.height >= 16
+        && rect.top >= viewportHeight * .48
+        && rect.bottom <= viewportHeight + 2);
+    const candidates = new Map();
+    for (const editable of editables) {
+      for (let node = editable.node.parentElement, depth = 0; node && depth < 7; node = node.parentElement, depth += 1) {
+        if (node.closest('#quotapin-profile-editor,#quotapin-placement-layer')) break;
+        const rect = node.getBoundingClientRect();
+        if (!isPaintedElement(node, rect)
+          || rect.width < Math.max(320, editable.rect.width)
+          || rect.width > viewportWidth - 12
+          || rect.height < 64
+          || rect.height > 260
+          || rect.bottom < viewportHeight - 190
+          || rect.bottom > viewportHeight + 2) continue;
+        const centerDistance = Math.abs((rect.left + rect.right) / 2 - viewportWidth / 2);
+        const score = 500 - depth * 18 - centerDistance * .18 - Math.abs(rect.bottom - (viewportHeight - 12)) * .08;
+        const previous = candidates.get(node);
+        if (!previous || score > previous.score) candidates.set(node, { node, rect, score });
+      }
+    }
+    const ranked = [...candidates.values()].sort((left, right) => right.score - left.score);
+    if (!ranked.length) return null;
+    if (ranked[1] && ranked[0].score - ranked[1].score < 1 && ranked[0].node !== ranked[1].node) return null;
+    return ranked[0].node;
+  }
+
+  function observePlacementComposer(composer) {
+    const next = composer instanceof Element ? composer : null;
+    if (next === observedPlacementComposer) return;
+    placementResizeObserver?.disconnect();
+    observedPlacementComposer = next;
+    if (observedPlacementComposer) placementResizeObserver?.observe(observedPlacementComposer);
+  }
+
+  function placementGeometryFor(row) {
+    const viewport = {
+      width: document.documentElement.clientWidth || window.innerWidth,
+      height: document.documentElement.clientHeight || window.innerHeight,
+    };
+    const composerNode = findComposerSurface();
+    observePlacementComposer(composerNode);
+    const composer = composerNode?.getBoundingClientRect() ?? null;
+    const sidebar = findAccountSurface(row)?.getBoundingClientRect() ?? row?.getBoundingClientRect() ?? null;
+    const composerOccupied = composerNode
+      ? [...composerNode.querySelectorAll('button,[role="button"],select')]
+          .filter((node) => isPaintedElement(node))
+          .map((node) => node.getBoundingClientRect())
+      : [];
+    const titleOccupied = [...document.querySelectorAll('button,[role="button"]')]
+      .filter((node) => !node.closest('#quotapin-profile-editor,#quotapin-placement-layer') && isPaintedElement(node))
+      .map((node) => node.getBoundingClientRect())
+      .filter((rect) => rect.top < 56 && rect.bottom > 0);
+    return {
+      composerNode,
+      geometry: computePlacementGeometry({ viewport, sidebar, composer, composerOccupied, titleOccupied }),
+    };
+  }
+
+  function resolvePlacementContext(row, placementValue) {
+    const placement = cleanPlacement(placementValue);
+    const { composerNode, geometry } = placementGeometryFor(row);
+    const primary = resolvePrimaryZone(placement, geometry) ?? "account-row";
+    const rail = resolveRailZone(placement, geometry);
+    return {
+      placement,
+      geometry,
+      composerNode,
+      primary,
+      rail,
+      primaryRemote: primary !== "account-row",
+      railRemote: primary !== "account-row" || rail !== "account-row",
+    };
+  }
+
+  function samePlacement(left, right) {
+    return left?.primary === right?.primary
+      && left?.fallback === right?.fallback
+      && left?.rail === right?.rail;
+  }
+
+  function cachedPlacementContext(row, placementValue) {
+    const placement = cleanPlacement(placementValue);
+    const cached = lastPlacementContext;
+    if (!cached
+      || cached.row !== row
+      || !row?.isConnected
+      || !samePlacement(cached.placement, placement)
+      || (cached.composerNode && !cached.composerNode.isConnected)) return null;
+    return cached;
   }
 
   function findAccountHelpControl(row, surface = findAccountSurface(row)) {
@@ -443,11 +566,17 @@ const installScript = String.raw`(() => {
     const captured = captureResponsiveFreeLayout(row);
     if (captured) responsiveFreeLayout = captured;
     const view = viewWithOptimisticLayout(state.view ?? {});
-    const solved = paintPositionedModuleLayout(row, badge, view.layout, { resizing: true });
+    const placementContext = resolvePlacementContext(row, view.layout?.placement);
+    const renderLayout = {
+      ...(view.layout ?? {}),
+      __resolvedPrimary: placementContext.primary,
+      __resolvedRail: placementContext.rail,
+    };
+    const solved = paintPositionedModuleLayout(row, badge, renderLayout, { resizing: true, primaryRemote: placementContext.primaryRemote });
     if (!solved) return false;
     lastLayoutBinding = captureAccountBinding(row, badge);
     lastLayoutPlan = committedLayoutPlan(row, badge, solved);
-    lastLayoutSignature = layoutInputSignature(row, badge, view.layout);
+    lastLayoutSignature = layoutInputSignature(row, badge, renderLayout);
     layoutRuntimeMetrics.reconciliations += 1;
     return true;
   }
@@ -517,8 +646,10 @@ const installScript = String.raw`(() => {
     activeLayoutDrag = null;
   }
 
-  function queuePanelRebind() {
+  function queuePanelRebind(reason = "host-change") {
     if (!panel || panelRebindQueued) return;
+    panelRuntimeMetrics.rebinds += 1;
+    panelRuntimeMetrics.lastRebindReason = reason;
     const stalePanel = panel;
     panelRebindQueued = true;
     queueMicrotask(() => {
@@ -582,6 +713,7 @@ const installScript = String.raw`(() => {
         avatarShape: profile.avatarShape,
         fontSize: profile.fontSize,
         barScope: profile.barScope === "row" ? "row" : "quota",
+        placement: cleanPlacement(profile.placement),
       },
     };
     return deliveryRuntime.stale ? staleQuotaView(optimisticView) : optimisticView;
@@ -698,6 +830,7 @@ const installScript = String.raw`(() => {
   }
 
   function closePanel(relockSecrets = true, restoreFocus = true, resumeProfileRefresh = true) {
+    if (panel) panelRuntimeMetrics.closes += 1;
     const returnFocus = panelReturnFocus;
     try { editorRowCleanup?.(); } catch {}
     editorRowCleanup = null;
@@ -990,6 +1123,13 @@ const installScript = String.raw`(() => {
       return;
     }
     const view = viewWithOptimisticLayout(state.view ?? {});
+    const placementContext = cachedPlacementContext(row, view.layout?.placement)
+      ?? resolvePlacementContext(row, view.layout?.placement);
+    const renderLayout = {
+      ...(view.layout ?? {}),
+      __resolvedPrimary: placementContext.primary,
+      __resolvedRail: placementContext.rail,
+    };
     const liveCopy = liveQuotaCopy(view);
     const usageCopy = profileUsageCopy();
     const modules = findAccountModules(row, badge);
@@ -1009,8 +1149,8 @@ const installScript = String.raw`(() => {
       modules[module].textContent = text;
       layoutChanged = true;
     }
-    if (layoutChanged) {
-      reconcileModuleLayout(row, badge, view.layout);
+    if (layoutChanged && !placementContext.primaryRemote) {
+      reconcileModuleLayout(row, badge, renderLayout);
       layoutRuntimeMetrics.liveTimeLayoutPasses += 1;
     }
     const hover = completeHoverCopy(liveCopy, usageCopy);
@@ -1020,6 +1160,10 @@ const installScript = String.raw`(() => {
     if (bar instanceof HTMLElement) bar.title = hover;
     const accessibleValue = view.showValue === false ? view.severity : liveCopy.text;
     badge.setAttribute("aria-label", t("Codex remaining quota") + (accessibleValue ? ": " + accessibleValue : ""));
+    if (placementContext.primaryRemote || placementContext.railRemote) {
+      const valueNode = modules.value;
+      syncPlacementPresentation(row, badge, { ...view, layout: renderLayout }, placementContext, valueNode?.style.color ?? "currentColor");
+    }
     paintQuickPreview?.();
     layoutRuntimeMetrics.liveTimeUpdates += 1;
     armLiveTimeTimer(view);
@@ -1107,6 +1251,7 @@ const installScript = String.raw`(() => {
         cleanLayoutMode(layout.layoutMode), layout.identity ?? "show", layout.avatarShape ?? "native",
         stableLayoutMetric(layout.fontSize), layout.barScope === "row" ? "row" : "quota", cleanModuleOrder(layout.moduleOrder),
         layoutModules.map((module) => stableLayoutMetric(anchors[module])),
+        cleanPlacement(layout.placement), layout.__resolvedPrimary ?? "account-row", layout.__resolvedRail ?? "account-row",
       ],
       typography: [badge.style.fontSize, badge.style.lineHeight, rowStyle.fontFamily, rowStyle.fontWeight, rowStyle.letterSpacing],
       identity: [modules.name?.textContent ?? "", Boolean(modules.avatar)],
@@ -1143,7 +1288,7 @@ const installScript = String.raw`(() => {
     });
   }
 
-  function reconcileModuleLayout(row, badge, layout = {}) {
+  function reconcileModuleLayout(row, badge, layout = {}, options = {}) {
     const nextBinding = captureAccountBinding(row, badge);
     const nextSignature = layoutInputSignature(row, badge, layout);
     if (sameAccountBinding(lastLayoutBinding, nextBinding)
@@ -1153,8 +1298,8 @@ const installScript = String.raw`(() => {
       positionQuotaBar(row, badge, layout.barScope);
       return findIdentityParts(row, badge);
     }
-    const identityParts = applyLayout(row, badge, layout);
-    const solved = paintPositionedModuleLayout(row, badge, layout);
+    const identityParts = applyLayout(row, badge, layout, options);
+    const solved = paintPositionedModuleLayout(row, badge, layout, options);
     lastLayoutBinding = captureAccountBinding(row, badge);
     lastLayoutPlan = committedLayoutPlan(row, badge, solved);
     // Store the post-layout geometry. A hidden identity becoming visible, or a
@@ -1245,7 +1390,7 @@ const installScript = String.raw`(() => {
 
   function paintPositionedModuleLayout(row, badge, layout = {}, options = {}) {
     const modules = findAccountModules(row, badge);
-    const visibleSet = new Set(visibleAccountModules(modules));
+    const visibleSet = new Set(visibleAccountModules(modules).filter((module) => options.primaryRemote !== true || ["avatar", "name"].includes(module)));
     const requestedAnchors = cleanModuleAnchors(layout.moduleAnchors);
     const smartLayout = cleanLayoutMode(layout.layoutMode) === "auto" && options.dragging !== true;
     const anchors = smartLayout ? dockModuleAnchors(requestedAnchors) : requestedAnchors;
@@ -1606,6 +1751,7 @@ const installScript = String.raw`(() => {
   }
 
   function openEditor(badge, preserveUnlock = false) {
+    panelRuntimeMetrics.opens += 1;
     const keepUnlocked = preserveUnlock && secretControlsUnlocked;
     const preservedReturnFocus = panelReturnFocus instanceof HTMLElement && panelReturnFocus.isConnected ? panelReturnFocus : null;
     const activeFocus = document.activeElement instanceof HTMLElement
@@ -2087,6 +2233,8 @@ const installScript = String.raw`(() => {
     let quickShowReset = profile.showReset === true;
     let quickShowTodayTokens = profile.showTodayTokens === true;
     let quickShowLifetimeTokens = profile.showLifetimeTokens === true;
+    let quickPlacement = cleanPlacement(profile.placement);
+    let paintPlacementControls = () => {};
     const availableWindowCount = Number(state.view?.availableWindowCount) || 0;
     const elementRows = document.createElement("div");
     elementRows.dataset.moduleGroup = "composition";
@@ -2113,6 +2261,7 @@ const installScript = String.raw`(() => {
       quickShowReset = saved.showReset === true;
       quickShowTodayTokens = saved.showTodayTokens === true;
       quickShowLifetimeTokens = saved.showLifetimeTokens === true;
+      quickPlacement = cleanPlacement(saved.placement);
       avatarVisible = !["hideAvatar", "quotaOnly"].includes(saved.identity);
       nameVisible = !["hideName", "quotaOnly"].includes(saved.identity);
       for (const [module, visible] of Object.entries({
@@ -2121,6 +2270,7 @@ const installScript = String.raw`(() => {
       })) moduleChips[module]?.setActive(Boolean(visible));
       quotaBarChip?.setActive(quickShowBar && quickBarScope === "quota");
       rowBarChip?.setActive(quickShowBar && quickBarScope === "row");
+      paintPlacementControls();
     };
     const sendModuleVisibility = (key, next, finish) => {
       sendAction({ type: "updateProfile", id: profile.id, patch: { displayMode: "modules", [key]: next } }, {
@@ -2147,6 +2297,112 @@ const installScript = String.raw`(() => {
         },
       });
     };
+    const sendPlacement = (patch) => {
+      const requested = cleanPlacement({ ...quickPlacement, ...patch });
+      quickPlacement = requested;
+      paintPlacementControls();
+      sendAction({ type: "updateProfile", id: profile.id, patch: { placement: requested } }, {
+        onAck: (ack) => {
+          const renderable = getRenderableSettings(settingsState);
+          if (ack?.ok) syncQuickControls(renderable);
+          if (!ack?.ok || !panel) return;
+          schedule(() => setLayoutEditing(isLayoutEditingMode()));
+        },
+      });
+    };
+
+    const placementMap = document.createElement("div");
+    placementMap.dataset.placementMap = "true";
+    Object.assign(placementMap.style, {
+      position: "relative", height: "128px", overflow: "hidden", borderRadius: "10px",
+      background: "var(--quotapin-panel-surface)", boxShadow: "inset 0 0 0 1px var(--quotapin-panel-line)",
+    });
+    const mapSidebar = document.createElement("span");
+    const mapComposer = document.createElement("span");
+    Object.assign(mapSidebar.style, { position: "absolute", left: "7px", top: "7px", bottom: "7px", width: "66px", borderRadius: "7px", background: "var(--quotapin-panel-fill)" });
+    Object.assign(mapComposer.style, { position: "absolute", left: "104px", right: "55px", bottom: "12px", height: "34px", borderRadius: "9px", background: "var(--quotapin-panel-fill)" });
+    placementMap.append(mapSidebar, mapComposer);
+    const placementButtons = new Map();
+    const zoneVisuals = [
+      { value: "account-row", label: "Account footer", css: { left: "13px", bottom: "13px", width: "54px", height: "24px" } },
+      { value: "title-center", label: "Title center", css: { left: "50%", top: "8px", width: "76px", height: "24px", transform: "translateX(-50%)" } },
+      { value: "workspace-bottom-start", label: "Bottom left", css: { left: "79px", bottom: "16px", width: "21px", height: "26px" } },
+      { value: "composer-center", label: "Composer center", css: { left: "50%", bottom: "17px", width: "82px", height: "24px", transform: "translateX(-50%)" } },
+      { value: "workspace-bottom-end", label: "Bottom right", css: { right: "10px", bottom: "16px", width: "39px", height: "26px" } },
+    ];
+    for (const option of zoneVisuals) {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.dataset.placementZone = option.value;
+      button.setAttribute("aria-label", t(option.label));
+      button.title = t(option.label);
+      button.textContent = option.value === "workspace-bottom-start" || option.value === "workspace-bottom-end" ? "•" : "42%";
+      Object.assign(button.style, option.css, {
+        position: "absolute", padding: "0 5px", border: "0", borderRadius: "6px", font: "inherit", fontSize: "9px",
+        fontWeight: "650", fontVariantNumeric: "tabular-nums", cursor: "pointer", transition: "opacity 120ms ease, background-color 120ms ease, color 120ms ease, transform 120ms ease",
+      });
+      button.addEventListener("click", () => {
+        if (button.disabled) return;
+        sendPlacement({ primary: option.value, fallback: "account-row" });
+      });
+      placementButtons.set(option.value, button);
+      placementMap.append(button);
+    }
+    const railButtons = new Map();
+    for (const option of [
+      { value: "account-row", label: "Account rail", css: { left: "13px", bottom: "9px", width: "54px" } },
+      { value: "composer-bottom", label: "Composer rail", css: { left: "110px", right: "61px", bottom: "8px" } },
+    ]) {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.dataset.placementRail = option.value;
+      button.setAttribute("aria-label", t(option.label));
+      button.title = t(option.label);
+      Object.assign(button.style, option.css, {
+        position: "absolute", height: "3px", padding: "0", border: "0", borderRadius: "999px", cursor: "pointer",
+        transition: "opacity 120ms ease, background-color 120ms ease",
+      });
+      button.addEventListener("click", () => {
+        if (button.disabled) return;
+        sendPlacement({ rail: option.value });
+      });
+      railButtons.set(option.value, button);
+      placementMap.append(button);
+    }
+    const placementStatus = document.createElement("div");
+    placementStatus.dataset.placementStatus = "true";
+    Object.assign(placementStatus.style, { marginTop: "6px", minHeight: "14px", color: "var(--quotapin-panel-faint)", fontSize: "9px", textAlign: "center", lineHeight: "1.35" });
+    paintPlacementControls = () => {
+      const currentRow = findAccountRow();
+      const context = currentRow ? resolvePlacementContext(currentRow, quickPlacement) : { geometry: { zones: {}, rails: {} }, primary: "account-row", rail: "account-row" };
+      for (const [zone, button] of placementButtons) {
+        const available = zone === "account-row" || context.geometry?.zones?.[zone]?.available === true;
+        const selected = quickPlacement.primary === zone;
+        const active = context.primary === zone;
+        button.disabled = !available;
+        button.setAttribute("aria-pressed", String(selected));
+        button.dataset.activePlacement = String(active);
+        button.style.background = selected ? "var(--quotapin-panel-accent-fill)" : "var(--quotapin-panel-fill-strong)";
+        button.style.color = selected ? "var(--quotapin-panel-accent)" : "var(--quotapin-panel-faint)";
+        button.style.opacity = available ? (selected ? "1" : ".62") : ".18";
+        button.style.boxShadow = active ? "0 3px 10px rgba(0,0,0,.14)" : "none";
+      }
+      for (const [rail, button] of railButtons) {
+        const available = rail === "account-row" || context.geometry?.rails?.[rail]?.available === true;
+        const selected = quickPlacement.rail === rail;
+        button.disabled = !available;
+        button.setAttribute("aria-pressed", String(selected));
+        button.style.background = selected ? "var(--quotapin-panel-accent)" : "var(--quotapin-panel-line-strong)";
+        button.style.opacity = available ? (selected ? "1" : ".58") : ".18";
+      }
+      const requestedUnavailable = quickPlacement.primary !== context.primary;
+      placementStatus.textContent = requestedUnavailable
+        ? t("Unavailable in this window") + " · " + t("Using account footer")
+        : t(zoneVisuals.find((item) => item.value === context.primary)?.label ?? "Account footer") + " · " + t(context.rail === "composer-bottom" ? "Composer rail" : "Account rail");
+    };
+    const placementBody = document.createElement("div");
+    placementBody.append(placementMap, placementStatus);
+    paintPlacementControls();
     const liveParts = state.view?.parts ?? {};
     const visualSpan = (text, color) => {
       const span = document.createElement("span");
@@ -2379,7 +2635,7 @@ const installScript = String.raw`(() => {
       color: "var(--quotapin-panel-faint)", fontSize: "9px", lineHeight: "1.4", textAlign: "center",
     });
     quickCompositionBody.append(badgeControls, quickCompositionHint);
-    quickGrid.append(quickModule("Visible modules", quickCompositionBody));
+    quickGrid.append(quickModule("Placement", placementBody), quickModule("Visible modules", quickCompositionBody));
 
     function makeModePanel(mode, scroll = true) {
       const section = document.createElement("div");
@@ -2642,7 +2898,7 @@ const installScript = String.raw`(() => {
     jsonCaption.textContent = t("Configuration JSON");
     Object.assign(jsonCaption.style, { color: "var(--quotapin-panel-muted)", fontSize: "10px", fontWeight: "600", letterSpacing: ".035em" });
     const configReference = document.createElement("a");
-    configReference.href = sourceRepository + "/blob/main/docs/configuration.md#configuration-json-schema-17";
+    configReference.href = sourceRepository + "/blob/main/docs/configuration.md#configuration-json-schema-18";
     configReference.target = "_blank";
     configReference.rel = "noreferrer";
     configReference.textContent = t("Configuration reference");
@@ -3199,10 +3455,13 @@ const installScript = String.raw`(() => {
     }
 
     setLayoutEditing = (active) => {
-      panel.dataset.rowEditing = String(Boolean(active));
+      const currentRow = findAccountRow();
+      const resolved = currentRow ? resolvePlacementContext(currentRow, profile.placement).primary : "account-row";
+      const editAccountRow = Boolean(active) && resolved === "account-row";
+      panel.dataset.rowEditing = String(editAccountRow);
       try { editorRowCleanup?.(); } catch {}
       editorRowCleanup = null;
-      if (!active) return;
+      if (!editAccountRow) return;
       enableLiveRowEditing(badge, profile);
     };
 
@@ -3224,13 +3483,14 @@ const installScript = String.raw`(() => {
   function removeBadge(options = {}) {
     closePanel(true, options.restoreFocus !== false, options.resumeProfileRefresh !== false);
     const badge = document.getElementById(badgeId);
-    const row = badge?.parentElement;
+    const row = observedAccountRow ?? badge?.closest('button[aria-haspopup="menu"]');
     clearEasterEgg(badge);
     if (row instanceof Element) {
       restoreIdentity(row);
       restoreModuleLayout(row, badge);
     }
     restoreAccountChrome();
+    removePlacementLayer(true);
     badge?.remove();
     lastLayoutBinding = null;
     lastLayoutSignature = "";
@@ -3470,7 +3730,7 @@ const installScript = String.raw`(() => {
     node.style.display = "";
   }
 
-  function applyLayout(row, badge, layout = {}) {
+  function applyLayout(row, badge, layout = {}, options = {}) {
     if (badge.parentElement !== row) row.appendChild(badge);
     restoreIdentity(row);
     const parts = findIdentityParts(row, badge);
@@ -3539,7 +3799,7 @@ const installScript = String.raw`(() => {
         parts.name.style.top = "0";
       }
     }
-    badge.style.display = "contents";
+    badge.style.display = options.primaryRemote === true ? "none" : "contents";
     for (const module of ["dot", "value", "todayTokens", "lifetimeTokens", "label", "countdown", "relative", "seconds", "date", "reset"]) {
       const node = modules[module];
       node.style.flex = "0 0 auto";
@@ -4035,6 +4295,177 @@ const installScript = String.raw`(() => {
     return next;
   }
 
+  function removePlacementLayer(disconnectHost = false) {
+    if (disconnectHost) {
+      placementResizeObserver?.disconnect();
+      observedPlacementComposer = null;
+    }
+    placementPrimarySurface = null;
+    placementRailSurface = null;
+    placementLayer?.remove();
+    placementLayer = null;
+    activePlacementZone = "account-row";
+    activePlacementRail = "account-row";
+    lastPlacementContext = null;
+  }
+
+  function ensurePlacementLayer() {
+    if (placementLayer?.isConnected && placementPrimarySurface?.isConnected && placementRailSurface?.isConnected) {
+      return placementLayer;
+    }
+    placementLayer?.remove();
+    placementLayer = document.createElement("div");
+    placementLayer.id = "quotapin-placement-layer";
+    placementLayer.setAttribute("aria-hidden", "false");
+    Object.assign(placementLayer.style, {
+      position: "fixed",
+      inset: "0",
+      zIndex: "2147483000",
+      pointerEvents: "none",
+      overflow: "hidden",
+      contain: "layout style paint",
+    });
+    placementPrimarySurface = document.createElement("div");
+    placementPrimarySurface.dataset.quotapinPlacementSurface = "primary";
+    placementPrimarySurface.setAttribute("role", "status");
+    placementPrimarySurface.setAttribute("aria-live", "off");
+    Object.assign(placementPrimarySurface.style, {
+      position: "fixed",
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+      gap: "8px",
+      overflow: "hidden",
+      whiteSpace: "nowrap",
+      pointerEvents: "auto",
+      cursor: "default",
+      boxSizing: "border-box",
+    });
+    placementRailSurface = document.createElement("div");
+    placementRailSurface.dataset.quotapinPlacementSurface = "rail";
+    placementRailSurface.setAttribute("aria-hidden", "true");
+    const fill = document.createElement("span");
+    fill.dataset.quotapinPlacementRailFill = "true";
+    Object.assign(placementRailSurface.style, {
+      position: "fixed",
+      height: "2px",
+      overflow: "hidden",
+      borderRadius: "999px",
+      pointerEvents: "none",
+      transformOrigin: "left center",
+    });
+    Object.assign(fill.style, {
+      display: "block",
+      width: "100%",
+      height: "100%",
+      borderRadius: "inherit",
+      transformOrigin: "left center",
+      transition: "transform 240ms cubic-bezier(.2,.8,.2,1)",
+    });
+    placementRailSurface.append(fill);
+    placementLayer.append(placementPrimarySurface, placementRailSurface);
+    document.body.appendChild(placementLayer);
+    return placementLayer;
+  }
+
+  function paintFixedRect(node, rect) {
+    if (!(node instanceof HTMLElement) || !rect) return false;
+    node.style.left = Math.round(rect.left * 2) / 2 + "px";
+    node.style.top = Math.round(rect.top * 2) / 2 + "px";
+    node.style.width = Math.max(1, Math.round(rect.width * 2) / 2) + "px";
+    node.style.height = Math.max(1, Math.round(rect.height * 2) / 2) + "px";
+    return true;
+  }
+
+  function syncRemoteQuotaModules(row, badge, view, context) {
+    if (!(placementPrimarySurface instanceof HTMLElement)) return;
+    const rect = context.geometry?.zones?.[context.primary]?.rect;
+    if (!context.primaryRemote || !paintFixedRect(placementPrimarySurface, rect)) {
+      placementPrimarySurface.style.display = "none";
+      placementPrimarySurface.replaceChildren();
+      return;
+    }
+    const sourceModules = findAccountModules(row, badge);
+    const remoteModules = cleanModuleOrder(view.layout?.moduleOrder)
+      .filter((module) => !["avatar", "name"].includes(module));
+    const fragment = document.createDocumentFragment();
+    for (const module of remoteModules) {
+      const source = sourceModules[module];
+      if (!(source instanceof HTMLElement) || source.style.display === "none") continue;
+      const clone = document.createElement("span");
+      clone.dataset.quotapinRemoteModule = module;
+      clone.textContent = source.textContent;
+      clone.title = source.title;
+      clone.style.cssText = source.style.cssText;
+      clone.style.position = "relative";
+      clone.style.left = "0";
+      clone.style.top = "0";
+      clone.style.transform = "none";
+      clone.style.transition = "none";
+      clone.style.maxWidth = "100%";
+      clone.style.marginInline = "0";
+      clone.style.flex = "0 0 auto";
+      if (module !== "dot") clone.style.width = "auto";
+      fragment.append(clone);
+    }
+    placementPrimarySurface.replaceChildren(fragment);
+    placementPrimarySurface.dataset.placementZone = context.primary;
+    placementPrimarySurface.style.display = "flex";
+    placementPrimarySurface.style.fontFamily = getComputedStyle(row).fontFamily;
+    placementPrimarySurface.style.fontSize = badge.style.fontSize;
+    placementPrimarySurface.style.fontWeight = badge.style.fontWeight;
+    placementPrimarySurface.style.lineHeight = badge.style.lineHeight;
+    placementPrimarySurface.title = badge.title;
+    placementPrimarySurface.setAttribute("aria-label", badge.getAttribute("aria-label") ?? t("Codex remaining quota"));
+  }
+
+  function syncRemoteQuotaRail(row, badge, view, context, valueColor) {
+    if (!(placementRailSurface instanceof HTMLElement)) return;
+    if (view.showBar !== true || !context.railRemote) {
+      placementRailSurface.style.display = "none";
+      return;
+    }
+    const sourceBar = badge.querySelector('[data-part="bar"]');
+    const sourceFill = badge.querySelector('[data-part="bar-fill"]');
+    const accountRect = (accountRowMode() === "beta" ? findAccountSurface(row) : row)?.getBoundingClientRect();
+    const railRect = context.rail === "composer-bottom"
+      ? context.geometry?.rails?.["composer-bottom"]?.rect
+      : accountRect
+        ? { left: accountRect.left, top: accountRect.bottom - 2, width: accountRect.width, height: 2 }
+        : null;
+    if (!paintFixedRect(placementRailSurface, railRect)) {
+      placementRailSurface.style.display = "none";
+      return;
+    }
+    const fill = placementRailSurface.querySelector('[data-quotapin-placement-rail-fill="true"]');
+    const percent = Math.max(0, Math.min(100, Number(view.remainingPercent) || 0));
+    placementRailSurface.dataset.placementRail = context.rail;
+    placementRailSurface.style.display = "block";
+    placementRailSurface.style.background = sourceBar instanceof HTMLElement
+      ? sourceBar.style.background
+      : "rgba(127,127,127,.18)";
+    placementRailSurface.style.borderRadius = sourceBar instanceof HTMLElement ? sourceBar.style.borderRadius : "999px";
+    placementRailSurface.title = sourceBar?.title ?? badge.title;
+    if (fill instanceof HTMLElement) {
+      fill.style.background = sourceFill instanceof HTMLElement ? sourceFill.style.background : valueColor;
+      fill.style.transform = "scaleX(" + percent / 100 + ")";
+    }
+  }
+
+  function syncPlacementPresentation(row, badge, view, context, valueColor) {
+    activePlacementZone = context.primary;
+    activePlacementRail = context.rail;
+    if (!context.primaryRemote && !context.railRemote) {
+      removePlacementLayer();
+      observePlacementComposer(context.composerNode);
+      return;
+    }
+    ensurePlacementLayer();
+    observePlacementComposer(context.composerNode);
+    syncRemoteQuotaModules(row, badge, view, context);
+    syncRemoteQuotaRail(row, badge, view, context, valueColor);
+  }
+
   function render() {
     if (disposed || window.__quotaPinController !== controller) return;
     clearLiveTimeTimer();
@@ -4133,6 +4564,18 @@ const installScript = String.raw`(() => {
     if (badge.parentElement !== row) row.appendChild(badge);
     badge.dataset.quotapinInstance = instanceId;
     const view = viewWithOptimisticLayout(state.view ?? {});
+    const placementContext = resolvePlacementContext(row, view.layout?.placement);
+    lastPlacementContext = { ...placementContext, row };
+    if (activePlacementZone !== placementContext.primary || activePlacementRail !== placementContext.rail) {
+      lastLayoutBinding = null;
+      lastLayoutSignature = "";
+      lastLayoutPlan = null;
+    }
+    const renderLayout = {
+      ...(view.layout ?? {}),
+      __resolvedPrimary: placementContext.primary,
+      __resolvedRail: placementContext.rail,
+    };
     const liveCopy = liveQuotaCopy(view);
     const modules = findAccountModules(row, badge);
     const bar = badge.querySelector('[data-part="bar"]');
@@ -4168,7 +4611,7 @@ const installScript = String.raw`(() => {
     const fontSize = Math.max(9, Math.min(18, Number(view.layout?.fontSize) || 14));
     badge.style.fontSize = fontSize + "px";
     badge.style.lineHeight = Math.max(16, Math.round(fontSize * 1.35)) + "px";
-    const identityParts = reconcileModuleLayout(row, badge, view.layout);
+    const identityParts = reconcileModuleLayout(row, badge, renderLayout, { primaryRemote: placementContext.primaryRemote });
     const muted = "var(--text-tertiary, rgba(255,255,255,.58))";
     const nativeTextColor = getComputedStyle(identityParts.name ?? row).color;
     const hostSurface = surfaceFromTextColor(nativeTextColor);
@@ -4179,7 +4622,7 @@ const installScript = String.raw`(() => {
     if (modules.dot) modules.dot.style.background = dotColor;
     if (bar instanceof HTMLElement && barFill instanceof HTMLElement) {
       const percent = Math.max(0, Math.min(100, Number(view.remainingPercent) || 0));
-      bar.style.display = view.showBar === true ? "block" : "none";
+      bar.style.display = view.showBar === true && !placementContext.railRemote ? "block" : "none";
       barFill.style.width = percent + "%";
       barFill.style.background = valueColor;
       bar.title = completeHoverCopy(liveCopy, usageCopy);
@@ -4203,10 +4646,17 @@ const installScript = String.raw`(() => {
     for (const module of ["value", "todayTokens", "lifetimeTokens", "label", "countdown", "relative", "seconds", "date", "reset"]) if (modules[module]) modules[module].style.animation = ["value", "both"].includes(view.effectTarget) ? animationFor("value") : "none";
     if (modules.dot) modules.dot.style.animation = ["dot", "both"].includes(view.effectTarget) ? animationFor("dot") : "none";
     updateOverdriveEasterEgg(badge, view);
+    syncPlacementPresentation(row, badge, { ...view, layout: renderLayout }, placementContext, valueColor);
     paintQuickPreview?.();
     const currentBinding = captureAccountBinding(row, badge);
     const windowCountChanged = panel && panel.dataset.availableWindowCount !== String(Number(view.availableWindowCount) || 0);
-    if (panel && (panelBadge !== badge || !sameAccountBinding(panelBinding, currentBinding) || windowCountChanged)) queuePanelRebind();
+    const panelHostReplaced = panel && (panelBadge !== badge
+      || panelBinding?.row !== row
+      || panelBinding?.badge !== badge
+      || !panelBinding?.row?.isConnected
+      || panelBinding?.nodes?.some((node) => node && !node.isConnected));
+    if (panel && (panelHostReplaced || windowCountChanged)) queuePanelRebind(panelHostReplaced ? "host-replaced" : "window-count");
+    else if (panel && currentBinding) panelBinding = currentBinding;
     while (afterRenderCallbacks.length) {
       try { afterRenderCallbacks.shift()?.(); } catch {}
     }
@@ -4220,6 +4670,8 @@ const installScript = String.raw`(() => {
     const row = badge.parentElement;
     if (!(row instanceof HTMLElement)) return false;
     const view = viewWithOptimisticLayout(state.view ?? {});
+    const placementContext = cachedPlacementContext(row, view.layout?.placement)
+      ?? resolvePlacementContext(row, view.layout?.placement);
     const liveCopy = liveQuotaCopy(view);
     const usageCopy = profileUsageCopy();
     const moduleMode = view.displayMode !== "template";
@@ -4246,7 +4698,18 @@ const installScript = String.raw`(() => {
       if (module !== "dot" && expectedVisibility[module] && node.textContent !== String(expectedCopy[module] ?? "")) return true;
     }
     const bar = badge.querySelector('[data-part="bar"]');
-    if (!(bar instanceof HTMLElement) || ((bar.style.display !== "none") !== (view.showBar === true))) return true;
+    const inlineBarExpected = view.showBar === true && !placementContext.railRemote;
+    if (!(bar instanceof HTMLElement) || ((bar.style.display !== "none") !== inlineBarExpected)) return true;
+    if (placementContext.primaryRemote) {
+      if (!(placementPrimarySurface instanceof HTMLElement)
+        || !placementPrimarySurface.isConnected
+        || placementPrimarySurface.dataset.placementZone !== placementContext.primary) return true;
+    }
+    if (view.showBar === true && placementContext.railRemote) {
+      if (!(placementRailSurface instanceof HTMLElement)
+        || !placementRailSurface.isConnected
+        || placementRailSurface.dataset.placementRail !== placementContext.rail) return true;
+    }
     return !committedLayoutMatches(lastLayoutPlan, row, badge);
   }
 
@@ -4500,6 +4963,9 @@ const installScript = String.raw`(() => {
         bound: Boolean(lastLayoutBinding?.row?.isConnected && lastLayoutBinding?.badge?.isConnected),
       };
     },
+    inspectPanelRuntime() {
+      return { ...panelRuntimeMetrics, connected: Boolean(panel?.isConnected) };
+    },
     inspectDeliveryRuntime() {
       return {
         highestSequence: deliveryRuntime.highestSequence,
@@ -4619,6 +5085,7 @@ const installScript = String.raw`(() => {
       };
       safely(() => observer.disconnect());
       safely(() => accountResizeObserver?.disconnect());
+      safely(() => placementResizeObserver?.disconnect());
       if (accountResizeFrame) safely(() => cancelAnimationFrame(accountResizeFrame));
       if (accountResizeSettleTimer) safely(() => clearTimeout(accountResizeSettleTimer));
       accountResizeFrame = 0;
@@ -4628,6 +5095,7 @@ const installScript = String.raw`(() => {
       moduleIntegrityObserver = null;
       integrityBadge = null;
       observedAccountRow = null;
+      observedPlacementComposer = null;
       observedAccountWidth = 0;
       responsiveFreeLayout = null;
       lastLayoutBinding = null;

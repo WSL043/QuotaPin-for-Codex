@@ -249,6 +249,7 @@ export function formatQuota(snapshot, config, now = Date.now(), locale) {
         avatarShape: profile.avatarShape,
         fontSize: profile.fontSize,
         barScope: profile.barScope,
+        placement: profile.placement,
       },
     };
   }
@@ -333,6 +334,7 @@ export function formatQuota(snapshot, config, now = Date.now(), locale) {
       avatarShape: profile.avatarShape,
       fontSize: profile.fontSize,
       barScope: profile.barScope,
+      placement: profile.placement,
     },
   };
 }

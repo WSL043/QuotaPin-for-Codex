@@ -73,13 +73,13 @@ Three editable views ship as starting points:
 
 Duplicate and rename a useful view instead of rebuilding it. Up to eight views are retained and at least one always remains. Date and precise-seconds combinations can be built directly in Quick or Code.
 
-## Configuration JSON (schema 17)
+## Configuration JSON (schema 18)
 
 A compact valid document looks like this:
 
 ```json
 {
-  "version": 17,
+  "version": 18,
   "locale": "en",
   "panelTheme": "dark",
   "accountRowMode": "legacy",
@@ -104,6 +104,11 @@ A compact valid document looks like this:
     "showReset": false,
     "showTodayTokens": false,
     "showLifetimeTokens": false,
+    "placement": {
+      "primary": "account-row",
+      "fallback": "account-row",
+      "rail": "account-row"
+    },
     "valueColor": "severity",
     "dotColor": "severity",
     "identityColor": "inherit",
@@ -153,8 +158,9 @@ A compact valid document looks like this:
 | `separator` | string, max 8 chars | Joins multiple quota periods in template mode; it does not draw a separate visual module. |
 | `displayMode` | `modules`, `template` | Independent modules or one Code-defined value. |
 | `showValue`, `showDot`, `showTodayTokens`, `showLifetimeTokens`, `showLabel`, `showCountdown`, `showRelative`, `showSeconds`, `showDate`, `showReset` | boolean | Independent inline module visibility. The token counters are optional; `countdown` is compact and universal; `relative` uses localized words. |
-| `showBar` | boolean | Optional quota line at the bottom of the account row; it uses the current percentage and value color without entering horizontal layout. |
-| `barScope` | `quota` \| `row` | `quota` follows the first and last visible quota module. `row` spans the usable account row: Legacy stops before Codex Help, while Beta uses the expanded row after Help is hidden. Both choices have a direct visual control in Quick and remain editable in Code. |
+| `showBar` | boolean | Optional quota line. Its color and fill use the same canonical percentage as the value module. |
+| `barScope` | `quota` \| `row` | Within the account surface, `quota` follows visible quota modules and `row` spans the usable row. Legacy stops before Codex Help; Beta uses the expanded row after Help is hidden. |
+| `placement` | semantic object | `primary` accepts `account-row`, `title-center`, `workspace-bottom-start`, `composer-center`, or `workspace-bottom-end`; `rail` accepts `account-row` or `composer-bottom`. `fallback` is currently fixed to `account-row`. |
 | `moduleOrder` | one permutation of all twelve module ids | Fallback order when two modules are saved at the same horizontal point. |
 | `layoutMode` | `auto`, `free` | Stable semantic docking or exact normalized coordinates. Quick uses `auto`; `free` is an expert Code option. |
 | `snapThreshold` | integer `0`–`48` | Magnetic distance in pixels for `auto`; `0` requires an exact target hit. |
@@ -171,6 +177,12 @@ A compact valid document looks like this:
 | `effectAt` | `always`, `warning`, `critical` | When the effect begins. |
 
 `critical` cannot be higher than `warning`. With the defaults, 10% or less is critical, 30% or less is warning, and anything above that is normal. Values outside 0–100 are corrected when the file is loaded.
+
+### Placement
+
+Quick exposes placement as a small map of the current Codex work surface. Saved settings contain semantic zone names rather than screen pixels, so resizing or moving the window does not corrupt a layout. Quota modules move as one group in the first 2.x beta; the native avatar, account name, and short/hold gesture remain in the account row.
+
+Each non-account zone is derived from current host geometry and is enabled only when a unique, painted safe slot exists. If the composer is absent, the window is too narrow, or Codex changes a surface that cannot be identified unambiguously, `fallback` returns the quota group to `account-row`. The quota rail is independent and may remain under the account row or span the verified bottom edge of the composer.
 
 ### Account-row mode
 

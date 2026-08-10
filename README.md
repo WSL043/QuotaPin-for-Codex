@@ -49,6 +49,8 @@ QuotaPin keeps the useful part visible in the account row, so checking quota bec
 
 Latest stable: **v1.2.0**.
 
+2.x beta line: **v2.0.0-beta.1**. It develops multi-surface placement and never replaces the stable Latest channel until it passes beta acceptance.
+
 | Platform | Status |
 |---|---|
 | Windows 11 x64 | ✅ Stable / verified on a signed-in machine |

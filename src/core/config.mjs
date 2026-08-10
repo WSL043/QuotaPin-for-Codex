@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
+import { DEFAULT_PLACEMENT, sanitizePlacement } from "./placement.mjs";
 
 export const MAX_PROFILES = 8;
 export const WINDOW_SELECTIONS = ["auto", "shortest", "longest", "all"];
@@ -22,7 +23,7 @@ export const SUPPORTED_LOCALES = ["en", "zh-CN", "ja"];
 export const PANEL_THEMES = ["dark", "light"];
 export const ACCOUNT_ROW_MODES = ["legacy", "beta"];
 export const BAR_SCOPES = ["quota", "row"];
-export const CURRENT_CONFIG_VERSION = 17;
+export const CURRENT_CONFIG_VERSION = 18;
 
 export const DEFAULT_MODULE_ANCHORS = Object.freeze({
   avatar: 0.04,
@@ -77,6 +78,7 @@ const DEFAULT_PROFILES = [
     showReset: false,
     showTodayTokens: false,
     showLifetimeTokens: false,
+    placement: DEFAULT_PLACEMENT,
     valueColor: "severity",
     dotColor: "severity",
     identityColor: "inherit",
@@ -112,6 +114,7 @@ const DEFAULT_PROFILES = [
     showReset: false,
     showTodayTokens: false,
     showLifetimeTokens: false,
+    placement: DEFAULT_PLACEMENT,
     valueColor: "severity",
     dotColor: "severity",
     identityColor: "inherit",
@@ -147,6 +150,7 @@ const DEFAULT_PROFILES = [
     showReset: true,
     showTodayTokens: false,
     showLifetimeTokens: false,
+    placement: DEFAULT_PLACEMENT,
     valueColor: "severity",
     dotColor: "severity",
     identityColor: "inherit",
@@ -434,6 +438,9 @@ function sanitizeProfile(input, fallback, index, usedIds, sourceVersion) {
   const showBar = Number(sourceVersion) >= 9 && typeof source.showBar === "boolean" ? source.showBar : false;
   const barScope = BAR_SCOPES.includes(source.barScope) ? source.barScope : (base.barScope ?? "quota");
   const display = displaySettings(source, base, sourceVersion);
+  const placement = Number(sourceVersion) >= 18
+    ? sanitizePlacement(source.placement, base.placement ?? DEFAULT_PLACEMENT)
+    : { ...DEFAULT_PLACEMENT };
   let moduleOrder = cleanModuleOrder(source.moduleOrder, base.moduleOrder, source);
   if (Number(sourceVersion) < 5 && display.displayMode === "modules" && /^\s*\{label\}/.test(display.template)) {
     moduleOrder = moduleOrder.filter((module) => module !== "label");
@@ -483,6 +490,7 @@ function sanitizeProfile(input, fallback, index, usedIds, sourceVersion) {
     showReset: display.showReset,
     showTodayTokens: display.showTodayTokens,
     showLifetimeTokens: display.showLifetimeTokens,
+    placement,
     valueColor: cleanColorMode(source.valueColor, VALUE_COLOR_MODES, base.valueColor ?? "severity"),
     dotColor: cleanColorMode(source.dotColor, DOT_COLOR_MODES, base.dotColor ?? "severity"),
     identityColor: cleanColorMode(source.identityColor, IDENTITY_COLOR_MODES, base.identityColor ?? "inherit"),

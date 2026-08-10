@@ -297,6 +297,7 @@ test("badge size and module order are bounded per saved view", () => {
     avatarShape: "native",
     fontSize: 16,
     barScope: "quota",
+    placement: { primary: "account-row", fallback: "account-row", rail: "account-row" },
   });
   const bounded = withProfile({ fontSize: 90, moduleOrder: ["quota", "quota", "name"] }, configured);
   const profile = bounded.profiles.find((item) => item.id === bounded.activeProfile);

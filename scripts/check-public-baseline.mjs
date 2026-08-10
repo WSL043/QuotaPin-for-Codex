@@ -53,6 +53,8 @@ for (const relative of files) {
 
 const version = read("VERSION").trim();
 if (!/^\d+\.\d+\.\d+(?:-beta\.\d+)?$/.test(version)) fail(`unsupported VERSION ${version}`);
+const stableVersion = read("STABLE_VERSION").trim();
+if (!/^\d+\.\d+\.\d+$/.test(stableVersion)) fail(`unsupported STABLE_VERSION ${stableVersion}`);
 if (requireStable) {
   if (!/^\d+\.\d+\.\d+$/.test(version)) fail(`public releases require a stable VERSION, found ${version}`);
   const prereleaseNotes = files.filter((relative) => /^\.github\/release-notes\/v[^/]+-(?:alpha|beta|dev|preview|rc)[^/]*\.md$/i.test(relative));
@@ -95,6 +97,7 @@ if (!macBootstrap.includes('QuotaPin-macOS-$VERSION.dmg') || !macBootstrap.inclu
 
 for (const readme of ["README.md", "README.zh-CN.md", "README.ja.md"]) {
   const text = read(readme);
+  if (!text.includes(`v${stableVersion}`)) fail(`${readme} does not identify the stable channel version`);
   if (!text.includes("https://raw.githubusercontent.com/WSL043/QuotaPin-for-Codex/main/install.ps1")) fail(`${readme} does not use the stable bootstrap`);
   const quickStart = text.match(/```powershell\s*([\s\S]*?)```/)?.[1] ?? "";
   if (!quickStart.includes("install.ps1")) fail(`${readme} has no PowerShell Quick Start`);
@@ -103,6 +106,6 @@ for (const readme of ["README.md", "README.zh-CN.md", "README.ja.md"]) {
 
 const agentGuide = read("AGENTS.md");
 if (!agentGuide.includes("https://raw.githubusercontent.com/WSL043/QuotaPin-for-Codex/main/install.ps1")) fail("AGENTS.md does not use the stable bootstrap");
-if (!agentGuide.includes(`-Version '${version}'`) && !agentGuide.includes("-Version '1.0.0'")) fail("AGENTS.md does not retain an exact-version maintenance path");
+if (!agentGuide.includes(`-Version '${stableVersion}'`)) fail("AGENTS.md does not retain the exact stable maintenance path");
 
 console.log(`Public baseline OK: ${version} (${files.length} files inspected)`);

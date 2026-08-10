@@ -40,11 +40,19 @@ for (const requiredLayoutBehavior of [
   "solveFreeLayout",
   "snapMagneticCenter",
   "quotapinPositionedLayout",
-  'badge.style.display = "contents"',
+  'badge.style.display = options.primaryRemote === true ? "none" : "contents"',
   'textOverflow = "ellipsis"',
   'alignItems = "center"',
 ]) {
   if (!renderer.includes(requiredLayoutBehavior)) throw new Error(`Missing module layout behavior: ${requiredLayoutBehavior}`);
+}
+for (const placementBehavior of [
+  'dataset.quotapinPlacementSurface = "primary"',
+  'dataset.quotapinPlacementSurface = "rail"',
+  'dataset.placementMap = "true"',
+  'resolvePlacementContext',
+]) {
+  if (!renderer.includes(placementBehavior)) throw new Error(`Missing semantic placement behavior: ${placementBehavior}`);
 }
 if (layoutToolkit.modules.join(",") !== "avatar,name,value,label,dot,countdown,relative,seconds,date,reset,todayTokens,lifetimeTokens") {
   throw new Error("The canonical renderer layout module list is incomplete");

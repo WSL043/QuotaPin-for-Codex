@@ -218,7 +218,7 @@ has(sourceInstaller, "foreach ($Attempt in 1..6)", "release downloads must have 
 has(sourceInstaller, "--continue-at -", "release downloads must resume partial assets");
 has(runtimeTrust, "DateTimeOffset]::Parse", "runtime identity timestamps must preserve their persisted UTC offset");
 lacks(runtimeTrust, "[datetime]::Parse", "runtime trust must not reinterpret UTC instants as local time");
-has(updateRuntime, 'MINIMUM_SAFE_VERSION = "0.3.0-alpha.25"', "the update picker must hide releases below the maintained compatibility floor");
+has(updateRuntime, 'MINIMUM_SAFE_VERSION = "1.2.0"', "the update picker must hide superseded releases below the maintained compatibility floor");
 has(updateRuntime, 'action?.type === "install"', "command updates must require an explicit renderer action");
 has(updateRuntime, 'this.state.status === "installing"', "renderer update actions must be single-flight");
 has(updateRuntime, "6 * 60 * 60 * 1000", "successful automatic release discovery must remain bounded");

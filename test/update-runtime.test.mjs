@@ -5,6 +5,7 @@ import path from "node:path";
 import { compareVersions, MINIMUM_SAFE_VERSION, normalizeReleases, updateDirection, UpdateRuntime } from "../src/agent/update-runtime.mjs";
 
 const DIGEST = "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
+const FIXTURE_MINIMUM_SAFE_VERSION = "0.3.0-alpha.25";
 const jsonResponse = (value) => new Response(JSON.stringify(value));
 
 const release = (version, options = {}) => {
@@ -36,7 +37,8 @@ const release = (version, options = {}) => {
   return value;
 };
 
-const windowsRuntime = (options) => new UpdateRuntime({ platform: "win32", pathImpl: path.win32, ...options });
+const fixtureRuntime = (options) => new UpdateRuntime({ minimumSafeVersion: FIXTURE_MINIMUM_SAFE_VERSION, ...options });
+const windowsRuntime = (options) => fixtureRuntime({ platform: "win32", pathImpl: path.win32, ...options });
 
 test("semantic versions compare stable and prerelease identifiers", () => {
   assert.equal(compareVersions("0.3.0-alpha.25", "0.3.0-alpha.24"), 1);
@@ -56,11 +58,12 @@ test("release normalization requires the command-install assets and respects sta
   const missingImmutable = release("0.3.0-alpha.28");
   delete missingImmutable.immutable;
   const payload = [release("0.3.0-alpha.26"), mutable, missingImmutable, mislabeledPrerelease, release("0.3.0-alpha.24"), release("0.3.0"), release("0.2.9"), incomplete, { ...release("9.0.0"), draft: true }];
-  assert.equal(MINIMUM_SAFE_VERSION, "0.3.0-alpha.25");
-  assert.deepEqual(normalizeReleases(payload, "0.3.0-alpha.25", MINIMUM_SAFE_VERSION, "darwin").map((item) => item.version), ["0.3.0", "0.3.0-alpha.26"]);
-  assert.deepEqual(normalizeReleases(payload, "0.3.0", MINIMUM_SAFE_VERSION, "darwin").map((item) => item.version), ["0.3.0"]);
-  assert.deepEqual(normalizeReleases([release("1.0.2", { windowsOnly: true })], "1.0.3", MINIMUM_SAFE_VERSION, "win32").map((item) => item.version), ["1.0.2"]);
-  assert.deepEqual(normalizeReleases([release("1.0.2", { windowsOnly: true })], "1.0.3", MINIMUM_SAFE_VERSION, "darwin"), []);
+  assert.equal(MINIMUM_SAFE_VERSION, "1.2.0");
+  assert.deepEqual(normalizeReleases(payload, "0.3.0-alpha.25", FIXTURE_MINIMUM_SAFE_VERSION, "darwin").map((item) => item.version), ["0.3.0", "0.3.0-alpha.26"]);
+  assert.deepEqual(normalizeReleases(payload, "0.3.0", FIXTURE_MINIMUM_SAFE_VERSION, "darwin").map((item) => item.version), ["0.3.0"]);
+  assert.deepEqual(normalizeReleases([release("1.0.2", { windowsOnly: true })], "1.0.3", FIXTURE_MINIMUM_SAFE_VERSION, "win32").map((item) => item.version), ["1.0.2"]);
+  assert.deepEqual(normalizeReleases([release("1.0.2", { windowsOnly: true })], "1.0.3", FIXTURE_MINIMUM_SAFE_VERSION, "darwin"), []);
+  assert.deepEqual(normalizeReleases([release("1.2.0"), release("1.1.2")], "1.2.0", MINIMUM_SAFE_VERSION, "win32").map((item) => item.version), ["1.2.0"]);
 });
 
 test("release normalization rejects missing, renamed, or extra public assets", () => {
@@ -71,15 +74,15 @@ test("release normalization rejects missing, renamed, or extra public assets", (
   const extra = release("0.3.0-alpha.26");
   extra.assets.push({ name: "internal.zip" });
   for (const [label, candidate] of [["missing", missing], ["renamed", renamed], ["extra", extra]]) {
-    assert.deepEqual(normalizeReleases([candidate], "0.3.0-alpha.25", MINIMUM_SAFE_VERSION, "darwin"), [], label);
+    assert.deepEqual(normalizeReleases([candidate], "0.3.0-alpha.25", FIXTURE_MINIMUM_SAFE_VERSION, "darwin"), [], label);
   }
 });
 
 test("release normalization accepts the compact universal DMG without weakening asset ceilings", () => {
-  const verifiedSize = release("1.1.2", { macSize: 96 * 1024 * 1024 });
-  assert.deepEqual(normalizeReleases([verifiedSize], "1.1.1", MINIMUM_SAFE_VERSION, "darwin").map((item) => item.version), ["1.1.2"]);
-  assert.deepEqual(normalizeReleases([release("1.1.2", { macSize: 128 * 1024 * 1024 + 1 })], "1.1.1", MINIMUM_SAFE_VERSION, "darwin"), []);
-  assert.deepEqual(normalizeReleases([release("1.1.2", { windowsSize: 160 * 1024 * 1024 + 1 })], "1.1.1", MINIMUM_SAFE_VERSION, "darwin"), []);
+  const verifiedSize = release("1.2.0", { macSize: 96 * 1024 * 1024 });
+  assert.deepEqual(normalizeReleases([verifiedSize], "1.1.2", MINIMUM_SAFE_VERSION, "darwin").map((item) => item.version), ["1.2.0"]);
+  assert.deepEqual(normalizeReleases([release("1.2.0", { macSize: 128 * 1024 * 1024 + 1 })], "1.1.2", MINIMUM_SAFE_VERSION, "darwin"), []);
+  assert.deepEqual(normalizeReleases([release("1.2.0", { windowsSize: 160 * 1024 * 1024 + 1 })], "1.1.2", MINIMUM_SAFE_VERSION, "darwin"), []);
 });
 
 test("release normalization exposes update, repair, and rollback direction", () => {
@@ -87,7 +90,7 @@ test("release normalization exposes update, repair, and rollback direction", () 
     release("0.3.0-alpha.27"),
     release("0.3.0-alpha.26"),
     release("0.3.0-alpha.25"),
-  ], "0.3.0-alpha.26", MINIMUM_SAFE_VERSION, "darwin");
+  ], "0.3.0-alpha.26", FIXTURE_MINIMUM_SAFE_VERSION, "darwin");
   assert.deepEqual(releases.map(({ version, direction }) => ({ version, direction })), [
     { version: "0.3.0-alpha.27", direction: "update" },
     { version: "0.3.0-alpha.26", direction: "repair" },
@@ -95,9 +98,9 @@ test("release normalization exposes update, repair, and rollback direction", () 
   ]);
   const missingImmutable = release("0.3.0-alpha.27");
   delete missingImmutable.immutable;
-  assert.deepEqual(normalizeReleases([missingImmutable], "0.3.0-alpha.26", MINIMUM_SAFE_VERSION, "darwin"), [], "missing immutable metadata fails closed");
+  assert.deepEqual(normalizeReleases([missingImmutable], "0.3.0-alpha.26", FIXTURE_MINIMUM_SAFE_VERSION, "darwin"), [], "missing immutable metadata fails closed");
   for (const immutable of [false, null, "true", 1]) {
-    assert.deepEqual(normalizeReleases([release("0.3.0-alpha.27", { immutable })], "0.3.0-alpha.26", MINIMUM_SAFE_VERSION, "darwin"), [], `immutable=${String(immutable)}`);
+    assert.deepEqual(normalizeReleases([release("0.3.0-alpha.27", { immutable })], "0.3.0-alpha.26", FIXTURE_MINIMUM_SAFE_VERSION, "darwin"), [], `immutable=${String(immutable)}`);
   }
 });
 
@@ -142,7 +145,7 @@ test("update runtime checks without installing and launches only an eligible sel
 test("macOS update runtime selects the universal asset and the installed bash updater", async () => {
   const launches = [];
   const root = "/Users/Test/Library/Application Support/QuotaPin";
-  const runtime = new UpdateRuntime({
+  const runtime = fixtureRuntime({
     currentVersion: "0.3.0-alpha.25",
     installRoot: root,
     platform: "darwin",
@@ -168,7 +171,7 @@ test("a running macOS Agent recognizes an update staged for the next normal Code
   const root = "/Users/Test/Library/Application Support/QuotaPin";
   const resultPath = `${root}/logs/update-result.json`;
   const removed = [];
-  const runtime = new UpdateRuntime({
+  const runtime = fixtureRuntime({
     currentVersion: "0.3.0-alpha.25",
     installRoot: root,
     platform: "darwin",

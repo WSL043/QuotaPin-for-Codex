@@ -17,7 +17,7 @@ const DEFAULT_POST_INSTALL_CHECK_MS = 60 * 1000;
 const OFFICIAL_REPOSITORY = "https://github.com/WSL043/QuotaPin-for-Codex";
 const WINDOWS_PACKAGE_MAX_BYTES = 160 * 1024 * 1024;
 const MAC_PACKAGE_MAX_BYTES = 128 * 1024 * 1024;
-export const MINIMUM_SAFE_VERSION = "0.3.0-alpha.25";
+export const MINIMUM_SAFE_VERSION = "1.2.0";
 
 function windowsPackageName(version) {
   return `QuotaPin-${version}.exe`;
@@ -136,6 +136,7 @@ function normalizeCachedReleases(payload, currentVersion, minimumSafeVersion = M
 export class UpdateRuntime {
   constructor(options = {}) {
     this.currentVersion = String(options.currentVersion ?? "");
+    this.minimumSafeVersion = String(options.minimumSafeVersion ?? MINIMUM_SAFE_VERSION);
     this.platform = String(options.platform ?? process.platform);
     this.pathImpl = options.pathImpl ?? (this.platform === "win32" ? path.win32 : path);
     this.installRoot = options.installRoot ? this.pathImpl.resolve(options.installRoot) : null;
@@ -216,7 +217,7 @@ export class UpdateRuntime {
     if (cached?.schema !== 2 || cached.currentVersion !== this.currentVersion) return;
     const checkedAt = Number(cached?.checkedAt);
     if (!Number.isFinite(checkedAt) || checkedAt <= 0 || checkedAt > this.now() + CLOCK_SKEW_MS || !Array.isArray(cached?.releases)) return;
-    const releases = normalizeCachedReleases(cached.releases, this.currentVersion);
+    const releases = normalizeCachedReleases(cached.releases, this.currentVersion, this.minimumSafeVersion);
     const latestVersion = releases[0]?.version ?? null;
     this.lastCheckedAt = checkedAt;
     this.state = {
@@ -411,7 +412,7 @@ export class UpdateRuntime {
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
         const releaseDocument = await readBoundedJsonResponse(response, { maximumBytes: 1024 * 1024 });
         if (!Array.isArray(releaseDocument) || releaseDocument.length > 20) throw new Error("Release response has an invalid shape");
-        const releases = normalizeReleases(releaseDocument, this.currentVersion, MINIMUM_SAFE_VERSION, this.platform);
+        const releases = normalizeReleases(releaseDocument, this.currentVersion, this.minimumSafeVersion, this.platform);
         const latest = releases[0]?.version ?? null;
         const available = latest && compareVersions(latest, this.currentVersion) === 1;
         this.lastCheckedAt = this.now();

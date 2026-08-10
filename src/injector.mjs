@@ -21,7 +21,7 @@ import { createProfileUsageStateToolkit } from "./renderer/profile-usage-state.m
 import { createDeliveryStateToolkit } from "./renderer/delivery-state.mjs";
 import { BUILD_COMMIT } from "./core/build-origin.mjs";
 
-const VERSION = "1.1.2";
+const VERSION = "1.2.0";
 const SOURCE_REPOSITORY = "https://github.com/WSL043/QuotaPin-for-Codex";
 const MAIN_TARGET_URL = "app://-/index.html";
 const portIndex = process.argv.indexOf("--port");
@@ -114,7 +114,7 @@ const installScript = String.raw`(() => {
   } = rendererToolkits.profileUsage();
   const { markDeliveryAccepted, evaluateDeliveryFreshness } = rendererToolkits.delivery();
   delete globalThis.__quotaPinRendererToolkits;
-  const version = "1.1.2";
+  const version = "1.2.0";
   const instanceId = "__QUOTAPIN_RENDERER_INSTANCE_ID__";
   const sourceRepository = "https://github.com/WSL043/QuotaPin-for-Codex";
   const previous = window.__quotaPinController;

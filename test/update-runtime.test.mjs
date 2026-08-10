@@ -21,13 +21,13 @@ const release = (version, options = {}) => {
         name: packageName,
         browser_download_url: `https://github.com/WSL043/QuotaPin-for-Codex/releases/download/${tag}/${packageName}`,
         digest: DIGEST,
-        size: 24_000_000,
+        size: options.windowsSize ?? 24_000_000,
       },
       {
         name: macPackageName,
         browser_download_url: `https://github.com/WSL043/QuotaPin-for-Codex/releases/download/${tag}/${macPackageName}`,
         digest: DIGEST,
-        size: 42_000_000,
+        size: options.macSize ?? 42_000_000,
       },
     ],
   };
@@ -72,6 +72,13 @@ test("release normalization rejects missing, renamed, or extra public assets", (
   for (const [label, candidate] of [["missing", missing], ["renamed", renamed], ["extra", extra]]) {
     assert.deepEqual(normalizeReleases([candidate], "0.3.0-alpha.25", MINIMUM_SAFE_VERSION, "darwin"), [], label);
   }
+});
+
+test("release normalization accepts the verified universal DMG without weakening asset ceilings", () => {
+  const verifiedSize = release("1.1.2", { macSize: 168_216_058 });
+  assert.deepEqual(normalizeReleases([verifiedSize], "1.1.1", MINIMUM_SAFE_VERSION, "darwin").map((item) => item.version), ["1.1.2"]);
+  assert.deepEqual(normalizeReleases([release("1.1.2", { macSize: 192 * 1024 * 1024 + 1 })], "1.1.1", MINIMUM_SAFE_VERSION, "darwin"), []);
+  assert.deepEqual(normalizeReleases([release("1.1.2", { windowsSize: 160 * 1024 * 1024 + 1 })], "1.1.1", MINIMUM_SAFE_VERSION, "darwin"), []);
 });
 
 test("release normalization exposes update, repair, and rollback direction", () => {

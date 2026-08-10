@@ -7,6 +7,8 @@ param(
 $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'
 $OfficialRepository = 'https://github.com/WSL043/QuotaPin-for-Codex'
+$WindowsPackageMaximumBytes = 160MB
+$MacPackageMaximumBytes = 192MB
 $VersionPattern = '^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$'
 if ($Version -notmatch $VersionPattern) { throw 'QuotaPin update version is invalid.' }
 
@@ -120,7 +122,7 @@ function Receive-QuotaPinInstaller([string]$Uri, [string]$Destination, [string]$
         & $CurlPath --ipv4 --http1.1 --fail --location --show-error --connect-timeout 20 --speed-limit 1024 --speed-time 90 --max-time 900 --continue-at - --output $Destination $Uri
         $ExitCode = $LASTEXITCODE
         if ($ExitCode -eq 0) { break }
-        if ((Test-Path -LiteralPath $Destination) -and (Get-Item -LiteralPath $Destination).Length -gt 160MB) {
+        if ((Test-Path -LiteralPath $Destination) -and (Get-Item -LiteralPath $Destination).Length -gt $WindowsPackageMaximumBytes) {
             throw 'QuotaPin installer exceeded its size limit.'
         }
         if ($Attempt -lt 6) { Start-Sleep -Seconds ([Math]::Min(16, [Math]::Pow(2, $Attempt))) }
@@ -128,7 +130,7 @@ function Receive-QuotaPinInstaller([string]$Uri, [string]$Destination, [string]$
     if ($ExitCode -ne 0) { throw "QuotaPin installer download failed with curl exit code $ExitCode." }
     if (-not (Test-Path -LiteralPath $Destination -PathType Leaf) -or
         (Get-Item -LiteralPath $Destination).Length -ne $ExpectedBytes -or
-        (Get-Item -LiteralPath $Destination).Length -gt 160MB) {
+        (Get-Item -LiteralPath $Destination).Length -gt $WindowsPackageMaximumBytes) {
         throw 'QuotaPin installer download has an invalid size.'
     }
 }
@@ -192,7 +194,7 @@ try {
         $ExpectedMacUrl = "$OfficialRepository/releases/download/$ExpectedTag/$MacPackageName"
         if ([string]$MacAsset.browser_download_url -cne $ExpectedMacUrl -or
             [string]$MacAsset.digest -notmatch '^sha256:[0-9a-f]{64}$' -or
-            [long]$MacAsset.size -le 0 -or [long]$MacAsset.size -gt 160MB) {
+            [long]$MacAsset.size -le 0 -or [long]$MacAsset.size -gt $MacPackageMaximumBytes) {
             throw 'The companion macOS package does not have an exact official URL and SHA-256 digest.'
         }
     }
@@ -203,7 +205,7 @@ try {
     $AssetDigest = [string]$Asset.digest
     $AssetBytes = [long]$Asset.size
     if ($AssetUrl -cne $ExpectedUrl -or $AssetDigest -notmatch '^sha256:[0-9a-f]{64}$' -or
-        $AssetBytes -le 0 -or $AssetBytes -gt 160MB) {
+        $AssetBytes -le 0 -or $AssetBytes -gt $WindowsPackageMaximumBytes) {
         throw 'The selected installer does not have an exact official URL and SHA-256 digest.'
     }
     $PackagePath = Join-Path $TempRoot $PackageName

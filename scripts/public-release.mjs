@@ -9,6 +9,17 @@ export const OFFICIAL_REPOSITORY = "https://github.com/WSL043/QuotaPin-for-Codex
 const VERSION_PATTERN = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?$/;
 const COMMIT_PATTERN = /^[0-9a-f]{40}$/;
 const HASH_PATTERN = /^[0-9a-f]{64}$/;
+export const WINDOWS_PACKAGE_MAX_BYTES = 160 * 1024 * 1024;
+export const MAC_PACKAGE_MAX_BYTES = 192 * 1024 * 1024;
+
+export function publicAssetSizeIsValid(name, size, version) {
+  const maximum = name === packageNameForVersion(version)
+    ? WINDOWS_PACKAGE_MAX_BYTES
+    : name === macPackageNameForVersion(version)
+      ? MAC_PACKAGE_MAX_BYTES
+      : 0;
+  return Number.isSafeInteger(Number(size)) && Number(size) > 0 && Number(size) <= maximum;
+}
 
 export function packageNameForVersion(version) {
   const normalized = String(version ?? "").trim();
@@ -111,8 +122,8 @@ function verifyCandidateDirectory(directory, identity, expectedContext = "github
   const macPackagePath = path.join(directory, macPackageName);
   const manifestPath = path.join(directory, "QuotaPin-release.json");
   const sbomPath = path.join(directory, "QuotaPin.spdx.json");
-  if (fs.statSync(packagePath).size <= 0 || fs.statSync(packagePath).size > 160 * 1024 * 1024) fail("QuotaPin.exe has an invalid size.");
-  if (fs.statSync(macPackagePath).size <= 0 || fs.statSync(macPackagePath).size > 160 * 1024 * 1024) fail("QuotaPin macOS package has an invalid size.");
+  if (!publicAssetSizeIsValid(packageName, fs.statSync(packagePath).size, identity.version)) fail("QuotaPin.exe has an invalid size.");
+  if (!publicAssetSizeIsValid(macPackageName, fs.statSync(macPackagePath).size, identity.version)) fail("QuotaPin macOS package has an invalid size.");
   const packageHash = sha256File(packagePath);
   const macPackageHash = sha256File(macPackagePath);
   const manifest = readJson(manifestPath);

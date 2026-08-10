@@ -14,6 +14,8 @@ const DEFAULT_ERROR_RETRY_BASE_MS = 15 * 60 * 1000;
 const DEFAULT_ERROR_RETRY_MAX_MS = 6 * 60 * 60 * 1000;
 const DEFAULT_POST_INSTALL_CHECK_MS = 60 * 1000;
 const OFFICIAL_REPOSITORY = "https://github.com/WSL043/QuotaPin-for-Codex";
+const WINDOWS_PACKAGE_MAX_BYTES = 160 * 1024 * 1024;
+const MAC_PACKAGE_MAX_BYTES = 192 * 1024 * 1024;
 export const MINIMUM_SAFE_VERSION = "0.3.0-alpha.25";
 
 function windowsPackageName(version) {
@@ -69,26 +71,26 @@ function decorateRelease(release, currentVersion) {
   return { ...release, direction: updateDirection(release.version, currentVersion) };
 }
 
-function validReleaseAsset(asset, expectedName, tag) {
+function validReleaseAsset(asset, expectedName, tag, maximumBytes) {
   return String(asset?.name ?? "") === expectedName
     && String(asset?.browser_download_url ?? "") === `${OFFICIAL_REPOSITORY}/releases/download/${tag}/${expectedName}`
     && /^sha256:[0-9a-f]{64}$/.test(String(asset?.digest ?? ""))
     && Number.isSafeInteger(Number(asset?.size))
     && Number(asset?.size) > 0
-    && Number(asset?.size) <= 160 * 1024 * 1024;
+    && Number(asset?.size) <= maximumBytes;
 }
 
 function releaseAssetsAreTrusted(assets, version, tag, platform) {
   const windowsName = windowsPackageName(version);
   const macName = macPackageName(version);
   if (platform === "win32" && assets.length === 1) {
-    return validReleaseAsset(assets[0], windowsName, tag);
+    return validReleaseAsset(assets[0], windowsName, tag, WINDOWS_PACKAGE_MAX_BYTES);
   }
   if (!['win32', 'darwin'].includes(platform) || assets.length !== 2) return false;
   const byName = new Map(assets.map((asset) => [String(asset?.name ?? ""), asset]));
   return byName.size === 2
-    && validReleaseAsset(byName.get(windowsName), windowsName, tag)
-    && validReleaseAsset(byName.get(macName), macName, tag);
+    && validReleaseAsset(byName.get(windowsName), windowsName, tag, WINDOWS_PACKAGE_MAX_BYTES)
+    && validReleaseAsset(byName.get(macName), macName, tag, MAC_PACKAGE_MAX_BYTES);
 }
 
 export function normalizeReleases(payload, currentVersion, minimumSafeVersion = MINIMUM_SAFE_VERSION, platform = process.platform) {

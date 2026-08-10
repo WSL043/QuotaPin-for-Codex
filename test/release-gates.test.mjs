@@ -210,6 +210,24 @@ test("release identity checks normalize padded Windows version resources", () =>
   assert.doesNotMatch(trayUpdater, /DownloadAndVerify|WindowsFileVersion/);
 });
 
+test("release asset ceilings distinguish the compact Windows installer from the universal DMG", () => {
+  const verifier = fs.readFileSync(new URL("../scripts/public-release.mjs", import.meta.url), "utf8");
+  const bootstrap = fs.readFileSync(new URL("../install.ps1", import.meta.url), "utf8");
+  const commandUpdater = fs.readFileSync(new URL("../scripts/update.ps1", import.meta.url), "utf8");
+  const macBootstrap = fs.readFileSync(new URL("../install-macos.sh", import.meta.url), "utf8");
+  const updateRuntime = fs.readFileSync(new URL("../src/agent/update-runtime.mjs", import.meta.url), "utf8");
+  for (const source of [verifier, updateRuntime]) {
+    assert.match(source, /WINDOWS_PACKAGE_MAX_BYTES = 160 \* 1024 \* 1024/);
+    assert.match(source, /MAC_PACKAGE_MAX_BYTES = 192 \* 1024 \* 1024/);
+  }
+  for (const source of [bootstrap, commandUpdater]) {
+    assert.match(source, /\$WindowsPackageMaximumBytes = 160MB/);
+    assert.match(source, /\$MacPackageMaximumBytes = 192MB/);
+  }
+  assert.match(macBootstrap, /WINDOWS_ASSET_MAX_BYTES=167772160/);
+  assert.match(macBootstrap, /MAC_ASSET_MAX_BYTES=201326592/);
+});
+
 test("the self-contained agent carries source origin and command install records it", () => {
   const source = fs.readFileSync(new URL("../src/injector.mjs", import.meta.url), "utf8");
   const build = fs.readFileSync(new URL("../scripts/build-agent.ps1", import.meta.url), "utf8");

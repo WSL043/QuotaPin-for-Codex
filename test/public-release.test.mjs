@@ -6,10 +6,13 @@ import path from "node:path";
 import test from "node:test";
 import {
   OFFICIAL_REPOSITORY,
+  MAC_PACKAGE_MAX_BYTES,
+  WINDOWS_PACKAGE_MAX_BYTES,
   macPackageNameForVersion,
   packageNameForVersion,
   prepareCiCandidate,
   publicReleaseAssets,
+  publicAssetSizeIsValid,
   preparePublicRelease,
   verifyCiCandidate,
   verifyPublicRelease,
@@ -32,6 +35,16 @@ test("semantic release versions map to exact numeric Windows file versions", () 
   assert.equal(windowsFileVersionForVersion("1.1.0-beta.7"), "1.1.0.7");
   assert.equal(windowsFileVersionForVersion("1.1.0-alpha.3"), "1.1.0.3");
   assert.throws(() => windowsFileVersionForVersion("1.1.0-preview.1"), /cannot be represented/i);
+});
+
+test("public package size policy keeps platform-specific anomaly ceilings", () => {
+  assert.equal(WINDOWS_PACKAGE_MAX_BYTES, 160 * 1024 * 1024);
+  assert.equal(MAC_PACKAGE_MAX_BYTES, 192 * 1024 * 1024);
+  assert.equal(publicAssetSizeIsValid(PACKAGE, WINDOWS_PACKAGE_MAX_BYTES, VERSION), true);
+  assert.equal(publicAssetSizeIsValid(PACKAGE, WINDOWS_PACKAGE_MAX_BYTES + 1, VERSION), false);
+  assert.equal(publicAssetSizeIsValid(MAC_PACKAGE, 168_216_058, VERSION), true);
+  assert.equal(publicAssetSizeIsValid(MAC_PACKAGE, MAC_PACKAGE_MAX_BYTES + 1, VERSION), false);
+  assert.equal(publicAssetSizeIsValid("unexpected.zip", 1, VERSION), false);
 });
 
 function sha256(filePath) {

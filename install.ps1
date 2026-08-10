@@ -3,6 +3,8 @@ param([string]$Version = '')
 $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'
 $OfficialRepository = 'https://github.com/WSL043/QuotaPin-for-Codex'
+$WindowsPackageMaximumBytes = 160MB
+$MacPackageMaximumBytes = 192MB
 $VersionPattern = '^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$'
 $RequestedVersion = $Version.Trim()
 if ($RequestedVersion -and $RequestedVersion -notmatch $VersionPattern) {
@@ -148,7 +150,7 @@ try {
             $ExpectedMacUrl = "$OfficialRepository/releases/download/$SelectedTag/$MacPackageName"
             if ([string]$MacAsset.browser_download_url -cne $ExpectedMacUrl -or
                 [string]$MacAsset.digest -notmatch '^sha256:[0-9a-f]{64}$' -or
-                [long]$MacAsset.size -le 0 -or [long]$MacAsset.size -gt 160MB) {
+                [long]$MacAsset.size -le 0 -or [long]$MacAsset.size -gt $MacPackageMaximumBytes) {
                 throw 'The companion macOS package does not have an exact official URL and SHA-256 digest.'
             }
         }
@@ -159,11 +161,11 @@ try {
         $PackageDigest = [string]$PackageAsset.digest
         $PackageBytes = [long]$PackageAsset.size
         if ($PackageUrl -cne $ExpectedPackageUrl -or $PackageDigest -notmatch '^sha256:[0-9a-f]{64}$' -or
-            $PackageBytes -le 0 -or $PackageBytes -gt 160MB) {
+            $PackageBytes -le 0 -or $PackageBytes -gt $WindowsPackageMaximumBytes) {
             throw 'The QuotaPin installer asset does not have an exact official URL and SHA-256 digest.'
         }
         $PackagePath = Join-Path $TempRoot $PackageName
-        Receive-QuotaPinBootstrapFile $PackageUrl $PackagePath 160MB 900 $PackageName $PackageBytes
+        Receive-QuotaPinBootstrapFile $PackageUrl $PackagePath $WindowsPackageMaximumBytes 900 $PackageName $PackageBytes
         $ActualDigest = 'sha256:' + (Get-FileHash -Algorithm SHA256 -LiteralPath $PackagePath).Hash.ToLowerInvariant()
         if ($ActualDigest -cne $PackageDigest) { throw 'The downloaded QuotaPin installer failed SHA-256 verification.' }
         $PackageVersionInfo = (Get-Item -LiteralPath $PackagePath).VersionInfo

@@ -2,6 +2,8 @@
 set -euo pipefail
 
 REPOSITORY="WSL043/QuotaPin-for-Codex"
+WINDOWS_ASSET_MAX_BYTES=167772160
+MAC_ASSET_MAX_BYTES=201326592
 REQUESTED_VERSION=""
 CODEX_APP=""
 WRITE_RESULT=false
@@ -121,7 +123,7 @@ while name="$(plutil -extract "assets.$index.name" raw -o - "$RELEASE_JSON" 2>/d
       ;;
     "$WINDOWS_ASSET_NAME")
       [[ "$WINDOWS_ASSET_SEEN" == false ]] || { echo "The Windows package appears more than once." >&2; exit 4; }
-      [[ "$asset_url" == "https://github.com/$REPOSITORY/releases/download/$TAG/$WINDOWS_ASSET_NAME" && "$asset_digest" =~ ^sha256:[0-9a-f]{64}$ && "$asset_bytes" =~ ^[0-9]+$ && "$asset_bytes" -gt 0 && "$asset_bytes" -le 167772160 ]] || {
+      [[ "$asset_url" == "https://github.com/$REPOSITORY/releases/download/$TAG/$WINDOWS_ASSET_NAME" && "$asset_digest" =~ ^sha256:[0-9a-f]{64}$ && "$asset_bytes" =~ ^[0-9]+$ && "$asset_bytes" -gt 0 && "$asset_bytes" -le "$WINDOWS_ASSET_MAX_BYTES" ]] || {
         echo "The companion Windows package does not match the official release identity." >&2
         exit 4
       }
@@ -137,7 +139,7 @@ done
   exit 4
 }
 [[ "$ASSET_DIGEST" =~ ^sha256:[0-9a-f]{64}$ ]] || { echo "The macOS release asset has no trusted SHA-256 digest." >&2; exit 4; }
-[[ "$ASSET_URL" == "https://github.com/$REPOSITORY/releases/download/$TAG/$ASSET_NAME" && "$ASSET_BYTES" =~ ^[0-9]+$ && "$ASSET_BYTES" -gt 0 && "$ASSET_BYTES" -le 167772160 ]] || { echo "The macOS release asset does not match the official release identity." >&2; exit 4; }
+[[ "$ASSET_URL" == "https://github.com/$REPOSITORY/releases/download/$TAG/$ASSET_NAME" && "$ASSET_BYTES" =~ ^[0-9]+$ && "$ASSET_BYTES" -gt 0 && "$ASSET_BYTES" -le "$MAC_ASSET_MAX_BYTES" ]] || { echo "The macOS release asset does not match the official release identity." >&2; exit 4; }
 
 ARCHIVE="$TEMP_ROOT/$ASSET_NAME"
 echo "Downloading $ASSET_NAME"

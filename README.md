@@ -133,6 +133,8 @@ Save useful combinations as named views and switch between them without rebuildi
 
 Short-click the account row and Codex behaves normally. Hold the same row to open QuotaPin. Press it again—or click outside—to close the open panel. The native help button, avatar, account name, and normal account menu stay in place.
 
+In the 2.x placement beta, the interaction moves with the quota group: hold the visible group and the editor opens beside that surface. Every supported surface keeps the same reorder gesture and editing frames.
+
 <p align="center">
   <img src="assets/screenshots/drag-layout.gif" width="405" alt="Dragging a QuotaPin module to the left, right, and center while neighboring modules make room">
   <br><sub>Drag modules left, right, or into the center; neighboring items make room as you move.</sub>

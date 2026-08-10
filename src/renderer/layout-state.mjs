@@ -66,13 +66,37 @@ export function createLayoutStateToolkit() {
       : "visible";
   }
 
-  function panelGeometry(viewportWidth, viewportHeight) {
+  function panelGeometry(viewportWidth, viewportHeight, anchorValue = null) {
     const widthLimit = Math.max(0, Math.floor(Number(viewportWidth) || 0));
     const heightLimit = Math.max(0, Math.floor(Number(viewportHeight) || 0));
     const width = Math.min(376, Math.max(0, widthLimit - 16));
-    const left = Math.min(8, Math.max(0, widthLimit - width));
-    const bottom = Math.min(56, Math.max(8, heightLimit - 160));
-    const height = Math.min(480, Math.max(0, heightLimit - bottom - 8));
+    const defaultLeft = Math.min(8, Math.max(0, widthLimit - width));
+    const defaultBottom = Math.min(56, Math.max(8, heightLimit - 160));
+    const height = Math.min(480, Math.max(0, heightLimit - defaultBottom - 8));
+    const anchor = anchorValue && typeof anchorValue === "object"
+      ? {
+          left: Number(anchorValue.left),
+          right: Number(anchorValue.right),
+          top: Number(anchorValue.top),
+          bottom: Number(anchorValue.bottom),
+        }
+      : null;
+    if (!anchor || ![anchor.left, anchor.right, anchor.top, anchor.bottom].every(Number.isFinite)
+      || anchor.right <= anchor.left || anchor.bottom <= anchor.top || width <= 0 || height <= 0) {
+      return { left: defaultLeft, bottom: defaultBottom, width, height };
+    }
+    const edge = 8;
+    const gap = 10;
+    const maximumLeft = Math.max(edge, widthLimit - width - edge);
+    const left = Math.max(edge, Math.min(maximumLeft, (anchor.left + anchor.right - width) / 2));
+    const maximumTop = Math.max(edge, heightLimit - height - edge);
+    const roomAbove = anchor.top - gap - edge;
+    const roomBelow = heightLimit - anchor.bottom - gap - edge;
+    const requestedTop = roomBelow >= height || roomBelow >= roomAbove
+      ? anchor.bottom + gap
+      : anchor.top - gap - height;
+    const top = Math.max(edge, Math.min(maximumTop, requestedTop));
+    const bottom = Math.max(0, heightLimit - top - height);
     return { left, bottom, width, height };
   }
 

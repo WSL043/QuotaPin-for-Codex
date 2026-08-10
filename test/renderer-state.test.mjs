@@ -242,6 +242,18 @@ test("panel geometry stays inside the viewport at desktop and compact heights", 
   }
 });
 
+test("panel geometry follows a semantic surface without covering its long-press anchor", () => {
+  const toolkit = createLayoutStateToolkit();
+  const upper = toolkit.panelGeometry(1280, 760, { left: 560, right: 720, top: 6, bottom: 34 });
+  assert.deepEqual(upper, { left: 452, bottom: 236, width: 376, height: 480 });
+
+  const lower = toolkit.panelGeometry(1280, 760, { left: 980, right: 1120, top: 704, bottom: 736 });
+  assert.deepEqual(lower, { left: 862, bottom: 66, width: 376, height: 480 });
+
+  const clamped = toolkit.panelGeometry(320, 320, { left: 300, right: 319, top: 130, bottom: 160 });
+  assert.deepEqual(clamped, { left: 8, bottom: 8, width: 304, height: 256 });
+});
+
 test("free layout keeps every module inside an extremely narrow account row", () => {
   const toolkit = createLayoutStateToolkit();
   const widths = { avatar: 18, name: 120, dot: 6, value: 34, label: 22, countdown: 42, seconds: 64, date: 42, reset: 58 };

@@ -180,9 +180,9 @@ A compact valid document looks like this:
 
 ### Placement
 
-Quick exposes placement as a small map of the current Codex work surface. Saved settings contain semantic zone names rather than screen pixels, so resizing or moving the window does not corrupt a layout. The title-bar slot and the lower workspace-top slot are separate targets. `composer-bottom` paints immediately outside the input surface rather than over its content.
+Quick exposes placement as a small map of the current Codex work surface. Saved settings contain semantic zone names rather than screen pixels, so resizing or moving the window does not corrupt a layout. The title-bar slot and the lower workspace-top slot are separate targets. `composer-bottom` follows the painted rounded composer shell and paints immediately after its outside bottom edge, not after a transparent inner editor wrapper.
 
-Quota modules move as one stable group in the first 2.x beta. Their DOM nodes are updated in place, so live quota refreshes do not reset a drag. While Quick or Customize is open, the modules can be reordered directly at the selected surface. Holding the moved module group opens or closes QuotaPin at that location; a short press there is not replayed into a distant Codex control. The native account row remains the fallback and keeps its normal short-click menu contract.
+Quota modules move as one stable group in the first 2.x beta. Their DOM nodes are updated in place, so live quota refreshes do not reset a drag. While Quick or Customize is open, every enabled remote surface shows the same module frames and supports the same direct reorder gesture. Holding the moved module group opens or closes QuotaPin, and the editor is anchored beside that real group instead of returning to the lower-left account row. A short press there is not replayed into a distant Codex control. The native account row remains the fallback and keeps its normal short-click menu contract.
 
 Each non-account zone is derived from current host geometry and is enabled only when a unique, painted safe slot exists. If the composer is absent, the window is too narrow, or Codex changes a surface that cannot be identified unambiguously, `fallback` returns the quota group to `account-row`. The quota rail is independent and may remain under the account row or span the verified bottom edge of the composer.
 

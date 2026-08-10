@@ -142,9 +142,10 @@ html,body{height:100%;margin:0;background:#050505;color:#eee;font:14px system-ui
 #account img{width:18px;height:18px;border-radius:50%;object-fit:cover}.name{min-width:0;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 #native-help{position:absolute;right:8px;bottom:12px;width:32px;height:32px;border:0;background:transparent;color:#888}
 #composer{position:fixed;left:380px;right:140px;bottom:14px;height:92px;border-radius:16px;background:#111}
+#composer .editor-inner{position:absolute;left:0;right:0;top:0;bottom:8px;background:transparent}
 #composer textarea{position:absolute;left:18px;right:18px;top:14px;width:calc(100% - 36px);height:30px;resize:none;background:transparent;color:#ddd;border:0}
 #composer .tool{position:absolute;bottom:12px;width:26px;height:26px;border:0;border-radius:50%;background:#222;color:#aaa}.tool.left{left:14px}.tool.right{right:14px}
-</style></head><body><aside id="sidebar"><div id="account-footer"><button id="account" aria-haspopup="menu"><img src="/avatar.png" alt=""><span class="name">Aster</span></button><button id="native-help" aria-label="Help">?</button></div></aside><main><div id="composer"><textarea aria-label="Message"></textarea><button class="tool left">+</button><button class="tool right">↗</button></div></main><script src="/renderer.js"></script><script src="/fixture.js"></script></body></html>`;
+</style></head><body><aside id="sidebar"><div id="account-footer"><button id="account" aria-haspopup="menu"><img src="/avatar.png" alt=""><span class="name">Aster</span></button><button id="native-help" aria-label="Help">?</button></div></aside><main><div id="composer"><div class="editor-inner"><textarea aria-label="Message"></textarea></div><button class="tool left">+</button><button class="tool right">↗</button></div></main><script src="/renderer.js"></script><script src="/fixture.js"></script></body></html>`;
 const avatar = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=", "base64");
 
 class CdpClient {
@@ -688,6 +689,63 @@ test("a remote quota surface keeps stable nodes and carries editing plus hold in
   })()`);
   await waitFor(() => client.evaluate(`Boolean(document.querySelector('#quotapin-profile-editor'))`));
   assert.equal(await client.evaluate(`window.__fixtureNativeMenuDown`), 0, "holding the moved quota opens QuotaPin without replaying a Codex short click");
+});
+
+test("every remote placement carries the same module frames, drag contract, and anchored panel", { skip: !canRun }, async () => {
+  await client.call("Emulation.setDeviceMetricsOverride", { width: 1100, height: 720, deviceScaleFactor: 1, mobile: false });
+  await navigate("en");
+  await openPanel();
+  await client.evaluate(`document.querySelector('[data-toggle="Show status dot"]').click()`);
+  await waitFor(() => client.evaluate(`window.__quotaPinController.preferences.profiles[0].showDot === true`));
+
+  for (const zone of ["title-center", "workspace-top-center", "workspace-bottom-start", "composer-center", "workspace-bottom-end"]) {
+    await client.evaluate(`document.querySelector('[data-placement-zone=${JSON.stringify(zone)}]').click()`);
+    await waitFor(() => client.evaluate(`document.querySelector('[data-quotapin-placement-surface="primary"]')?.dataset.placementZone === ${JSON.stringify(zone)} && document.querySelector('[data-quotapin-placement-group="true"]')?.dataset.quotapinEditing === 'true'`));
+    await client.evaluate(`window.__quotaPinController.closeEditor(); true`);
+    await waitFor(() => client.evaluate(`!document.querySelector('#quotapin-profile-editor')`));
+    await client.evaluate(`(() => {
+      const group=document.querySelector('[data-quotapin-placement-group="true"]');
+      const rect=group.getBoundingClientRect();
+      group.dispatchEvent(new PointerEvent('pointerdown',{bubbles:true,cancelable:true,button:0,buttons:1,pointerId:230,pointerType:'mouse',isPrimary:true,clientX:rect.left+rect.width/2,clientY:rect.top+rect.height/2}));
+    })()`);
+    await new Promise((resolve) => setTimeout(resolve, 520));
+    await client.evaluate(`(() => {
+      const group=document.querySelector('[data-quotapin-placement-group="true"]');
+      const rect=group.getBoundingClientRect();
+      group.dispatchEvent(new PointerEvent('pointerup',{bubbles:true,cancelable:true,button:0,buttons:0,pointerId:230,pointerType:'mouse',isPrimary:true,clientX:rect.left+rect.width/2,clientY:rect.top+rect.height/2}));
+    })()`);
+    await waitFor(() => client.evaluate(`document.querySelector('#quotapin-profile-editor')?.dataset.remoteEditing === 'true'`));
+    const before = await client.evaluate(`(() => {
+      const group=document.querySelector('[data-quotapin-placement-group="true"]');
+      const panel=document.querySelector('#quotapin-profile-editor');
+      const groupRect=group.getBoundingClientRect();
+      const panelRect=panel.getBoundingClientRect();
+      const modules=[...group.querySelectorAll('[data-quotapin-remote-module]')];
+      return {
+        order:modules.map((node)=>node.dataset.quotapinRemoteModule),
+        framed:modules.every((node)=>getComputedStyle(node).outlineStyle === 'solid' && Number.parseFloat(getComputedStyle(node).outlineWidth) >= 1),
+        separated:panelRect.bottom <= groupRect.top - 8 || panelRect.top >= groupRect.bottom + 8,
+      };
+    })()`);
+    assert.equal(before.framed, true, `${zone} did not expose the same module editing frames`);
+    assert.equal(before.separated, true, `${zone} panel covered its long-press surface`);
+    const valueBeforeDot = before.order.indexOf("value") < before.order.indexOf("dot");
+    await client.evaluate(`(() => {
+      const value=document.querySelector('[data-quotapin-remote-module="value"]');
+      const dot=document.querySelector('[data-quotapin-remote-module="dot"]');
+      const from=value.getBoundingClientRect();
+      const target=dot.getBoundingClientRect();
+      const x=${JSON.stringify(valueBeforeDot)} ? target.right + 18 : target.left - 18;
+      const common={bubbles:true,cancelable:true,button:0,pointerId:231,pointerType:'mouse',isPrimary:true};
+      value.dispatchEvent(new PointerEvent('pointerdown',{...common,buttons:1,clientX:from.left+from.width/2,clientY:from.top+from.height/2}));
+      value.dispatchEvent(new PointerEvent('pointermove',{...common,buttons:1,clientX:x,clientY:target.top+target.height/2}));
+      value.dispatchEvent(new PointerEvent('pointerup',{...common,buttons:0,clientX:x,clientY:target.top+target.height/2}));
+    })()`);
+    await waitFor(() => client.evaluate(`(() => {
+      const order=[...document.querySelectorAll('[data-quotapin-placement-group="true"] [data-quotapin-remote-module]')].map((node)=>node.dataset.quotapinRemoteModule);
+      return (order.indexOf('value') < order.indexOf('dot')) === ${JSON.stringify(!valueBeforeDot)};
+    })()`));
+  }
 });
 
 test("Legacy and Beta switch one reversible account-row and gesture contract", { skip: !canRun }, async () => {

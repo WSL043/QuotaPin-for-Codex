@@ -238,7 +238,7 @@ test("Quick, Customize, and Code keep one coherent settings chain without duplic
 
 test("every settings mode keeps one stable bounded panel height", () => {
   assert.match(renderer, /syncPanelGeometry = \(\) =>/);
-  assert.match(renderer, /panelGeometry\(window\.innerWidth, window\.innerHeight\)/);
+  assert.match(renderer, /panelGeometry\([\s\S]{0,180}panelAnchorElement\?\.getBoundingClientRect\(\)/);
   assert.match(renderer, /panel\.style\.height = geometry\.height \+ "px"/);
   assert.match(renderer, /panel\.style\.maxHeight = geometry\.height \+ "px"/);
   assert.doesNotMatch(renderer, /const compact = mode === "quick" \|\| mode === "arcade"/);

@@ -7,6 +7,7 @@ import { resolveCodexAppServerCommand } from "../src/agent/app-server-runtime.mj
 import {
   macAgentResumeDelayMs,
   macAutoAttachDecision,
+  macDiscoveryRetryDelayMs,
   macProcessIdentityKey,
   macProcessIdentityMatches,
 } from "../src/macos/auto-attach-policy.mjs";
@@ -157,6 +158,13 @@ test("macOS Agent recovery uses bounded exponential backoff without reopening Co
     launcher.indexOf("async function launchOnce"),
   );
   assert.doesNotMatch(resumeSource, /\/usr\/bin\/open|openArguments/);
+});
+
+test("macOS runtime rediscovery backs off to a quiet five-minute ceiling", () => {
+  assert.deepEqual(
+    Array.from({ length: 9 }, (_, failureCount) => macDiscoveryRetryDelayMs(failureCount)),
+    [0, 5_000, 10_000, 20_000, 40_000, 80_000, 160_000, 300_000, 300_000],
+  );
 });
 
 test("macOS production package owns a user LaunchAgent and a bounded uninstall path", () => {

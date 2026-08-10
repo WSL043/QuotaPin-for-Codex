@@ -8,6 +8,7 @@ import { readBoundedJsonResponse } from "../core/http-json.mjs";
 import {
   macAgentResumeDelayMs,
   macAutoAttachDecision,
+  macDiscoveryRetryDelayMs,
   macProcessIdentityKey,
   macProcessIdentityMatches,
 } from "./auto-attach-policy.mjs";
@@ -25,7 +26,6 @@ import {
 const VERSION = "1.1.2";
 const SOURCE_REPOSITORY = "https://github.com/WSL043/QuotaPin-for-Codex";
 const POLL_MS = 1_000;
-const DISCOVERY_RETRY_MS = 5_000;
 const AGENT_MODE_ARGUMENT = "--quotapin-agent-runtime";
 
 function argumentValue(name) {
@@ -428,6 +428,7 @@ async function watch() {
   fs.mkdirSync(paths.logRoot, { recursive: true });
   let bundleIdentity = null;
   let nextDiscoveryAt = 0;
+  let discoveryFailures = 0;
   let ignored = new Set();
   let initialized = false;
   let idleSince = 0;
@@ -440,6 +441,7 @@ async function watch() {
       if (!bundleIdentity || Date.now() >= nextDiscoveryAt) {
         const bundlePath = resolveCodexBundle({ env: process.env, override: argumentValue("--codex-app") || undefined });
         bundleIdentity = inspectOfficialBundle(bundlePath);
+        discoveryFailures = 0;
         nextDiscoveryAt = Date.now() + 60_000;
       }
       const roots = codexRootProcesses(bundleIdentity);
@@ -564,10 +566,13 @@ async function watch() {
       }
       await sleep(POLL_MS);
     } catch (error) {
-      appendLog(paths.watcherLogPath, `watch cycle degraded: ${error?.message ?? String(error)}`);
       bundleIdentity = null;
-      nextDiscoveryAt = Date.now() + DISCOVERY_RETRY_MS;
-      await sleep(DISCOVERY_RETRY_MS);
+      discoveryFailures += 1;
+      const retryDelay = macDiscoveryRetryDelayMs(discoveryFailures);
+      nextDiscoveryAt = Date.now() + retryDelay;
+      const reason = String(error?.message ?? error).replaceAll("\n", " ");
+      appendLog(paths.watcherLogPath, `runtime rediscovery deferred failures=${discoveryFailures} retryMs=${retryDelay} reason=${reason}`);
+      await sleep(retryDelay);
     }
   }
 }

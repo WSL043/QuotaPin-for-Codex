@@ -6,6 +6,12 @@ export function macAgentResumeDelayMs(failureCount) {
   return Math.min(30_000, 2_000 * (2 ** Math.min(4, failures - 1)));
 }
 
+export function macDiscoveryRetryDelayMs(failureCount) {
+  const failures = Math.max(0, Math.trunc(Number(failureCount) || 0));
+  if (failures === 0) return 0;
+  return Math.min(300_000, 5_000 * (2 ** Math.min(6, failures - 1)));
+}
+
 export function macAutoAttachDecision(options = {}) {
   const guardState = String(options.guardState ?? "none");
   const roots = Array.isArray(options.roots) ? options.roots : [];

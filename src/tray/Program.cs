@@ -87,6 +87,8 @@ namespace QuotaPin.Tray
             internal DateTime NextAttemptAt;
             internal DateTime LauncherStartedAt;
             internal Process Launcher;
+            internal long VerifiedCreationFileTime;
+            internal string Generation;
         }
 
         private sealed class LifecycleSnapshot
@@ -293,6 +295,100 @@ namespace QuotaPin.Tray
             catch { return false; }
         }
 
+        private bool TryReadCodexCreationFileTime(int processId, out long fileTime)
+        {
+            fileTime = 0;
+            try
+            {
+                if (!IsOfficialCodexRoot(processId)) return false;
+                using (var process = Process.GetProcessById(processId))
+                {
+                    fileTime = process.StartTime.ToUniversalTime().ToFileTimeUtc();
+                    return fileTime > 0;
+                }
+            }
+            catch { return false; }
+        }
+
+        private bool WriteHandoffPendingGuard(AttachAttempt attempt)
+        {
+            if (attempt == null || attempt.CodexPid <= 0 || attempt.VerifiedCreationFileTime <= 0
+                || string.IsNullOrEmpty(attempt.Generation)) return false;
+            try
+            {
+                var logRoot = Path.Combine(installRoot, "logs");
+                Directory.CreateDirectory(logRoot);
+                var path = Path.Combine(logRoot, "auto-attach-guard.json");
+                var value = new Dictionary<string, object>();
+                value["schema"] = 1;
+                value["state"] = "handoff-pending";
+                value["generation"] = attempt.Generation;
+                value["sourcePid"] = attempt.CodexPid;
+                value["sourceCreationTimeUtc"] = DateTime.FromFileTimeUtc(attempt.VerifiedCreationFileTime).ToString("o", CultureInfo.InvariantCulture);
+                value["writtenAt"] = DateTimeOffset.UtcNow.ToString("o", CultureInfo.InvariantCulture);
+                var temporary = path + "." + Guid.NewGuid().ToString("N") + ".tmp";
+                File.WriteAllText(temporary, new JavaScriptSerializer().Serialize(value));
+                if (File.Exists(path))
+                {
+                    try { File.Replace(temporary, path, null); }
+                    catch
+                    {
+                        File.Copy(temporary, path, true);
+                        File.Delete(temporary);
+                    }
+                }
+                else File.Move(temporary, path);
+                return true;
+            }
+            catch (Exception error)
+            {
+                WriteLog("attach guard write failed: " + error.GetType().Name);
+                return false;
+            }
+        }
+
+        private void WriteSuccessorObservedGuard(AttachAttempt attempt, Dictionary<string, object> runtime)
+        {
+            try
+            {
+                if (attempt == null || runtime == null || !runtime.ContainsKey("generation")
+                    || !string.Equals(Convert.ToString(runtime["generation"], CultureInfo.InvariantCulture), attempt.Generation, StringComparison.Ordinal)) return;
+                var successorPid = Convert.ToInt32(runtime["codexPid"], CultureInfo.InvariantCulture);
+                var agentPid = Convert.ToInt32(runtime["agentPid"], CultureInfo.InvariantCulture);
+                var port = Convert.ToInt32(runtime["port"], CultureInfo.InvariantCulture);
+                var successorCreation = Convert.ToString(runtime["codexCreationTimeUtc"], CultureInfo.InvariantCulture);
+                if (successorPid <= 0 || agentPid <= 0 || port < 1024 || port > 65535 || string.IsNullOrEmpty(successorCreation)) return;
+                var value = new Dictionary<string, object>();
+                value["schema"] = 1;
+                value["state"] = "successor-observed";
+                value["generation"] = attempt.Generation;
+                value["sourcePid"] = attempt.CodexPid;
+                value["sourceCreationTimeUtc"] = DateTime.FromFileTimeUtc(attempt.VerifiedCreationFileTime).ToString("o", CultureInfo.InvariantCulture);
+                value["successorPid"] = successorPid;
+                value["successorCreationTimeUtc"] = successorCreation;
+                value["agentPid"] = agentPid;
+                value["port"] = port;
+                value["writtenAt"] = DateTimeOffset.UtcNow.ToString("o", CultureInfo.InvariantCulture);
+                var path = Path.Combine(installRoot, "logs", "auto-attach-guard.json");
+                var temporary = path + "." + Guid.NewGuid().ToString("N") + ".tmp";
+                File.WriteAllText(temporary, new JavaScriptSerializer().Serialize(value));
+                if (File.Exists(path))
+                {
+                    try { File.Replace(temporary, path, null); }
+                    catch
+                    {
+                        File.Copy(temporary, path, true);
+                        File.Delete(temporary);
+                    }
+                }
+                else File.Move(temporary, path);
+            }
+            catch (Exception error)
+            {
+                WriteLog("successor guard write skipped: " + error.GetType().Name);
+            }
+        }
+
         private void ScanCodexProcesses(bool seedOnly)
         {
             try
@@ -317,8 +413,20 @@ namespace QuotaPin.Tray
                     }
                     if (!IsOfficialCodexRoot(processId)) continue;
                     if (attachAttempts.Count > 0) continue;
+                    long creationFileTime;
+                    if (!TryReadCodexCreationFileTime(processId, out creationFileTime))
+                    {
+                        WriteLog("fresh official root skipped: creation identity unavailable pid=" + processId.ToString(CultureInfo.InvariantCulture));
+                        continue;
+                    }
                     WriteLog("fresh official root observed pid=" + processId.ToString(CultureInfo.InvariantCulture));
-                    var attempt = new AttachAttempt { CodexPid = processId, Number = 1, NextAttemptAt = DateTime.UtcNow };
+                    var attempt = new AttachAttempt {
+                        CodexPid = processId,
+                        Number = 1,
+                        NextAttemptAt = DateTime.UtcNow,
+                        VerifiedCreationFileTime = creationFileTime,
+                        Generation = Guid.NewGuid().ToString("N"),
+                    };
                     attachAttempts[processId] = attempt;
                     StartAttachAttempt(attempt);
                 }
@@ -341,9 +449,16 @@ namespace QuotaPin.Tray
             }
             try
             {
+                if (!WriteHandoffPendingGuard(attempt))
+                {
+                    RetryOrCompleteAttachFailure(attempt, "attach authorization could not be prepared");
+                    return;
+                }
                 WriteLifecycleState("starting", attempt.CodexPid, 0, 0, attempt.Number, "");
                 var arguments = "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File \"" + script
                     + "\" -NoRelaunchPrompt -AutoAttach -VerifiedCodexPid " + attempt.CodexPid.ToString(CultureInfo.InvariantCulture)
+                    + " -VerifiedCreationFileTime " + attempt.VerifiedCreationFileTime.ToString(CultureInfo.InvariantCulture)
+                    + " -AttachGeneration \"" + attempt.Generation + "\""
                     + " -AttachAttempt " + attempt.Number.ToString(CultureInfo.InvariantCulture);
                 var start = new ProcessStartInfo(powerShellPath, arguments);
                 start.UseShellExecute = false;
@@ -399,7 +514,7 @@ namespace QuotaPin.Tray
                 if (exitCode == 0)
                 {
                     seenCodexRoots.Add(attempt.CodexPid);
-                    AcceptRuntimeCodexRoot();
+                    AcceptRuntimeCodexRoot(attempt);
                     attachAttempts.Remove(attempt.CodexPid);
                     WriteLog("attach accepted pid=" + attempt.CodexPid.ToString(CultureInfo.InvariantCulture) + " attempt=" + attempt.Number.ToString(CultureInfo.InvariantCulture));
                     continue;
@@ -428,7 +543,7 @@ namespace QuotaPin.Tray
             WriteLog("attach exhausted pid=" + attempt.CodexPid.ToString(CultureInfo.InvariantCulture) + " attempt=" + attempt.Number.ToString(CultureInfo.InvariantCulture) + " reason=" + reason);
         }
 
-        private void AcceptRuntimeCodexRoot()
+        private void AcceptRuntimeCodexRoot(AttachAttempt attempt)
         {
             try
             {
@@ -437,7 +552,11 @@ namespace QuotaPin.Tray
                 var state = new JavaScriptSerializer().DeserializeObject(File.ReadAllText(statePath)) as Dictionary<string, object>;
                 if (state == null || !state.ContainsKey("codexPid")) return;
                 var processId = Convert.ToInt32(state["codexPid"], CultureInfo.InvariantCulture);
-                if (IsOfficialCodexRoot(processId)) seenCodexRoots.Add(processId);
+                if (IsOfficialCodexRoot(processId))
+                {
+                    seenCodexRoots.Add(processId);
+                    WriteSuccessorObservedGuard(attempt, state);
+                }
             }
             catch { }
         }

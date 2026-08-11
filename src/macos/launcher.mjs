@@ -23,7 +23,7 @@ import {
   validateOfficialCodexRuntimeIdentity,
 } from "./launcher-runtime.mjs";
 
-const VERSION = "1.2.0";
+const VERSION = "1.2.1";
 const SOURCE_REPOSITORY = "https://github.com/WSL043/QuotaPin-for-Codex";
 const POLL_MS = 1_000;
 const AGENT_MODE_ARGUMENT = "--quotapin-agent-runtime";

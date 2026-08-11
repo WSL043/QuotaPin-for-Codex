@@ -47,7 +47,7 @@ QuotaPin keeps the useful part visible in the account row, so checking quota bec
 
 ## Platform status
 
-Latest stable: **v1.2.0**.
+Latest stable: **v1.2.1**.
 
 | Platform | Status |
 |---|---|
@@ -68,7 +68,7 @@ Open the **[latest stable release](https://github.com/WSL043/QuotaPin-for-Codex/
 Installation is per-user. Windows does not require elevation; macOS does not require `sudo`, Homebrew, or a separate runtime. Installing or updating never closes or restarts a running Codex session. If QuotaPin cannot attach safely, it waits for the next normal Codex launch.
 
 > [!NOTE]
-> **Upgrading from QuotaPin 1.1.2 or earlier on Windows:** run the installer or Quick Start once. The updater in those builds can fail before the update process starts, so it cannot reliably install its own fix. This one-time repair keeps your settings and leaves the running Codex session open. Updates started from QuotaPin are supported again from 1.2.0 onward.
+> **Upgrading from QuotaPin 1.1.2 or earlier on Windows:** run the installer or Quick Start once. The updater in those builds can fail before the update process starts, so it cannot reliably install its own fix. This one-time repair keeps your settings and leaves the running Codex session open. Updates started from QuotaPin are supported again from 1.2.1 onward.
 
 ### Command-line install
 

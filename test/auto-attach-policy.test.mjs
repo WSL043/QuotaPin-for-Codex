@@ -142,3 +142,17 @@ test("watcher and launcher source enforce the single-flight transaction", () => 
   assert.ok(launcher.indexOf("Test-QuotaPinRendererReady") < launcher.indexOf("Write-QuotaPinJsonAtomic -Path $RuntimeStatePath"));
   assert.match(launcher, /Local\\QuotaPinCodexRelaunch/);
 });
+
+test("setup tray and launcher share the generation-bound attach handshake", () => {
+  const tray = fs.readFileSync(path.join(root, "src", "tray", "Program.cs"), "utf8");
+  const launcher = fs.readFileSync(path.join(root, "src", "launch.ps1"), "utf8");
+  assert.match(tray, /VerifiedCreationFileTime/);
+  assert.match(tray, /AttachGeneration/);
+  assert.match(tray, /state\"] = \"handoff-pending\"/);
+  assert.match(tray, /sourceCreationTimeUtc/);
+  assert.match(tray, /state\"] = \"successor-observed\"/);
+  assert.match(tray, /ClearHandoffPendingGuard/);
+  assert.match(launcher, /VerifiedCreationFileTime/);
+  assert.match(launcher, /AttachGeneration/);
+  assert.match(launcher, /handoff-pending/);
+});

@@ -20,10 +20,10 @@ test("the packaged default config matches the runtime defaults", () => {
   assert.equal(packaged.version, CURRENT_CONFIG_VERSION);
   assert.equal(packaged.profiles.every((profile) => profile.showValue === true && profile.showDot === false && profile.showBar === false), true);
   assert.equal(packaged.profiles.every((profile) => !Object.hasOwn(profile, "quotaSource") && !Object.hasOwn(profile, "showSourceLabel")), true);
-  assert.deepEqual(packaged.profiles.map((profile) => [profile.showLabel, profile.showCountdown, profile.showRelative, profile.showSeconds, profile.showDate, profile.showReset, profile.showTodayTokens, profile.showLifetimeTokens]), [
-    [false, false, false, false, false, false, false, false],
-    [false, true, false, false, false, false, false, false],
-    [false, false, false, false, false, true, false, false],
+  assert.deepEqual(packaged.profiles.map((profile) => [profile.showLabel, profile.showCountdown, profile.showRelative, profile.showSeconds, profile.showDate, profile.showReset, profile.showTodayTokens, profile.showLifetimeTokens, profile.showPace, profile.showRunway]), [
+    [false, false, false, false, false, false, false, false, false, false],
+    [false, true, false, false, false, false, false, false, false, false],
+    [false, false, false, false, false, true, false, false, false, false],
   ]);
   assert.equal(packaged.profiles.every((profile) => profile.displayMode === "modules"), true);
   assert.equal(packaged.profiles.every((profile) => profile.moduleOrder.join("|") === LAYOUT_MODULES.join("|")), true);
@@ -41,7 +41,9 @@ test("the packaged default config matches the runtime defaults", () => {
     showReset: packaged.profiles[0].showReset,
     showTodayTokens: packaged.profiles[0].showTodayTokens,
     showLifetimeTokens: packaged.profiles[0].showLifetimeTokens,
-  }, { showValue: true, showDot: false, showBar: false, showLabel: false, showCountdown: false, showRelative: false, showSeconds: false, showDate: false, showReset: false, showTodayTokens: false, showLifetimeTokens: false });
+    showPace: packaged.profiles[0].showPace,
+    showRunway: packaged.profiles[0].showRunway,
+  }, { showValue: true, showDot: false, showBar: false, showLabel: false, showCountdown: false, showRelative: false, showSeconds: false, showDate: false, showReset: false, showTodayTokens: false, showLifetimeTokens: false, showPace: false, showRunway: false });
   assert.deepEqual(packaged.thresholds, { warning: 30, critical: 10 });
   assert.equal(Object.hasOwn(packaged, "experiments"), false);
   assert.equal(packaged.profiles.every((profile) => !(optionalContract.enabled in profile) && !(optionalContract.persistent in profile)), true);
@@ -87,7 +89,7 @@ test("granular module parts assemble one canonical text value without decorative
   const view = formatQuota(weekly, configured, now, "en-US");
   assert.equal(view.text, `${view.parts.value} ${view.parts.countdown}`);
   assert.equal(view.showLabel, false);
-  assert.deepEqual(Object.keys(view.parts), ["label", "value", "countdown", "relative", "seconds", "date", "reset", "todayTokens", "lifetimeTokens"]);
+  assert.deepEqual(Object.keys(view.parts), ["label", "value", "countdown", "relative", "seconds", "date", "reset", "todayTokens", "lifetimeTokens", "pace", "runway"]);
   assert.equal(view.parts.label, "7d");
   assert.equal(view.parts.value, "42%");
   const ignoredLegacyDecoration = withProfile({ moduleDivider: "custom", dividerText: " / " }, configured);
@@ -112,7 +114,7 @@ test("legacy version-one settings migrate to an editable view", () => {
   assert.equal(migrated.profiles[0].template, "{remaining}% / {countdown}");
   assert.equal(migrated.profiles[0].displayMode, "template");
   assert.equal(migrated.profiles[0].showDot, false);
-  assert.deepEqual(migrated.profiles[0].moduleOrder, ["dot", "value", "todayTokens", "lifetimeTokens", "label", "countdown", "relative", "seconds", "date", "reset", "avatar", "name"]);
+  assert.deepEqual(migrated.profiles[0].moduleOrder, ["dot", "value", "pace", "runway", "todayTokens", "lifetimeTokens", "label", "countdown", "relative", "seconds", "date", "reset", "avatar", "name"]);
   assert.equal(migrated.profiles[0].identity, "quotaOnly");
   assert.deepEqual(migrated.thresholds, { warning: 35, critical: 12 });
 });
@@ -148,7 +150,7 @@ test("version-four standard views become modules while arbitrary templates stay 
   });
   assert.equal(migrated.version, CURRENT_CONFIG_VERSION);
   assert.deepEqual(migrated.profiles.map((profile) => profile.displayMode), ["modules", "modules", "template"]);
-  assert.deepEqual(migrated.profiles[1].moduleOrder, ["dot", "value", "todayTokens", "lifetimeTokens", "label", "countdown", "relative", "seconds", "date", "reset", "avatar", "name"]);
+  assert.deepEqual(migrated.profiles[1].moduleOrder, ["dot", "value", "pace", "runway", "todayTokens", "lifetimeTokens", "label", "countdown", "relative", "seconds", "date", "reset", "avatar", "name"]);
   assert.equal(migrated.profiles[1].showCountdown, true);
   assert.equal(migrated.profiles[2].template, "{remaining}% / {countdown}");
   assert.equal(formatQuota(weekly, { ...migrated, activeProfile: "custom" }, now, "en-US").text, "42% / 4d 8h");
@@ -288,7 +290,7 @@ test("badge size and module order are bounded per saved view", () => {
   const configured = withProfile({ fontSize: 16, moduleOrder: ["quota", "avatar", "name"] });
   const view = formatQuota(weekly, configured, now, "en-US");
   assert.deepEqual(view.layout, {
-    moduleOrder: ["dot", "value", "todayTokens", "lifetimeTokens", "label", "countdown", "relative", "seconds", "date", "reset", "avatar", "name"],
+    moduleOrder: ["dot", "value", "pace", "runway", "todayTokens", "lifetimeTokens", "label", "countdown", "relative", "seconds", "date", "reset", "avatar", "name"],
     layoutMode: "auto",
     snapThreshold: 16,
     snapTargets: ["edges", "center", "modules"],
@@ -358,10 +360,10 @@ test("legacy continuous placement migrates to the nearest module insertion slot"
   const left = sanitizeConfig({ version: 3, activeProfile: "loose", profiles: [{ id: "loose", name: "Loose", position: "free", freeX: 12 }] });
   const middle = sanitizeConfig({ version: 3, activeProfile: "loose", profiles: [{ id: "loose", name: "Loose", position: "free", freeX: 50 }] });
   const right = sanitizeConfig({ version: 3, activeProfile: "loose", profiles: [{ id: "loose", name: "Loose", position: "free", freeX: 88 }] });
-  assert.deepEqual(left.profiles[0].moduleOrder, ["dot", "value", "todayTokens", "lifetimeTokens", "label", "countdown", "relative", "seconds", "date", "reset", "avatar", "name"]);
-  assert.deepEqual(middle.profiles[0].moduleOrder, ["avatar", "dot", "value", "todayTokens", "lifetimeTokens", "label", "countdown", "relative", "seconds", "date", "reset", "name"]);
+  assert.deepEqual(left.profiles[0].moduleOrder, ["dot", "value", "pace", "runway", "todayTokens", "lifetimeTokens", "label", "countdown", "relative", "seconds", "date", "reset", "avatar", "name"]);
+  assert.deepEqual(middle.profiles[0].moduleOrder, ["avatar", "dot", "value", "pace", "runway", "todayTokens", "lifetimeTokens", "label", "countdown", "relative", "seconds", "date", "reset", "name"]);
   assert.deepEqual(right.profiles[0].moduleOrder, LAYOUT_MODULES);
-  const reorderedOrder = ["name", "label", "value", "todayTokens", "lifetimeTokens", "dot", "avatar", "countdown", "relative", "seconds", "date", "reset"];
+  const reorderedOrder = ["name", "label", "value", "pace", "runway", "todayTokens", "lifetimeTokens", "dot", "avatar", "countdown", "relative", "seconds", "date", "reset"];
   const reordered = applyConfigAction(right, { type: "updateProfile", id: "loose", patch: { moduleOrder: reorderedOrder } });
   assert.deepEqual(reordered.profiles[0].moduleOrder, reorderedOrder);
 });
@@ -553,6 +555,45 @@ test("localized time, date, and seconds are independent modules and Code tokens"
   assert.match(formatQuota(weekly, code, now, "en-US").text, /^42% \| 4d 8h \| 4 days 8 hours \| 104:00:00 \| Aug/);
 });
 
+test("account-wide pace and runway remain optional modules backed by official quota history", () => {
+  const config = withProfile({
+    showPace: true,
+    showRunway: true,
+    moduleOrder: ["avatar", "name", "value", "pace", "runway", "label", "dot", "countdown", "relative", "seconds", "date", "reset", "todayTokens", "lifetimeTokens"],
+  });
+  const reset = now / 1000 + 4 * 86400;
+  const snapshot = {
+    status: "ready",
+    windows: [{ id: "codex:10080", sourceId: "codex", label: "7d", displayLabel: "Weekly", windowDurationMins: 10080, remainingPercent: 70, resetsAt: reset }],
+    quotaPace: { windows: [{ id: "codex:10080", sourceId: "codex", windowDurationMins: 10080, resetsAt: reset, status: "ready", pacePerHour: 2, runwaySeconds: 35 * 3600, survivesReset: false }] },
+  };
+  const view = formatQuota(snapshot, config, now, "zh-CN");
+  assert.equal(view.text, "70% 2%/h ≈1d 11h");
+  assert.equal(view.parts.pace, "2%/h");
+  assert.equal(view.parts.runway, "≈1d 11h");
+  assert.match(view.tooltip, /平均消耗 2%\/h · 预计可用 1天11小时/);
+
+  const code = withProfile({ template: "{remaining}% {pace} {runway}" }, config);
+  assert.equal(formatQuota(snapshot, code, now, "en-US").text, "70% 2%/h ≈1d 11h");
+});
+
+test("schema-eighteen layouts gain forecast modules without restoring retired side placements", () => {
+  const oldOrder = ["avatar", "name", "value", "label", "dot", "countdown", "relative", "seconds", "date", "reset", "todayTokens", "lifetimeTokens"];
+  const migrated = sanitizeConfig({
+    ...DEFAULT_CONFIG,
+    version: 18,
+    profiles: [{
+      ...DEFAULT_CONFIG.profiles[0],
+      moduleOrder: oldOrder,
+      placement: { primary: "workspace-bottom-start", fallback: "account-row", rail: "account-row" },
+    }],
+  });
+  assert.deepEqual(migrated.profiles[0].moduleOrder, ["avatar", "name", "value", "pace", "runway", "label", "dot", "countdown", "relative", "seconds", "date", "reset", "todayTokens", "lifetimeTokens"]);
+  assert.deepEqual(migrated.profiles[0].placement, { primary: "account-row", fallback: "account-row", rail: "account-row" });
+  assert.equal(migrated.profiles[0].showPace, false);
+  assert.equal(migrated.profiles[0].showRunway, false);
+});
+
 test("schema-nine layouts gain the localized module without moving existing modules", () => {
   const oldOrder = ["value", "avatar", "seconds", "name", "countdown", "date", "dot", "reset", "label"];
   const migrated = sanitizeConfig({
@@ -567,10 +608,10 @@ test("schema-nine layouts gain the localized module without moving existing modu
   });
   const profile = migrated.profiles[0];
   assert.equal(migrated.version, CURRENT_CONFIG_VERSION);
-  assert.deepEqual(profile.moduleOrder, ["value", "todayTokens", "lifetimeTokens", "avatar", "seconds", "name", "countdown", "relative", "date", "dot", "reset", "label"]);
+  assert.deepEqual(profile.moduleOrder, ["value", "pace", "runway", "todayTokens", "lifetimeTokens", "avatar", "seconds", "name", "countdown", "relative", "date", "dot", "reset", "label"]);
   assert.equal(profile.showRelative, false);
   assert.equal(profile.moduleAnchors.relative, DEFAULT_MODULE_ANCHORS.relative);
-  assert.deepEqual(oldOrder, profile.moduleOrder.filter((module) => !["relative", "todayTokens", "lifetimeTokens"].includes(module)));
+  assert.deepEqual(oldOrder, profile.moduleOrder.filter((module) => !["relative", "todayTokens", "lifetimeTokens", "pace", "runway"].includes(module)));
 });
 
 test("version-six module layouts gain new modules without losing their order", () => {
@@ -585,7 +626,7 @@ test("version-six module layouts gain new modules without losing their order", (
     }],
   });
   const profile = migrated.profiles[0];
-  assert.deepEqual(profile.moduleOrder, ["value", "todayTokens", "lifetimeTokens", "avatar", "name", "dot", "label", "date", "reset", "countdown", "relative", "seconds"]);
+  assert.deepEqual(profile.moduleOrder, ["value", "pace", "runway", "todayTokens", "lifetimeTokens", "avatar", "name", "dot", "label", "date", "reset", "countdown", "relative", "seconds"]);
   assert.equal(profile.showSeconds, false);
   assert.equal(profile.showDate, false);
   assert.equal(profile.moduleAnchors.value, 0.4);

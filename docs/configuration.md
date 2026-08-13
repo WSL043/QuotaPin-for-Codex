@@ -1,6 +1,6 @@
 # Configuration
 
-QuotaPin creates `%LOCALAPPDATA%\QuotaPin\config.json` on first install and preserves it across updates. Hold the Codex account row for 480 ms to open the editor. A short press keeps the original Codex menu; pressing the row again or clicking outside closes the open panel.
+QuotaPin creates `%LOCALAPPDATA%\QuotaPin\config.json` on first install and preserves it across updates. Hold the visible QuotaPin surface for 480 ms to open the editor. At the default account-row position, a short press keeps the original Codex menu; pressing the surface again or clicking outside closes the open panel.
 
 The fresh-install default is deliberately small: Codex keeps its native avatar and account name, and QuotaPin adds only the remaining percentage. The status dot, quota bar, and every time module start off. Warning begins at 30% remaining; critical begins at 10%.
 
@@ -14,10 +14,10 @@ All three surfaces edit the same settings. A change appears immediately, but `Sa
 
 The active tab owns its content scrolling. Opening a long list does not create a second nested scroll region.
 
-## Twelve independent modules
+## Fourteen independent modules
 
 ```json
-["avatar", "name", "value", "label", "dot", "countdown", "relative", "seconds", "date", "reset", "todayTokens", "lifetimeTokens"]
+["avatar", "name", "value", "pace", "runway", "label", "dot", "countdown", "relative", "seconds", "date", "reset", "todayTokens", "lifetimeTokens"]
 ```
 
 | Module | Example | Meaning |
@@ -26,6 +26,8 @@ The active tab owns its content scrolling. Opening a long list does not create a
 | `name` | `Aster` | The existing Codex account name. |
 | `dot` | colored dot | Compact status based on the saved thresholds. |
 | `value` | `42%` | Remaining percentage. |
+| `pace` | `1.8%/h` | Recent account-wide burn pace estimated from changes in the official remaining percentage. |
+| `runway` | `≈2d 4h` | Estimated time until the current quota reaches zero at that recent pace. `≥` means the estimate reaches the official reset first. |
 | `todayTokens` | `Today 12.4M` | Tokens processed on this device during the current local calendar day, derived from Codex's local `token_count` events. |
 | `lifetimeTokens` | `Total 44B` | Account lifetime tokens from Codex's settled profile statistics. |
 | `label` | period name | The label Codex returns when more than one quota period exists. |
@@ -35,9 +37,11 @@ The active tab owns its content scrolling. Opening a long list does not create a
 | `date` | `Aug 9` | Localized reset calendar date. |
 | `reset` | `Sun 02:15 AM` | Localized reset weekday and time. |
 
-Quick shows each module as it looks now instead of asking you to decode setting names. Pressed means visible. The palette groups identity, quota, status, usage, and time; the status dot and quota bar share one status row. In Code, avatar and name are represented by `identity`; the ten inline quota modules use separate `show*` flags. The optional quota bar is controlled by `showBar` and follows the visible quota cluster by default; it is not part of horizontal `moduleOrder` and cannot push another module.
+Quick shows each module as it looks now instead of asking you to decode setting names. Pressed means visible. The palette groups account identity, quota, forecast, signals, usage, and time; the status dot and quota bar share one signals row. In Code, avatar and name are represented by `identity`; the twelve inline quota modules use separate `show*` flags. The optional quota bar is controlled by `showBar` and follows the visible quota cluster by default; it is not part of horizontal `moduleOrder` and cannot push another module.
 
 The two token counters are optional and start off. Today's counter reads only numeric `token_count` fields from local Codex session logs; it never reads message bodies and refreshes from newly appended events. It therefore describes this computer, and two computers can show different Today values. Fork replays and repeated cumulative snapshots are deduplicated. The compact module stays clean; if bounded startup backfill cannot prove full-day coverage, the localized hover copy identifies the exact value as "at least" rather than presenting a lower bound as exact. Total uses Codex's account profile summary and is account-wide; that summary may settle later than the local counter. Neither value is written into the QuotaPin configuration or log, and an unavailable source stays `—` rather than becoming zero.
+
+Pace and runway are a separate account-wide estimate. QuotaPin samples only the official remaining percentage and reset identity returned by Codex, keeps at most 24 hours of recent observations, and starts a new calibration epoch after a reset or a confirmed percentage increase. It needs at least three observations, 30 minutes, and one percentage point of movement before showing a number; until then the optional modules show `…`. The calculation deliberately excludes prompts, local token totals, model choice, cache accounting, and API pricing. Work performed on another computer is still reflected when the official account percentage reaches this computer, although the estimate naturally cannot observe time when no QuotaPin instance is sampling.
 
 ### Avatar shape
 
@@ -73,13 +77,13 @@ Three editable views ship as starting points:
 
 Duplicate and rename a useful view instead of rebuilding it. Up to eight views are retained and at least one always remains. Date and precise-seconds combinations can be built directly in Quick or Code.
 
-## Configuration JSON (schema 18)
+## Configuration JSON (schema 19)
 
 A compact valid document looks like this:
 
 ```json
 {
-  "version": 18,
+  "version": 19,
   "locale": "en",
   "panelTheme": "dark",
   "accountRowMode": "legacy",
@@ -102,6 +106,8 @@ A compact valid document looks like this:
     "showSeconds": false,
     "showDate": false,
     "showReset": false,
+    "showPace": false,
+    "showRunway": false,
     "showTodayTokens": false,
     "showLifetimeTokens": false,
     "placement": {
@@ -112,7 +118,7 @@ A compact valid document looks like this:
     "valueColor": "severity",
     "dotColor": "severity",
     "identityColor": "inherit",
-    "moduleOrder": ["avatar", "name", "value", "label", "dot", "countdown", "relative", "seconds", "date", "reset", "todayTokens", "lifetimeTokens"],
+    "moduleOrder": ["avatar", "name", "value", "pace", "runway", "label", "dot", "countdown", "relative", "seconds", "date", "reset", "todayTokens", "lifetimeTokens"],
     "layoutMode": "auto",
     "snapThreshold": 16,
     "snapTargets": ["edges", "center", "modules"],
@@ -121,6 +127,8 @@ A compact valid document looks like this:
       "name": 0.04,
       "dot": 0.96,
       "value": 0.96,
+      "pace": 0.96,
+      "runway": 0.96,
       "todayTokens": 0.96,
       "lifetimeTokens": 0.96,
       "label": 0.96,
@@ -157,11 +165,11 @@ A compact valid document looks like this:
 | `window` | `auto`, `all`, `shortest`, `longest`, `duration:<minutes>` | What to show when Codex reports more than one quota period. |
 | `separator` | string, max 8 chars | Joins multiple quota periods in template mode; it does not draw a separate visual module. |
 | `displayMode` | `modules`, `template` | Independent modules or one Code-defined value. |
-| `showValue`, `showDot`, `showTodayTokens`, `showLifetimeTokens`, `showLabel`, `showCountdown`, `showRelative`, `showSeconds`, `showDate`, `showReset` | boolean | Independent inline module visibility. The token counters are optional; `countdown` is compact and universal; `relative` uses localized words. |
+| `showValue`, `showDot`, `showPace`, `showRunway`, `showTodayTokens`, `showLifetimeTokens`, `showLabel`, `showCountdown`, `showRelative`, `showSeconds`, `showDate`, `showReset` | boolean | Independent inline module visibility. Forecast and token modules are optional; `countdown` is compact and universal; `relative` uses localized words. |
 | `showBar` | boolean | Optional quota line. Its color and fill use the same canonical percentage as the value module. |
 | `barScope` | `quota` \| `row` | Within the account surface, `quota` follows visible quota modules and `row` spans the usable row. Legacy stops before Codex Help; Beta uses the expanded row after Help is hidden. |
-| `placement` | semantic object | `primary` accepts `account-row`, `title-center`, `workspace-top-center`, `workspace-bottom-start`, `composer-center`, or `workspace-bottom-end`; `rail` accepts `account-row` or `composer-bottom`. `fallback` is currently fixed to `account-row`. |
-| `moduleOrder` | one permutation of all twelve module ids | Fallback order when two modules are saved at the same horizontal point. |
+| `placement` | semantic object | `primary` accepts `account-row`, `title-center`, `workspace-top-center`, or `composer-center`; `rail` accepts `account-row` or `composer-bottom`. `fallback` is currently fixed to `account-row`. Retired composer-side values migrate safely to the account row. |
+| `moduleOrder` | one permutation of all fourteen module ids | Fallback order when two modules are saved at the same horizontal point. |
 | `layoutMode` | `auto`, `free` | Stable semantic docking or exact normalized coordinates. Quick uses `auto`; `free` is an expert Code option. |
 | `snapThreshold` | integer `0`–`48` | Magnetic distance in pixels for `auto`; `0` requires an exact target hit. |
 | `snapTargets` | any subset of `edges`, `center`, `modules` | Magnetic target families for `auto`; an empty array disables all targets. |
@@ -180,9 +188,9 @@ A compact valid document looks like this:
 
 ### Placement
 
-Quick exposes placement as a small map of the current Codex work surface. Saved settings contain semantic zone names rather than screen pixels, so resizing or moving the window does not corrupt a layout. The title-bar slot and the lower workspace-top slot are separate targets. `composer-bottom` follows the painted rounded composer shell and paints immediately after its outside bottom edge, not after a transparent inner editor wrapper.
+Quick exposes placement as one small map of the current Codex work surface. The four quota targets and two line targets are selected directly on that map; unavailable host targets are visibly disabled. Saved settings contain semantic zone names rather than screen pixels, so resizing or moving the window does not corrupt a layout. The title-bar slot and the lower workspace-top slot are separate targets. `composer-center` sits above the composer instead of inside its editable area. `composer-bottom` follows the painted rounded composer shell and paints immediately after its outside bottom edge, not after a transparent inner editor wrapper.
 
-Quota modules move as one stable group in the first 2.x beta. Their DOM nodes are updated in place, so live quota refreshes do not reset a drag. While Quick or Customize is open, every enabled remote surface shows the same module frames and supports the same direct reorder gesture. Holding the moved module group opens or closes QuotaPin, and the editor is anchored beside that real group instead of returning to the lower-left account row. A short press there is not replayed into a distant Codex control. The native account row remains the fallback and keeps its normal short-click menu contract.
+Quota modules move as one stable semantic surface in the 2.x beta. Their DOM nodes are updated in place, so live quota refreshes do not reset a drag. The whole visible surface owns the hold target, including its empty padding; the old account row no longer keeps a hidden QuotaPin hold target after quota moves elsewhere. While Quick or Customize is open, every enabled position uses the same anchors, pointer-following drag, collision solver, magnetic targets, and editing frames as the account row. The editor anchors beside that real surface instead of returning to the lower-left account row. A short press there is not replayed into a distant Codex control. The native account row remains the fallback and keeps its normal short-click menu contract.
 
 Each non-account zone is derived from current host geometry and is enabled only when a unique, painted safe slot exists. If the composer is absent, the window is too narrow, or Codex changes a surface that cannot be identified unambiguously, `fallback` returns the quota group to `account-row`. The quota rail is independent and may remain under the account row or span the verified bottom edge of the composer.
 
@@ -210,10 +218,12 @@ Code templates accept:
 - `{seconds}` — precise time until reset as accumulated `HH:MM:SS`;
 - `{date}` — localized reset date;
 - `{reset}` — localized reset weekday and time.
+- `{pace}` — recent official account-wide burn rate, such as `1.8%/h`;
+- `{runway}` — recent estimated runway, such as `≈2d 4h`.
 
 In `template` mode, `showValue` controls the combined result and `showDot` remains independent. The other time/label modules are not duplicated alongside the template.
 
-The built-in hover is intentionally fuller than the inline row: it lists every ordinary quota period with remaining percentage, compact time to reset, localized reset date, and localized weekday/time. It then includes exact, grouped token counts for this device today and the account lifetime total when those sources are available; inline token modules remain compact. A custom quota `hoverTemplate` remains fully user-controlled without suppressing the token details.
+The built-in hover is intentionally fuller than the inline row: it lists every ordinary quota period with remaining percentage, compact time to reset, localized reset date, and localized weekday/time. Once calibrated, it also includes the recent official account-wide burn pace and estimated runway. It then includes exact, grouped token counts for this device today and the account lifetime total when those sources are available; inline modules remain compact. A custom quota `hoverTemplate` remains fully user-controlled without suppressing the token details.
 
 ## Recovery
 
@@ -250,7 +260,7 @@ The version control in the editor reads the official GitHub release list. After 
 
 Only compatible, immutable releases with an exact public package set are eligible. Historical Windows-only releases may contain one correctly named executable; cross-platform releases contain that Windows executable plus one correctly named universal macOS disk image. Any duplicate, renamed, or additional asset is rejected. The user must select a version and confirm before installation begins. Panel and tray both hand the operation to the same updater, which resumes interrupted downloads, checks GitHub's asset digest and platform package identity, preserves the current setup/command ownership, configuration, and launch preference, and then uses the same package as Quick Start. Its receipt moves through preparation, download, verification, installation, and reconnection, so a replaced Agent or tray can recover the real outcome instead of reporting success from process presence alone. It never closes or launches Codex: it may reattach only to the exact loopback runtime receipt from the current session; otherwise the new version waits for the next normal Codex launch. A version absent from the picker is not treated as compatible.
 
-The remote bootstrap without `-Version` resolves GitHub's immutable latest stable release. Supplying an exact published stable version permits a repair or compatible rollback. Reinstalling the same version follows the same transactional replacement path and does not reset configuration.
+The remote bootstrap without `-Version` resolves GitHub's immutable latest stable release. Supplying an exact reviewed stable or beta version permits an explicit install, repair, or compatible rollback. A beta never appears in the normal in-product update feed, even for a user already running a beta; moving between betas remains an intentional exact-version install. Reinstalling the same version follows the same transactional replacement path and does not reset configuration.
 
 ```powershell
 & ([scriptblock]::Create((irm https://raw.githubusercontent.com/WSL043/QuotaPin-for-Codex/main/install.ps1))) -Version '1.2.1'

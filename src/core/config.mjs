@@ -4,7 +4,7 @@ import { DEFAULT_PLACEMENT, sanitizePlacement } from "./placement.mjs";
 
 export const MAX_PROFILES = 8;
 export const WINDOW_SELECTIONS = ["auto", "shortest", "longest", "all"];
-export const LAYOUT_MODULES = ["avatar", "name", "value", "label", "dot", "countdown", "relative", "seconds", "date", "reset", "todayTokens", "lifetimeTokens"];
+export const LAYOUT_MODULES = ["avatar", "name", "value", "pace", "runway", "label", "dot", "countdown", "relative", "seconds", "date", "reset", "todayTokens", "lifetimeTokens"];
 export const DEFAULT_MODULE_ORDER = [...LAYOUT_MODULES];
 export const LAYOUT_MODES = ["auto", "free"];
 export const SNAP_TARGETS = ["edges", "center", "modules"];
@@ -23,13 +23,15 @@ export const SUPPORTED_LOCALES = ["en", "zh-CN", "ja"];
 export const PANEL_THEMES = ["dark", "light"];
 export const ACCOUNT_ROW_MODES = ["legacy", "beta"];
 export const BAR_SCOPES = ["quota", "row"];
-export const CURRENT_CONFIG_VERSION = 18;
+export const CURRENT_CONFIG_VERSION = 19;
 
 export const DEFAULT_MODULE_ANCHORS = Object.freeze({
   avatar: 0.04,
   name: 0.04,
   dot: 0.96,
   value: 0.96,
+  pace: 0.96,
+  runway: 0.96,
   todayTokens: 0.96,
   lifetimeTokens: 0.96,
   label: 0.96,
@@ -40,13 +42,14 @@ export const DEFAULT_MODULE_ANCHORS = Object.freeze({
   reset: 0.96,
 });
 const PREVIOUS_DEFAULT_MODULE_ANCHORS = Object.freeze({
-  avatar: 0.04, name: 0.18, dot: 0.96, value: 0.96, todayTokens: 0.96, lifetimeTokens: 0.96, label: 0.96,
+  avatar: 0.04, name: 0.18, dot: 0.96, value: 0.96, pace: 0.96, runway: 0.96, todayTokens: 0.96, lifetimeTokens: 0.96, label: 0.96,
   countdown: 0.96, relative: 0.96, seconds: 0.96, date: 0.96, reset: 0.96,
 });
-const VERSION_12_DEFAULT_MODULE_ORDER = ["avatar", "name", "dot", "value", "todayTokens", "lifetimeTokens", "label", "countdown", "relative", "seconds", "date", "reset"];
-const LEGACY_AUTO_MODULE_ORDER = ["avatar", "name", "dot", "value", "todayTokens", "lifetimeTokens", "label", "countdown", "relative", "seconds", "date", "reset"];
+const VERSION_12_DEFAULT_MODULE_ORDER = ["avatar", "name", "dot", "value", "pace", "runway", "todayTokens", "lifetimeTokens", "label", "countdown", "relative", "seconds", "date", "reset"];
+const VERSION_18_LAYOUT_MODULES = ["avatar", "name", "value", "label", "dot", "countdown", "relative", "seconds", "date", "reset", "todayTokens", "lifetimeTokens"];
+const LEGACY_AUTO_MODULE_ORDER = ["avatar", "name", "dot", "value", "pace", "runway", "todayTokens", "lifetimeTokens", "label", "countdown", "relative", "seconds", "date", "reset"];
 const LEGACY_AUTO_MODULE_ANCHORS = Object.freeze({
-  avatar: 0.06, name: 0.29, dot: 0.50, value: 0.59, todayTokens: 0.59, lifetimeTokens: 0.59, label: 0.69,
+  avatar: 0.06, name: 0.29, dot: 0.50, value: 0.59, pace: 0.59, runway: 0.59, todayTokens: 0.59, lifetimeTokens: 0.59, label: 0.69,
   countdown: 0.75, relative: 0.96, seconds: 0.83, date: 0.89, reset: 0.95,
 });
 
@@ -78,6 +81,8 @@ const DEFAULT_PROFILES = [
     showReset: false,
     showTodayTokens: false,
     showLifetimeTokens: false,
+    showPace: false,
+    showRunway: false,
     placement: DEFAULT_PLACEMENT,
     valueColor: "severity",
     dotColor: "severity",
@@ -114,6 +119,8 @@ const DEFAULT_PROFILES = [
     showReset: false,
     showTodayTokens: false,
     showLifetimeTokens: false,
+    showPace: false,
+    showRunway: false,
     placement: DEFAULT_PLACEMENT,
     valueColor: "severity",
     dotColor: "severity",
@@ -150,6 +157,8 @@ const DEFAULT_PROFILES = [
     showReset: true,
     showTodayTokens: false,
     showLifetimeTokens: false,
+    showPace: false,
+    showRunway: false,
     placement: DEFAULT_PLACEMENT,
     valueColor: "severity",
     dotColor: "severity",
@@ -193,7 +202,7 @@ export const DEFAULT_CONFIG = Object.freeze({
 
 const clone = (value) => JSON.parse(JSON.stringify(value));
 const isHexColor = (value) => /^#[0-9a-f]{6}$/i.test(String(value));
-const QUOTA_MODULES = ["dot", "value", "todayTokens", "lifetimeTokens", "label", "countdown", "relative", "seconds", "date", "reset"];
+const QUOTA_MODULES = ["dot", "value", "pace", "runway", "todayTokens", "lifetimeTokens", "label", "countdown", "relative", "seconds", "date", "reset"];
 const VERSION_11_LAYOUT_MODULES = ["avatar", "name", "dot", "value", "label", "countdown", "relative", "seconds", "date", "reset"];
 const VERSION_9_LAYOUT_MODULES = ["avatar", "name", "dot", "value", "label", "countdown", "seconds", "date", "reset"];
 const VERSION_6_LAYOUT_MODULES = ["avatar", "name", "dot", "value", "label", "countdown", "reset"];
@@ -293,6 +302,20 @@ function expandVersion11ModuleOrder(value) {
   return expanded;
 }
 
+function expandVersion18ModuleOrder(value) {
+  const order = Array.isArray(value) ? value.map(String) : [];
+  if (order.length !== VERSION_18_LAYOUT_MODULES.length
+    || new Set(order).size !== VERSION_18_LAYOUT_MODULES.length
+    || !VERSION_18_LAYOUT_MODULES.every((module) => order.includes(module))) return null;
+  const expanded = [...order];
+  expanded.splice(expanded.indexOf("value") + 1, 0, "pace", "runway");
+  return expanded;
+}
+
+function withForecastModules(order) {
+  return expandVersion18ModuleOrder(order) ?? order;
+}
+
 function withProfileUsageModules(order) {
   return expandVersion11ModuleOrder(order) ?? order;
 }
@@ -300,22 +323,25 @@ function withProfileUsageModules(order) {
 function cleanModuleOrder(value, fallback, legacySource) {
   const order = Array.isArray(value) ? value.map(String) : [];
   if (order.length === LAYOUT_MODULES.length && new Set(order).size === LAYOUT_MODULES.length && LAYOUT_MODULES.every((module) => order.includes(module))) return order;
+  const version18Upgraded = expandVersion18ModuleOrder(order);
+  if (version18Upgraded) return version18Upgraded;
   const version11Upgraded = expandVersion11ModuleOrder(order);
-  if (version11Upgraded) return version11Upgraded;
+  if (version11Upgraded) return withForecastModules(version11Upgraded);
   const version9Upgraded = expandVersion9ModuleOrder(order);
-  if (version9Upgraded) return withProfileUsageModules(version9Upgraded);
+  if (version9Upgraded) return withForecastModules(withProfileUsageModules(version9Upgraded));
   const previewUpgraded = expandVersion7PreviewModuleOrder(order);
-  if (previewUpgraded) return withProfileUsageModules(previewUpgraded);
+  if (previewUpgraded) return withForecastModules(withProfileUsageModules(previewUpgraded));
   const upgraded = expandVersion6ModuleOrder(order);
-  if (upgraded) return withProfileUsageModules(upgraded);
+  if (upgraded) return withForecastModules(withProfileUsageModules(upgraded));
   const expanded = expandLegacyModuleOrder(order);
-  if (expanded) return expanded;
-  if (legacySource && LEGACY_BADGE_POSITIONS.includes(legacySource.position)) return legacyModuleOrder(legacySource);
-  return expandVersion11ModuleOrder(fallback)
-    ?? withProfileUsageModules(expandVersion9ModuleOrder(fallback))
-    ?? withProfileUsageModules(expandVersion7PreviewModuleOrder(fallback))
-    ?? withProfileUsageModules(expandVersion6ModuleOrder(fallback))
-    ?? expandLegacyModuleOrder(fallback)
+  if (expanded) return withForecastModules(expanded);
+  if (legacySource && LEGACY_BADGE_POSITIONS.includes(legacySource.position)) return withForecastModules(legacyModuleOrder(legacySource));
+  return expandVersion18ModuleOrder(fallback)
+    ?? withForecastModules(expandVersion11ModuleOrder(fallback))
+    ?? withForecastModules(withProfileUsageModules(expandVersion9ModuleOrder(fallback)))
+    ?? withForecastModules(withProfileUsageModules(expandVersion7PreviewModuleOrder(fallback)))
+    ?? withForecastModules(withProfileUsageModules(expandVersion6ModuleOrder(fallback)))
+    ?? withForecastModules(expandLegacyModuleOrder(fallback))
     ?? (Array.isArray(fallback) ? [...fallback] : [...LAYOUT_MODULES]);
 }
 
@@ -382,6 +408,8 @@ function displaySettings(source, base, sourceVersion) {
     showSeconds: template.includes("{seconds}"),
     showDate: template.includes("{date}"),
     showReset: template.includes("{reset}"),
+    showPace: template.includes("{pace}"),
+    showRunway: template.includes("{runway}"),
   };
   return {
     template,
@@ -394,6 +422,8 @@ function displaySettings(source, base, sourceVersion) {
     showReset: typeof source.showReset === "boolean" ? source.showReset : tokenDefaults.showReset,
     showTodayTokens: typeof source.showTodayTokens === "boolean" ? source.showTodayTokens : false,
     showLifetimeTokens: typeof source.showLifetimeTokens === "boolean" ? source.showLifetimeTokens : false,
+    showPace: typeof source.showPace === "boolean" ? source.showPace : false,
+    showRunway: typeof source.showRunway === "boolean" ? source.showRunway : false,
   };
 }
 
@@ -490,6 +520,8 @@ function sanitizeProfile(input, fallback, index, usedIds, sourceVersion) {
     showReset: display.showReset,
     showTodayTokens: display.showTodayTokens,
     showLifetimeTokens: display.showLifetimeTokens,
+    showPace: display.showPace,
+    showRunway: display.showRunway,
     placement,
     valueColor: cleanColorMode(source.valueColor, VALUE_COLOR_MODES, base.valueColor ?? "severity"),
     dotColor: cleanColorMode(source.dotColor, DOT_COLOR_MODES, base.dotColor ?? "severity"),

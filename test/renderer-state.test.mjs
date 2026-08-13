@@ -8,10 +8,10 @@ import { createI18nToolkit } from "../src/renderer/i18n-state.mjs";
 import { createCommandStateToolkit } from "../src/renderer/command-state.mjs";
 import { createColorStateToolkit } from "../src/renderer/color-state.mjs";
 
-const moduleOrder = ["avatar", "name", "value", "label", "dot", "countdown", "relative", "seconds", "date", "reset", "todayTokens", "lifetimeTokens"];
-const moduleWidths = { avatar: 18, name: 55, dot: 7, value: 34, todayTokens: 48, lifetimeTokens: 48, label: 22, countdown: 44, relative: 58, seconds: 66, date: 42, reset: 58 };
-const moduleMinimumWidths = { avatar: 18, name: 24, dot: 7, value: 26, todayTokens: 42, lifetimeTokens: 42, label: 14, countdown: 28, relative: 36, seconds: 38, date: 28, reset: 34 };
-const moduleShrinkPriorities = { name: 0, label: 10, countdown: 11, relative: 12, seconds: 13, date: 14, reset: 15, todayTokens: 16, lifetimeTokens: 17, value: 20, avatar: 100, dot: 100 };
+const moduleOrder = ["avatar", "name", "value", "pace", "runway", "label", "dot", "countdown", "relative", "seconds", "date", "reset", "todayTokens", "lifetimeTokens"];
+const moduleWidths = { avatar: 18, name: 55, dot: 7, value: 34, pace: 46, runway: 54, todayTokens: 48, lifetimeTokens: 48, label: 22, countdown: 44, relative: 58, seconds: 66, date: 42, reset: 58 };
+const moduleMinimumWidths = { avatar: 18, name: 24, dot: 7, value: 26, pace: 36, runway: 38, todayTokens: 42, lifetimeTokens: 42, label: 14, countdown: 28, relative: 36, seconds: 38, date: 28, reset: 34 };
+const moduleShrinkPriorities = { name: 0, label: 10, countdown: 11, relative: 12, seconds: 13, date: 14, pace: 15, runway: 16, reset: 17, todayTokens: 18, lifetimeTokens: 19, value: 20, avatar: 100, dot: 100 };
 const optionalContract = JSON.parse(Buffer.from("eyJzZWN0aW9uIjoiZXhwZXJpbWVudHMiLCJlbmFibGVkIjoib3ZlcmRyaXZlRWdnIiwicGVyc2lzdGVudCI6Im92ZXJkcml2ZUFsd2F5cyIsImVmZmVjdCI6Im92ZXJkcml2ZUVmZmVjdCIsInZhcmlhbnQiOiJtZW51RmlyZSIsImZhbGxiYWNrIjoicmFuZG9tIn0=", "base64").toString("utf8"));
 
 function orderForMagneticTarget(toolkit, order, module, snap, rects = {}) {
@@ -191,8 +191,8 @@ test("layout state gives insertion and keyboard movement one canonical order", (
   const toolkit = createLayoutStateToolkit();
   const rects = Object.fromEntries(moduleOrder.map((module, index) => [module, { left: index * 20, width: 16 }]));
   assert.deepEqual(toolkit.modules, moduleOrder);
-  assert.deepEqual(toolkit.orderForPointer(moduleOrder, "reset", 0, rects), ["reset", "avatar", "name", "value", "label", "dot", "countdown", "relative", "seconds", "date", "todayTokens", "lifetimeTokens"]);
-  assert.deepEqual(toolkit.moveModuleByKey(moduleOrder, "value", "left"), ["avatar", "value", "name", "label", "dot", "countdown", "relative", "seconds", "date", "reset", "todayTokens", "lifetimeTokens"]);
+  assert.deepEqual(toolkit.orderForPointer(moduleOrder, "reset", 0, rects), ["reset", "avatar", "name", "value", "pace", "runway", "label", "dot", "countdown", "relative", "seconds", "date", "todayTokens", "lifetimeTokens"]);
+  assert.deepEqual(toolkit.moveModuleByKey(moduleOrder, "value", "left"), ["avatar", "value", "name", "pace", "runway", "label", "dot", "countdown", "relative", "seconds", "date", "reset", "todayTokens", "lifetimeTokens"]);
 });
 
 test("smart layout reduces arbitrary fractions to stable left, center, and right docks", () => {
@@ -424,7 +424,7 @@ test("every neighbour magnet survives insertion and final ordered solving", () =
       }
     }
   }
-  assert.equal(cases, 3960);
+  assert.equal(cases, 5 * moduleOrder.length * (moduleOrder.length - 1) * 3 * 2);
 });
 
 test("pointer ordering rearranges only visible modules and preserves hidden-module order", () => {
@@ -455,7 +455,7 @@ test("pointer ordering rearranges only visible modules and preserves hidden-modu
       }
     }
   }
-  assert.equal(cases, 159732);
+  assert.equal(cases, moduleOrder.length * (moduleOrder.length + 1) * (2 ** (moduleOrder.length - 2)) - moduleOrder.length);
 });
 
 test("edge magnets outrank coincident neighbour magnets throughout a full layout", () => {
@@ -500,7 +500,7 @@ test("edge magnets outrank coincident neighbour magnets throughout a full layout
       }
     }
   }
-  assert.equal(cases, 120);
+  assert.equal(cases, 5 * moduleOrder.length * 2);
 
   const bounds = { left: 0, right: 200 };
   assert.equal(

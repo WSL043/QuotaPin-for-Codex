@@ -13,9 +13,7 @@ test("placement configuration stays semantic and falls back only to the account 
     "account-row",
     "title-center",
     "workspace-top-center",
-    "workspace-bottom-start",
     "composer-center",
-    "workspace-bottom-end",
   ]);
   assert.deepEqual(PLACEMENT_RAIL_ZONES, ["account-row", "composer-bottom"]);
   assert.deepEqual(sanitizePlacement({}), DEFAULT_PLACEMENT);
@@ -25,9 +23,10 @@ test("placement configuration stays semantic and falls back only to the account 
     rail: "composer-bottom",
   });
   assert.deepEqual(sanitizePlacement({ primary: "screen-pixel", rail: "anywhere" }), DEFAULT_PLACEMENT);
+  assert.deepEqual(sanitizePlacement({ primary: "workspace-bottom-start", rail: "account-row" }), DEFAULT_PLACEMENT);
 });
 
-test("placement geometry exposes real gaps and rejects narrow side slots", () => {
+test("placement geometry exposes only proven centered surfaces", () => {
   const placement = createPlacementToolkit();
   const geometry = placement.computePlacementGeometry({
     viewport: { width: 1360, height: 864 },
@@ -44,9 +43,9 @@ test("placement geometry exposes real gaps and rejects narrow side slots", () =>
   });
   assert.equal(geometry.zones["title-center"].available, true);
   assert.equal(geometry.zones["workspace-top-center"].available, true);
-  assert.equal(geometry.zones["workspace-bottom-start"].available, true);
   assert.equal(geometry.zones["composer-center"].available, true);
-  assert.equal(geometry.zones["workspace-bottom-end"].available, true);
+  assert.equal(Object.hasOwn(geometry.zones, "workspace-bottom-start"), false);
+  assert.equal(Object.hasOwn(geometry.zones, "workspace-bottom-end"), false);
   assert.equal(geometry.rails["composer-bottom"].available, true);
   assert.ok(geometry.zones["workspace-top-center"].rect.top > geometry.zones["title-center"].rect.bottom);
   assert.equal(geometry.zones["workspace-top-center"].rect.top, 42);
@@ -64,8 +63,8 @@ test("placement geometry exposes real gaps and rejects narrow side slots", () =>
       { left: 560, top: 654, width: 174, height: 30 },
     ],
   });
-  assert.equal(narrow.zones["workspace-bottom-start"].available, false);
-  assert.equal(narrow.zones["workspace-bottom-end"].available, false);
+  assert.equal(Object.hasOwn(narrow.zones, "workspace-bottom-start"), false);
+  assert.equal(Object.hasOwn(narrow.zones, "workspace-bottom-end"), false);
   assert.equal(placement.resolvePrimaryZone({ primary: "workspace-bottom-end" }, narrow), "account-row");
   assert.equal(placement.resolveRailZone({ rail: "composer-bottom" }, narrow), "composer-bottom");
 });

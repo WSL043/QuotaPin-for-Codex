@@ -49,7 +49,7 @@ QuotaPin 做的事情很简单：把真正有用的信息留在账户栏里。�
 
 当前稳定版：**v1.2.1**。
 
-2.x Beta 线：**v2.0.0-beta.1**。它用于推进多位置显示；完成 Beta 验收前，不会替换 Latest 稳定版。
+2.x Beta 线：**v2.0.0-beta.2**。它用于推进多位置显示和账户级额度趋势；完成 Beta 验收前，不会替换 Latest 稳定版。
 
 | 平台 | 当前状态 |
 |---|---|
@@ -119,6 +119,7 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\install.ps1
 下面这些模块都可以单独显示、隐藏和排序：
 
 - 剩余百分比；
+- 根据官方剩余百分比变化计算的近期账户消耗速度与预计可用时间；
 - 状态圆点，以及跟随额度模块或横跨账户栏的额度线；
 - 剩余时间和秒级倒计时；
 - 重置日期和重置时间；
@@ -132,6 +133,8 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\install.ps1
 ## 不替换 Codex 原来的账户菜单
 
 短按账户栏，一切和原来的 Codex 一样；长按同一行才会打开 QuotaPin。再次按下或点击面板外即可关闭。原有帮助按钮、头像、账户名和账户菜单都保留。
+
+在 2.x 多位置 Beta 中，长按区域会跟着实际显示位置移动：标题栏中央、工作区顶部、输入框上方和账户栏都使用同一套长按、拖动、碰撞让位和对齐逻辑。效果不稳定的输入框左右位置已删除，不再留下“看得到却点不到”的区域。
 
 <p align="center">
   <img src="assets/screenshots/drag-layout.gif" width="405" alt="拖动 QuotaPin 模块到左侧、右侧和中间时，旁边模块自动让位">

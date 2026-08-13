@@ -73,10 +73,10 @@ test("the update surface uses complete versions, explicit intents, and inline co
   assert.doesNotMatch(updateSource, /\bconfirm\(/);
 });
 
-test("the account row exposes twelve independently ordered modules", () => {
-  assert.deepEqual(createLayoutStateToolkit().modules, ["avatar", "name", "value", "label", "dot", "countdown", "relative", "seconds", "date", "reset", "todayTokens", "lifetimeTokens"]);
+test("the account row exposes fourteen independently ordered modules", () => {
+  assert.deepEqual(createLayoutStateToolkit().modules, ["avatar", "name", "value", "pace", "runway", "label", "dot", "countdown", "relative", "seconds", "date", "reset", "todayTokens", "lifetimeTokens"]);
   assert.match(renderer, /badge\.style\.display = options\.primaryRemote === true \? "none" : "contents"/);
-  assert.match(renderer, /\["dot", "value", "todayTokens", "lifetimeTokens", "label", "countdown", "relative", "seconds", "date", "reset"\]\.map/);
+  assert.match(renderer, /\["dot", "value", "pace", "runway", "todayTokens", "lifetimeTokens", "label", "countdown", "relative", "seconds", "date", "reset"\]\.map/);
   assert.match(renderer, /solveFreeLayout/);
   assert.match(renderer, /moduleAnchors/);
   assert.match(renderer, /getComputedStyle\(row\)\.position === "static"/);
@@ -232,7 +232,7 @@ test("Quick, Customize, and Code keep one coherent settings chain without duplic
   assert.match(renderer, /accountGroup\.section\.dataset\.settingsScope = "global"/);
   assert.match(renderer, /detailGroup\.section\.dataset\.settingsScope = "profile"/);
   assert.match(renderer, /syncAlertDependencies/);
-  assert.match(renderer, /configuration-json-schema-18/);
+  assert.match(renderer, /configuration-json-schema-19/);
   assert.doesNotMatch(renderer, /configuration-json-schema-15/);
 });
 

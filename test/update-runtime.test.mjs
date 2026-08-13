@@ -37,7 +37,7 @@ const release = (version, options = {}) => {
   return value;
 };
 
-const fixtureRuntime = (options) => new UpdateRuntime({ minimumSafeVersion: FIXTURE_MINIMUM_SAFE_VERSION, ...options });
+const fixtureRuntime = (options) => new UpdateRuntime({ minimumSafeVersion: FIXTURE_MINIMUM_SAFE_VERSION, releaseChannel: "preview", ...options });
 const windowsRuntime = (options) => fixtureRuntime({ platform: "win32", pathImpl: path.win32, ...options });
 
 test("semantic versions compare stable and prerelease identifiers", () => {
@@ -50,7 +50,7 @@ test("semantic versions compare stable and prerelease identifiers", () => {
   assert.equal(updateDirection("0.3.0-alpha.25", "0.3.0-alpha.26"), "rollback");
 });
 
-test("release normalization requires the command-install assets and respects stable channels", () => {
+test("release normalization requires trusted assets and keeps every update feed stable-only", () => {
   const incomplete = release("0.4.0");
   incomplete.assets.pop();
   const mislabeledPrerelease = { ...release("0.4.0-beta.1"), prerelease: false };
@@ -59,11 +59,16 @@ test("release normalization requires the command-install assets and respects sta
   delete missingImmutable.immutable;
   const payload = [release("0.3.0-alpha.26"), mutable, missingImmutable, mislabeledPrerelease, release("0.3.0-alpha.24"), release("0.3.0"), release("0.2.9"), incomplete, { ...release("9.0.0"), draft: true }];
   assert.equal(MINIMUM_SAFE_VERSION, "1.2.0");
-  assert.deepEqual(normalizeReleases(payload, "0.3.0-alpha.25", FIXTURE_MINIMUM_SAFE_VERSION, "darwin").map((item) => item.version), ["0.3.0", "0.3.0-alpha.26"]);
+  assert.deepEqual(normalizeReleases(payload, "0.3.0-alpha.25", FIXTURE_MINIMUM_SAFE_VERSION, "darwin").map((item) => item.version), ["0.3.0"]);
   assert.deepEqual(normalizeReleases(payload, "0.3.0", FIXTURE_MINIMUM_SAFE_VERSION, "darwin").map((item) => item.version), ["0.3.0"]);
   assert.deepEqual(normalizeReleases([release("1.0.2", { windowsOnly: true })], "1.0.3", FIXTURE_MINIMUM_SAFE_VERSION, "win32").map((item) => item.version), ["1.0.2"]);
   assert.deepEqual(normalizeReleases([release("1.0.2", { windowsOnly: true })], "1.0.3", FIXTURE_MINIMUM_SAFE_VERSION, "darwin"), []);
   assert.deepEqual(normalizeReleases([release("1.2.0"), release("1.1.2")], "1.2.0", MINIMUM_SAFE_VERSION, "win32").map((item) => item.version), ["1.2.0"]);
+});
+
+test("a preview Agent never discovers another preview through the update feed", () => {
+  const payload = [release("2.0.0-beta.2"), release("2.0.0-beta.1"), release("1.2.1")];
+  assert.deepEqual(normalizeReleases(payload, "2.0.0-beta.1", MINIMUM_SAFE_VERSION, "darwin").map((item) => item.version), ["1.2.1"]);
 });
 
 test("release normalization rejects missing, renamed, or extra public assets", () => {
@@ -74,7 +79,7 @@ test("release normalization rejects missing, renamed, or extra public assets", (
   const extra = release("0.3.0-alpha.26");
   extra.assets.push({ name: "internal.zip" });
   for (const [label, candidate] of [["missing", missing], ["renamed", renamed], ["extra", extra]]) {
-    assert.deepEqual(normalizeReleases([candidate], "0.3.0-alpha.25", FIXTURE_MINIMUM_SAFE_VERSION, "darwin"), [], label);
+    assert.deepEqual(normalizeReleases([candidate], "0.3.0-alpha.25", FIXTURE_MINIMUM_SAFE_VERSION, "darwin", "preview"), [], label);
   }
 });
 
@@ -90,7 +95,7 @@ test("release normalization exposes update, repair, and rollback direction", () 
     release("0.3.0-alpha.27"),
     release("0.3.0-alpha.26"),
     release("0.3.0-alpha.25"),
-  ], "0.3.0-alpha.26", FIXTURE_MINIMUM_SAFE_VERSION, "darwin");
+  ], "0.3.0-alpha.26", FIXTURE_MINIMUM_SAFE_VERSION, "darwin", "preview");
   assert.deepEqual(releases.map(({ version, direction }) => ({ version, direction })), [
     { version: "0.3.0-alpha.27", direction: "update" },
     { version: "0.3.0-alpha.26", direction: "repair" },
@@ -98,9 +103,9 @@ test("release normalization exposes update, repair, and rollback direction", () 
   ]);
   const missingImmutable = release("0.3.0-alpha.27");
   delete missingImmutable.immutable;
-  assert.deepEqual(normalizeReleases([missingImmutable], "0.3.0-alpha.26", FIXTURE_MINIMUM_SAFE_VERSION, "darwin"), [], "missing immutable metadata fails closed");
+  assert.deepEqual(normalizeReleases([missingImmutable], "0.3.0-alpha.26", FIXTURE_MINIMUM_SAFE_VERSION, "darwin", "preview"), [], "missing immutable metadata fails closed");
   for (const immutable of [false, null, "true", 1]) {
-    assert.deepEqual(normalizeReleases([release("0.3.0-alpha.27", { immutable })], "0.3.0-alpha.26", FIXTURE_MINIMUM_SAFE_VERSION, "darwin"), [], `immutable=${String(immutable)}`);
+    assert.deepEqual(normalizeReleases([release("0.3.0-alpha.27", { immutable })], "0.3.0-alpha.26", FIXTURE_MINIMUM_SAFE_VERSION, "darwin", "preview"), [], `immutable=${String(immutable)}`);
   }
 });
 

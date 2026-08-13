@@ -31,6 +31,10 @@ QuotaPin is divided by change boundary. The quota model, saved configuration, re
 
 The model contains only observed sources and windows. `rateLimitsByLimitId` becomes keyed `buckets`; the flattened `windows` list keeps formatting and layout source-agnostic. The legacy single `rateLimits` shape remains a fallback. `primary` and `secondary` are transport details, not product assumptions, and sparse updates merge into their matching bucket without deleting the others.
 
+### `QuotaPace`
+
+Quota pace is derived independently from the sequence of official `remainingPercent` observations for one `sourceId + windowDurationMins` key. The Agent persists only timestamp, remaining percentage, reset identity, and window identity in `quota-pace.json`; it does not use prompt content, token counts, model choice, cache pricing, or API prices. A reset-time change or a percentage increase starts a new epoch. At least three samples, 30 minutes, and one consumed percentage point are required before an exponentially recent-weighted regression yields `%/h` and estimated runway. Because the input is the account limit returned by Codex, use on another device is reflected at the next observation on this device.
+
 ### `DisplayPreferences`
 
 Configuration selects the global account-row mode, active saved view, returned-window selection, module or template display, hover content, layout, avatar mask, colors, thresholds, attention behavior, and UI locale.
@@ -38,7 +42,7 @@ Configuration selects the global account-row mode, active saved view, returned-w
 Layout stores one permutation of:
 
 ```js
-["avatar", "name", "value", "label", "dot", "countdown", "relative", "seconds", "date", "reset", "todayTokens", "lifetimeTokens"]
+["avatar", "name", "value", "pace", "runway", "label", "dot", "countdown", "relative", "seconds", "date", "reset", "todayTokens", "lifetimeTokens"]
 ```
 
 Visibility is separate from order and normalized horizontal anchors, so hiding a module does not erase its place. `avatarShape: "native"` removes QuotaPin's mask and lets Codex own the shape again; the visual editor also exposes rounded and square masks.
@@ -50,6 +54,8 @@ Visibility is separate from order and normalized horizontal anchors, so hiding a
   text: "42%",
   parts: {
     value: "42%",
+    pace: "1.8%/h",
+    runway: "≈2d 4h",
     label: "cycle",
     countdown: "4d 8h",
     relative: "4 days 8 hours",
@@ -115,7 +121,7 @@ Renderer installation has a separate per-Agent instance id in addition to the pu
 
 The account row has one canonical state renderer plus two bounded hot paths. Quota, settings, and profile changes use the complete renderer. Sidebar resize events are coalesced to at most one animation-frame commit and run only the horizontal solver; clock boundaries update only time-derived copy and invoke the same solver only when that copy changes width. Both hot paths refresh the canonical binding, layout signature, and committed plan, so the integrity observer still validates one result rather than competing with an alternate renderer. Unrelated Codex content mutations are ignored unless they touch the verified account host or replace the optional effect signal. This keeps streaming task output, sidebar dragging, and second-by-second countdowns from waking the full renderer.
 
-The quota bar is an auxiliary surface outside the twelve-module horizontal collision solver, so enabling it cannot push or resize account identity and quota text. Its default `quota` scope derives its left and right edges from the first and last visible quota module after each committed layout. Quick can instead choose `barScope: "row"`: Legacy spans the account button and stops before Codex Help, while Beta spans the expanded footer after Help is hidden. Both scopes use measured production rectangles, remain frame-bounded during resize and drag, and stay available in Code.
+The quota bar is an auxiliary surface outside the fourteen-module horizontal collision solver, so enabling it cannot push or resize account identity and quota text. Its default `quota` scope derives its left and right edges from the first and last visible quota module after each committed layout. Quick can instead choose `barScope: "row"`: Legacy spans the account button and stops before Codex Help, while Beta spans the expanded footer after Help is hidden. Both scopes use measured production rectangles, remain frame-bounded during resize and drag, and stay available in Code.
 
 The token counters deliberately use two sources with different freshness. `todayTokens` is computed by the Agent from numeric `token_count` events in local Codex JSONL sessions, so its scope is the current device rather than a cross-device account total. Startup backfill reads backwards only to the local day boundary with a fixed byte budget; subsequent passes inspect changed file tails. An unchanged scan updates internal file cursors without broadcasting another renderer document. Cumulative snapshots provide fork/replay deduplication and stale-regression checks, while message bodies are never parsed. Incomplete backfill is exposed as a lower bound. `lifetimeTokens` remains the settled account-wide total from the authenticated Codex renderer client. The renderer feature-detects that client, keeps the response in memory, and never sends authentication material or the profile payload to the Agent. A five-minute successful refresh interval, single-flight requests, an eight-second UI timeout, and one-minute failure backoff bound the profile integration; either source can fail closed independently. Inline modules use compact localized notation, while the shared hover surface uses exact grouped counts and is available even when those modules are hidden.
 
@@ -123,11 +129,11 @@ The token counters deliberately use two sources with different freshness. `today
 
 ## Gesture boundary
 
-The renderer owns gesture isolation at the Codex account boundary. Legacy scopes that boundary to the native account button. Beta first proves one bounded footer and one adjacent Help control, hides that control reversibly, expands the account button into the freed width, and scopes the same classifier to the complete footer. Pointer-down is captured before the host sees it. A short release is replayed to the native account trigger; a hold opens QuotaPin; movement cancels the hold. Pressing the row again closes the open panel. The invisible target remains available even when all QuotaPin modules are hidden. Ambiguous host chrome always falls back to Legacy. When the quota group uses a remote semantic placement, that real group becomes the hold and panel anchor surface. Its short release is intentionally local and is never replayed into the distant account button; the viewport-bounded panel selects the free side of the anchor and never covers it.
+The renderer owns gesture isolation at the Codex account boundary. Legacy scopes that boundary to the native account button. Beta first proves one bounded footer and one adjacent Help control, hides that control reversibly, expands the account button into the freed width, and scopes the same classifier to the complete footer. Pointer-down is captured before the host sees it. A short release is replayed to the native account trigger; a hold opens QuotaPin; movement cancels the hold. Pressing the row again closes the open panel. The invisible target remains available even when all QuotaPin modules are hidden. Ambiguous host chrome always falls back to Legacy. When quota uses a remote semantic placement, its complete painted slot—including empty padding—becomes the sole hold and panel-anchor surface; the old account row no longer retains a hidden QuotaPin hold target. A remote short release is intentionally local and is never replayed into the distant account button. The viewport-bounded panel selects the free side of that surface and never covers it.
 
 ## Layout boundary
 
-Quick exposes one smart horizontal drag model and always calculates vertical centering from the host row. In `auto`, a completed placement becomes stable left, intentional center, right, or neighbour gravity rather than an arbitrary percentage exposed by a later resize. Text width is re-measured from current glyph bounds rather than a previously painted solver width, and background refreshes never animate row geometry. Code may set `layoutMode` to `free` for literal normalized coordinates, change `snapThreshold`, or choose any subset of `snapTargets`; these expert controls stay out of the direct-manipulation surface. No module type is assigned a mandatory side. Remote placements keep the account row as the canonical host but render keyed derived nodes into one pointer-transparent placement layer. Only the visible module group accepts input; every remote zone shares the same framed edit state, canonical order transaction, and stable insertion thresholds, while fixed slot geometry never blocks the surrounding Codex surface.
+Quick exposes one smart horizontal drag model and always calculates vertical centering from the active semantic surface. In `auto`, a completed placement becomes stable left, intentional center, right, or neighbour gravity rather than an arbitrary percentage exposed by a later resize. Text width is re-measured from current glyph bounds rather than a previously painted solver width, and background refreshes never animate geometry. Code may set `layoutMode` to `free` for literal normalized coordinates, change `snapThreshold`, or choose any subset of `snapTargets`; these expert controls stay out of the direct-manipulation surface. No module type is assigned a mandatory side. Remote placements keep the account row as the canonical data host but render keyed derived nodes into one bounded placement layer. Account and remote surfaces run the same anchor model, collision solver, pointer-following pinned item, neighbour spring, and commit transaction. Fixed slot geometry never blocks the surrounding Codex surface outside the visible slot.
 
 Composer discovery distinguishes the painted rounded shell from transparent editable and scrolling wrappers. Semantic slots may use inner controls to find safe gaps, but `composer-bottom` is derived only from the visual shell's outside edge. If that shell is ambiguous or has no viewport space below it, the rail fails closed to the account-row surface.
 

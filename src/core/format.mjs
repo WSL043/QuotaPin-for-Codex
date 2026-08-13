@@ -105,12 +105,35 @@ export function formatResetTime(resetsAt, locale) {
   }).format(new Date(Number(resetsAt) * 1000));
 }
 
-function replaceTokens(template, windowState, now, locale) {
-  const values = quotaParts(windowState, now, locale);
-  return template.replace(/\{(label|remaining|countdown|relative|seconds|date|reset)\}/g, (_, token) => token === "remaining" ? values.remaining : values[token]);
+export function formatPacePerHour(value) {
+  const rate = Number(value);
+  if (!Number.isFinite(rate) || rate < 0.02) return "—";
+  const digits = rate < 10 ? 1 : 0;
+  return `${rate.toFixed(digits).replace(/\.0$/, "")}%/h`;
 }
 
-function quotaParts(windowState, now, locale) {
+function formatForecastDuration(seconds, locale, localized = false) {
+  const totalMinutes = Math.max(1, Math.ceil(Number(seconds) / 60));
+  if (!Number.isFinite(totalMinutes)) return "—";
+  const days = Math.floor(totalMinutes / 1440);
+  const hours = Math.floor((totalMinutes % 1440) / 60);
+  const minutes = totalMinutes % 60;
+  const compact = days ? `${days}d${hours ? ` ${hours}h` : ""}` : hours ? `${hours}h${minutes ? ` ${minutes}m` : ""}` : `${minutes}m`;
+  if (!localized) return compact;
+  const language = String(locale ?? "").toLowerCase();
+  if (language.startsWith("zh")) return days ? `${days}天${hours ? `${hours}小时` : ""}` : hours ? `${hours}小时${minutes ? `${minutes}分钟` : ""}` : `${minutes}分钟`;
+  if (language.startsWith("ja")) return days ? `${days}日${hours ? `${hours}時間` : ""}` : hours ? `${hours}時間${minutes ? `${minutes}分` : ""}` : `${minutes}分`;
+  return days ? `${days} day${days === 1 ? "" : "s"}${hours ? ` ${hours} hour${hours === 1 ? "" : "s"}` : ""}`
+    : hours ? `${hours} hour${hours === 1 ? "" : "s"}${minutes ? ` ${minutes} minute${minutes === 1 ? "" : "s"}` : ""}`
+      : `${minutes} minute${minutes === 1 ? "" : "s"}`;
+}
+
+function replaceTokens(template, windowState, now, locale, estimate = null) {
+  const values = quotaParts(windowState, now, locale, estimate);
+  return template.replace(/\{(label|remaining|countdown|relative|seconds|date|reset|pace|runway)\}/g, (_, token) => token === "remaining" ? values.remaining : values[token]);
+}
+
+function quotaParts(windowState, now, locale, estimate = null) {
   const remaining = String(clampPercent(windowState.remainingPercent));
   return {
     label: windowState.label,
@@ -123,11 +146,17 @@ function quotaParts(windowState, now, locale) {
     seconds: formatPreciseRemainingTime(windowState.resetsAt, now),
     date: formatResetDate(windowState.resetsAt, locale),
     reset: formatResetTime(windowState.resetsAt, locale),
+    pace: formatPacePerHour(estimate?.pacePerHour),
+    runway: estimate?.status === "ready"
+      ? `${estimate.survivesReset ? "≥" : "≈"}${formatForecastDuration(estimate.survivesReset
+        ? Math.max(60, Number(windowState.resetsAt) - now / 1000)
+        : estimate.runwaySeconds, locale)}`
+      : estimate?.status === "calibrating" ? "…" : "—",
   };
 }
 
-function runtimeWindow(windowState, now, locale) {
-  const parts = quotaParts(windowState, now, locale);
+function runtimeWindow(windowState, now, locale, estimate = null) {
+  const parts = quotaParts(windowState, now, locale, estimate);
   return {
     label: parts.label,
     sourceId: windowState.sourceId ?? "codex",
@@ -140,6 +169,8 @@ function runtimeWindow(windowState, now, locale) {
     resetsAt: Number(windowState.resetsAt),
     date: parts.date,
     reset: parts.reset,
+    pace: parts.pace,
+    runway: parts.runway,
   };
 }
 
@@ -154,6 +185,8 @@ function assembleModuleText(parts, profile) {
     reset: profile.showReset,
     todayTokens: profile.showTodayTokens,
     lifetimeTokens: profile.showLifetimeTokens,
+    pace: profile.showPace,
+    runway: profile.showRunway,
   };
   return profile.moduleOrder
     .filter((module) => enabled[module] === true)
@@ -175,7 +208,35 @@ function aggregateParts(partSets, separator, options = {}) {
     reset: partSets.map((parts) => parts.reset).join(separator),
     todayTokens: "—",
     lifetimeTokens: "—",
+    pace: partSets.map((parts) => parts.pace).join(separator),
+    runway: partSets.map((parts) => parts.runway).join(separator),
   };
+}
+
+function paceEstimateFor(windowState, paceWindows) {
+  const available = Array.isArray(paceWindows) ? paceWindows : [];
+  return available.find((estimate) => estimate.id === windowState.id)
+    ?? available.find((estimate) => estimate.sourceId === (windowState.sourceId ?? "codex")
+      && Number(estimate.windowDurationMins) === Number(windowState.windowDurationMins))
+    ?? null;
+}
+
+function localizedForecastTooltip(estimate, locale, now) {
+  if (estimate?.status !== "ready") return "";
+  const pace = formatPacePerHour(estimate.pacePerHour);
+  const language = String(locale ?? "").toLowerCase();
+  const runway = estimate.survivesReset && Number.isFinite(Number(estimate.resetsAt))
+    ? formatForecastDuration(Math.max(60, Number(estimate.resetsAt) - now / 1000), locale, true)
+    : formatForecastDuration(estimate.runwaySeconds, locale, true);
+  if (language.startsWith("zh")) return estimate.survivesReset
+    ? `平均消耗 ${pace} · 按当前速度可维持到本周期重置（至少 ${runway}）`
+    : `平均消耗 ${pace} · 预计可用 ${runway}`;
+  if (language.startsWith("ja")) return estimate.survivesReset
+    ? `平均消費 ${pace} · このペースならリセットまで持続（少なくとも ${runway}）`
+    : `平均消費 ${pace} · 使用可能見込み ${runway}`;
+  return estimate.survivesReset
+    ? `Average burn ${pace} · lasts through this reset (at least ${runway})`
+    : `Average burn ${pace} · estimated runway ${runway}`;
 }
 
 function resolveColor(mode, severity, palette, match) {
@@ -196,12 +257,13 @@ function resolveIdentityColor(mode, severity, palette, valueColor) {
 export function formatQuota(snapshot, config, now = Date.now(), locale) {
   const profile = activeProfile(config);
   const availableWindows = Array.isArray(snapshot?.windows) ? snapshot.windows : [];
+  const paceWindows = Array.isArray(snapshot?.quotaPace?.windows) ? snapshot.quotaPace.windows : [];
   const availableWindowCount = availableWindows.length;
   const selected = selectWindows(availableWindows, profile.window);
   if (!selected.length) {
     return {
       text: "--%",
-      parts: { label: "", value: "--%", todayTokens: "—", lifetimeTokens: "—", countdown: "--", relative: "--", seconds: "--:--:--", date: "--", reset: "--" },
+      parts: { label: "", value: "--%", pace: "…", runway: "…", todayTokens: "—", lifetimeTokens: "—", countdown: "--", relative: "--", seconds: "--:--:--", date: "--", reset: "--" },
       runtimeWindows: [],
       tooltipWindows: [],
       renderTemplate: profile.template,
@@ -225,6 +287,8 @@ export function formatQuota(snapshot, config, now = Date.now(), locale) {
       showReset: profile.showReset,
       showTodayTokens: profile.showTodayTokens,
       showLifetimeTokens: profile.showLifetimeTokens,
+      showPace: profile.showPace,
+      showRunway: profile.showRunway,
       displayMode: profile.displayMode,
       valueColor: "muted",
       dotColor: "muted",
@@ -255,10 +319,10 @@ export function formatQuota(snapshot, config, now = Date.now(), locale) {
   }
   const effectiveShowLabel = availableWindowCount > 1 && profile.showLabel === true;
   const renderProfile = profile.displayMode === "modules" ? { ...profile, showLabel: effectiveShowLabel } : profile;
-  const partSets = selected.map((item) => quotaParts(item, now, locale));
+  const partSets = selected.map((item) => quotaParts(item, now, locale, paceEstimateFor(item, paceWindows)));
   const text = selected.map((item, index) => {
     const rendered = profile.displayMode === "template"
-      ? replaceTokens(profile.template, item, now, locale)
+      ? replaceTokens(profile.template, item, now, locale, paceEstimateFor(item, paceWindows))
       : assembleModuleText(partSets[index], renderProfile);
     return rendered;
   }).join(profile.separator);
@@ -267,9 +331,13 @@ export function formatQuota(snapshot, config, now = Date.now(), locale) {
     ? localizedDefaultHover(locale, true)
     : profile.hoverTemplate;
   const tooltip = hoverTemplate
-    ? (usesDefaultHover ? availableWindows : selected).map((item) => replaceTokens(hoverTemplate, usesDefaultHover
-      ? { ...item, label: item.displayLabel ?? item.label }
-      : item, now, locale)).join("\n")
+    ? (usesDefaultHover ? availableWindows : selected).map((item) => {
+      const displayItem = usesDefaultHover ? { ...item, label: item.displayLabel ?? item.label } : item;
+      const estimate = paceEstimateFor(item, paceWindows);
+      const main = replaceTokens(hoverTemplate, displayItem, now, locale, estimate);
+      const forecast = usesDefaultHover ? localizedForecastTooltip(estimate, locale, now) : "";
+      return [main, forecast].filter(Boolean).join("\n");
+    }).join("\n")
     : "";
   const lowest = Math.min(...selected.map((item) => Number(item.remainingPercent)).filter(Number.isFinite));
   const severity = lowest <= config.thresholds.critical
@@ -284,11 +352,11 @@ export function formatQuota(snapshot, config, now = Date.now(), locale) {
   return {
     text,
     parts,
-    runtimeWindows: selected.map((item, index) => runtimeWindow({ ...item, label: partSets[index].label }, now, locale)),
+    runtimeWindows: selected.map((item, index) => runtimeWindow({ ...item, label: partSets[index].label }, now, locale, paceEstimateFor(item, paceWindows))),
     tooltipWindows: (usesDefaultHover ? availableWindows : selected).map((item) => runtimeWindow({
       ...item,
       label: usesDefaultHover ? (item.displayLabel ?? item.label) : item.label,
-    }, now, locale)),
+    }, now, locale, paceEstimateFor(item, paceWindows))),
     renderTemplate: profile.template,
     renderHoverTemplate: hoverTemplate,
     renderSeparator: profile.separator,
@@ -310,6 +378,8 @@ export function formatQuota(snapshot, config, now = Date.now(), locale) {
     showReset: profile.showReset,
     showTodayTokens: profile.showTodayTokens,
     showLifetimeTokens: profile.showLifetimeTokens,
+    showPace: profile.showPace,
+    showRunway: profile.showRunway,
     displayMode: profile.displayMode,
     valueColor,
     dotColor,

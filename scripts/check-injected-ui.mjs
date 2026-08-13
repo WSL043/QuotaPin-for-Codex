@@ -54,7 +54,7 @@ for (const placementBehavior of [
 ]) {
   if (!renderer.includes(placementBehavior)) throw new Error(`Missing semantic placement behavior: ${placementBehavior}`);
 }
-if (layoutToolkit.modules.join(",") !== "avatar,name,value,label,dot,countdown,relative,seconds,date,reset,todayTokens,lifetimeTokens") {
+if (layoutToolkit.modules.join(",") !== "avatar,name,value,pace,runway,label,dot,countdown,relative,seconds,date,reset,todayTokens,lifetimeTokens") {
   throw new Error("The canonical renderer layout module list is incomplete");
 }
 if (!renderer.includes('contentBody.append(quickGrid, visualGrid, codeGrid, arcadeWrap)')) {
@@ -74,6 +74,8 @@ if (renderer.includes('quickModule("Color"') || renderer.includes('quickModule("
 }
 for (const granularControl of [
   'toggleChip("Show value"',
+  'toggleChip("Show burn pace"',
+  'toggleChip("Show estimated runway"',
   'toggleChip("Show status dot"',
   'toggleChip("Show window label"',
   'toggleChip("Show compact countdown"',

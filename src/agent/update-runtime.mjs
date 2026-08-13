@@ -94,13 +94,16 @@ function releaseAssetsAreTrusted(assets, version, tag, platform) {
     && validReleaseAsset(byName.get(macName), macName, tag, MAC_PACKAGE_MAX_BYTES);
 }
 
-export function normalizeReleases(payload, currentVersion, minimumSafeVersion = MINIMUM_SAFE_VERSION, platform = process.platform) {
+export function normalizeReleases(payload, currentVersion, minimumSafeVersion = MINIMUM_SAFE_VERSION, platform = process.platform, releaseChannel = "stable") {
   const current = parseVersion(currentVersion);
   if (!current || !parseVersion(minimumSafeVersion) || !Array.isArray(payload)) return [];
-  const acceptsPrerelease = current.pre.length > 0;
+  const acceptsPrerelease = releaseChannel === "preview" && current.pre.length > 0;
   const releases = [];
   for (const item of payload) {
-    if (!item || item.draft === true || item.immutable !== true || (item.prerelease === true && !acceptsPrerelease)) continue;
+    // Preview builds are installed by explicit version only. They never enter
+    // the in-product update feed, even when the current Agent is itself a
+    // preview, so test cohorts cannot silently expand through update checks.
+    if (!item || item.draft === true || (item.prerelease === true && !acceptsPrerelease) || item.immutable !== true) continue;
     const tag = String(item.tag_name ?? "");
     if (!tag.startsWith("v")) continue;
     const parsed = parseVersion(tag.slice(1));
@@ -117,10 +120,10 @@ export function normalizeReleases(payload, currentVersion, minimumSafeVersion = 
     .slice(0, 12);
 }
 
-function normalizeCachedReleases(payload, currentVersion, minimumSafeVersion = MINIMUM_SAFE_VERSION) {
+function normalizeCachedReleases(payload, currentVersion, minimumSafeVersion = MINIMUM_SAFE_VERSION, releaseChannel = "stable") {
   const current = parseVersion(currentVersion);
   if (!current || !Array.isArray(payload)) return [];
-  const acceptsPrerelease = current.pre.length > 0;
+  const acceptsPrerelease = releaseChannel === "preview" && current.pre.length > 0;
   const releases = [];
   for (const item of payload) {
     const parsed = parseVersion(item?.version);
@@ -138,6 +141,7 @@ export class UpdateRuntime {
     this.currentVersion = String(options.currentVersion ?? "");
     this.minimumSafeVersion = String(options.minimumSafeVersion ?? MINIMUM_SAFE_VERSION);
     this.platform = String(options.platform ?? process.platform);
+    this.releaseChannel = options.releaseChannel === "preview" ? "preview" : "stable";
     this.pathImpl = options.pathImpl ?? (this.platform === "win32" ? path.win32 : path);
     this.installRoot = options.installRoot ? this.pathImpl.resolve(options.installRoot) : null;
     this.fetchImpl = options.fetchImpl ?? globalThis.fetch;
@@ -217,7 +221,7 @@ export class UpdateRuntime {
     if (cached?.schema !== 2 || cached.currentVersion !== this.currentVersion) return;
     const checkedAt = Number(cached?.checkedAt);
     if (!Number.isFinite(checkedAt) || checkedAt <= 0 || checkedAt > this.now() + CLOCK_SKEW_MS || !Array.isArray(cached?.releases)) return;
-    const releases = normalizeCachedReleases(cached.releases, this.currentVersion, this.minimumSafeVersion);
+    const releases = normalizeCachedReleases(cached.releases, this.currentVersion, this.minimumSafeVersion, this.releaseChannel);
     const latestVersion = releases[0]?.version ?? null;
     this.lastCheckedAt = checkedAt;
     this.state = {
@@ -412,7 +416,7 @@ export class UpdateRuntime {
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
         const releaseDocument = await readBoundedJsonResponse(response, { maximumBytes: 1024 * 1024 });
         if (!Array.isArray(releaseDocument) || releaseDocument.length > 20) throw new Error("Release response has an invalid shape");
-        const releases = normalizeReleases(releaseDocument, this.currentVersion, this.minimumSafeVersion, this.platform);
+        const releases = normalizeReleases(releaseDocument, this.currentVersion, this.minimumSafeVersion, this.platform, this.releaseChannel);
         const latest = releases[0]?.version ?? null;
         const available = latest && compareVersions(latest, this.currentVersion) === 1;
         this.lastCheckedAt = this.now();

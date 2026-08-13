@@ -1,5 +1,5 @@
 export function createLayoutStateToolkit() {
-  const modules = ["avatar", "name", "value", "label", "dot", "countdown", "relative", "seconds", "date", "reset", "todayTokens", "lifetimeTokens"];
+  const modules = ["avatar", "name", "value", "pace", "runway", "label", "dot", "countdown", "relative", "seconds", "date", "reset", "todayTokens", "lifetimeTokens"];
   const layoutModes = ["auto", "free"];
   const snapTargets = ["edges", "center", "modules"];
   const defaultAnchors = Object.freeze({
@@ -7,6 +7,8 @@ export function createLayoutStateToolkit() {
     name: 0.04,
     dot: 0.96,
     value: 0.96,
+    pace: 0.96,
+    runway: 0.96,
     todayTokens: 0.96,
     lifetimeTokens: 0.96,
     label: 0.96,
@@ -61,7 +63,7 @@ export function createLayoutStateToolkit() {
 
   function positionedModuleOverflow(module) {
     if (module === "avatar") return "hidden";
-    return ["name", "label", "countdown", "relative", "seconds", "date", "reset", "value", "todayTokens", "lifetimeTokens"].includes(module)
+    return ["name", "label", "countdown", "relative", "seconds", "date", "reset", "value", "pace", "runway", "todayTokens", "lifetimeTokens"].includes(module)
       ? "hidden"
       : "visible";
   }

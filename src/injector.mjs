@@ -8,6 +8,7 @@ import { UpdateRuntime } from "./agent/update-runtime.mjs";
 import { createLifecycleStateWriter } from "./agent/lifecycle-state.mjs";
 import { createAttachReadinessWriter } from "./agent/attach-readiness.mjs";
 import { LocalTokenUsageRuntime } from "./agent/local-token-usage.mjs";
+import { QuotaPaceRuntime } from "./agent/quota-pace-runtime.mjs";
 import { createSettingsStateToolkit } from "./renderer/settings-state.mjs";
 import { createLayoutStateToolkit } from "./renderer/layout-state.mjs";
 import { createGestureStateToolkit } from "./renderer/gesture-state.mjs";
@@ -98,7 +99,7 @@ const installScript = String.raw`(() => {
     isAccountRowGeometry
   } = rendererToolkits.layout();
   const defaultModuleOrder = [...layoutModules].sort((left, right) => defaultModuleAnchors[left] - defaultModuleAnchors[right]);
-  const textLayoutModules = new Set(["name", "value", "todayTokens", "lifetimeTokens", "label", "countdown", "relative", "seconds", "date", "reset"]);
+  const textLayoutModules = new Set(["name", "value", "pace", "runway", "todayTokens", "lifetimeTokens", "label", "countdown", "relative", "seconds", "date", "reset"]);
   const { createGestureState, reduceGestureState } = rendererToolkits.gesture();
   const {
     createEffectState, reduceEffectState, createEffectMonitorState,
@@ -133,11 +134,11 @@ const installScript = String.raw`(() => {
   try { previous?.cleanup?.(); } catch {}
 
   const badgeId = "quotapin-inline-badge";
-  let state = { status: "loading", view: { text: "--%", parts: { value: "--%", todayTokens: "—", lifetimeTokens: "—", label: "", countdown: "--", relative: "--", seconds: "--:--:--", date: "--", reset: "--" }, runtimeWindows: [], tooltipWindows: [], renderTemplate: "{remaining}%", renderHoverTemplate: "", renderSeparator: " · ", tooltip: "QuotaPin is loading", severity: "unavailable", profileId: "glance", availableWindowCount: 0, showValue: true, showDot: false, showBar: false, barScope: "quota", remainingPercent: null, showLabel: false, showCountdown: false, showRelative: false, showSeconds: false, showDate: false, showReset: false, showTodayTokens: false, showLifetimeTokens: false, displayMode: "modules", valueColor: "muted", dotColor: "muted", identityColor: "inherit", valueColorMode: "muted", dotColorMode: "muted", identityColorMode: "inherit", effect: "none", effectTarget: "dot", effectAt: "critical", overdriveEgg: false, overdriveAlways: false, overdriveEffect: "menuFire", accountRowMode: "legacy", layout: { moduleOrder: defaultModuleOrder, layoutMode: "auto", snapThreshold: 16, snapTargets: ["edges", "center", "modules"], moduleAnchors: defaultModuleAnchors, identity: "show", avatarShape: "native", fontSize: 14, barScope: "quota", placement: defaultPlacement } }, preferences: null };
+  let state = { status: "loading", view: { text: "--%", parts: { value: "--%", pace: "…", runway: "…", todayTokens: "—", lifetimeTokens: "—", label: "", countdown: "--", relative: "--", seconds: "--:--:--", date: "--", reset: "--" }, runtimeWindows: [], tooltipWindows: [], renderTemplate: "{remaining}%", renderHoverTemplate: "", renderSeparator: " · ", tooltip: "QuotaPin is loading", severity: "unavailable", profileId: "glance", availableWindowCount: 0, showValue: true, showDot: false, showBar: false, barScope: "quota", remainingPercent: null, showLabel: false, showCountdown: false, showRelative: false, showSeconds: false, showDate: false, showReset: false, showPace: false, showRunway: false, showTodayTokens: false, showLifetimeTokens: false, displayMode: "modules", valueColor: "muted", dotColor: "muted", identityColor: "inherit", valueColorMode: "muted", dotColorMode: "muted", identityColorMode: "inherit", effect: "none", effectTarget: "dot", effectAt: "critical", overdriveEgg: false, overdriveAlways: false, overdriveEffect: "menuFire", accountRowMode: "legacy", layout: { moduleOrder: defaultModuleOrder, layoutMode: "auto", snapThreshold: 16, snapTargets: ["edges", "center", "modules"], moduleAnchors: defaultModuleAnchors, identity: "show", avatarShape: "native", fontSize: 14, barScope: "quota", placement: defaultPlacement } }, preferences: null };
   const deliveryRuntime = { highestSequence: 0, accepted: 0, rejected: 0, presentationSkips: 0, lastReason: null, lastAcceptedAt: 0, stale: false, staleTransitions: 0, recoveries: 0, trace: [] };
   const deliverySummary = (nextState, sequence, accepted, cause) => {
     const view = nextState?.view ?? {};
-    const visible = ["value", "dot", "bar", "label", "countdown", "relative", "seconds", "date", "reset", "todayTokens", "lifetimeTokens"]
+    const visible = ["value", "pace", "runway", "dot", "bar", "label", "countdown", "relative", "seconds", "date", "reset", "todayTokens", "lifetimeTokens"]
       .filter((module) => view["show" + module[0].toUpperCase() + module.slice(1)] === true);
     deliveryRuntime.trace.push({
       rendererInstanceId: nextState?.delivery?.rendererInstanceId ?? null,
@@ -719,6 +720,8 @@ const installScript = String.raw`(() => {
       showReset: profile.showReset,
       showTodayTokens: profile.showTodayTokens,
       showLifetimeTokens: profile.showLifetimeTokens,
+      showPace: profile.showPace,
+      showRunway: profile.showRunway,
       renderTemplate: profile.template,
       renderSeparator: profile.separator,
       layout: {
@@ -750,6 +753,8 @@ const installScript = String.raw`(() => {
         value: "--%",
         todayTokens: "—",
         lifetimeTokens: "—",
+        pace: "…",
+        runway: "…",
         label: "—",
         countdown: "--",
         relative: "--",
@@ -958,14 +963,14 @@ const installScript = String.raw`(() => {
       relative: formatLocalizedRemainingTime(windowState.resetsAt, now, locale),
       seconds: formatPreciseRemainingTime(windowState.resetsAt, now),
     }));
-    const parts = Object.fromEntries(["label", "value", "countdown", "relative", "seconds", "date", "reset"].map((part) => [
+    const parts = Object.fromEntries(["label", "value", "pace", "runway", "countdown", "relative", "seconds", "date", "reset"].map((part) => [
       part,
       liveWindows.map((windowState) => {
         if (part !== "value") return String(windowState[part] ?? "");
         return String(windowState.value ?? "");
       }).join(separator),
     ]));
-    const replace = (template, windowState) => String(template ?? "").replace(/\{(label|remaining|countdown|relative|seconds|date|reset)\}/g, (_, token) => String(windowState[token] ?? ""));
+    const replace = (template, windowState) => String(template ?? "").replace(/\{(label|remaining|countdown|relative|seconds|date|reset|pace|runway)\}/g, (_, token) => String(windowState[token] ?? ""));
     let text = view?.text ?? "--%";
     if (view?.displayMode === "template") {
       const template = view?.renderTemplate ?? "{remaining}%";
@@ -1192,7 +1197,7 @@ const installScript = String.raw`(() => {
 
   function findAccountModules(row, badge) {
     const identity = findIdentityParts(row, badge);
-    const parts = Object.fromEntries(["dot", "value", "todayTokens", "lifetimeTokens", "label", "countdown", "relative", "seconds", "date", "reset"].map((module) => [
+    const parts = Object.fromEntries(["dot", "value", "pace", "runway", "todayTokens", "lifetimeTokens", "label", "countdown", "relative", "seconds", "date", "reset"].map((module) => [
       module,
       badge?.querySelector('[data-part="' + module + '"]') ?? null,
     ]));
@@ -1213,6 +1218,17 @@ const installScript = String.raw`(() => {
     return {
       left: rect.left + Math.max(4, paddingLeft),
       right: rect.right - Math.max(4, paddingRight),
+      rowRect: rect,
+    };
+  }
+
+  function remoteLayoutBounds(surface = placementPrimarySurface) {
+    if (!(surface instanceof HTMLElement)) return null;
+    const rect = surface.getBoundingClientRect();
+    if (!(rect.width > 0 && rect.height > 0)) return null;
+    return {
+      left: rect.left + 4,
+      right: rect.right - 4,
       rowRect: rect,
     };
   }
@@ -1445,8 +1461,10 @@ const installScript = String.raw`(() => {
       seconds: { minWidth: 38, shrinkPriority: 12 },
       date: { minWidth: 28, shrinkPriority: 13 },
       reset: { minWidth: 34, shrinkPriority: 14 },
-      todayTokens: { minWidth: 42, shrinkPriority: 15 },
-      lifetimeTokens: { minWidth: 42, shrinkPriority: 16 },
+      pace: { minWidth: 42, shrinkPriority: 15 },
+      runway: { minWidth: 42, shrinkPriority: 16 },
+      todayTokens: { minWidth: 42, shrinkPriority: 17 },
+      lifetimeTokens: { minWidth: 42, shrinkPriority: 18 },
       value: { minWidth: 26, shrinkPriority: 20 },
     };
     const items = [];
@@ -1512,6 +1530,79 @@ const installScript = String.raw`(() => {
     }
     positionQuotaBar(row, badge, layout.barScope);
     return { ...solved, anchors, bounds };
+  }
+
+  function paintRemoteModuleLayout(layout = {}, options = {}) {
+    const group = placementPrimaryGroup;
+    const surface = placementPrimarySurface;
+    if (!(group instanceof HTMLElement) || !(surface instanceof HTMLElement)) return null;
+    const nodes = new Map([...group.querySelectorAll('[data-quotapin-remote-module]')]
+      .filter((node) => node instanceof HTMLElement)
+      .map((node) => [node.dataset.quotapinRemoteModule, node]));
+    const bounds = options.frozenBounds ?? remoteLayoutBounds(surface);
+    if (!bounds || !nodes.size) return null;
+    const requestedAnchors = cleanModuleAnchors(layout.moduleAnchors);
+    const magnetic = cleanLayoutMode(layout.layoutMode) === "auto" && options.dragging !== true;
+    const anchors = magnetic ? dockModuleAnchors(requestedAnchors) : requestedAnchors;
+    const rank = new Map(cleanModuleOrder(layout.moduleOrder).map((module, index) => [module, index]));
+    const ordered = cleanModuleOrder(layout.moduleOrder).filter((module) => nodes.has(module));
+    const visible = options.dragging === true
+      ? ordered
+      : ordered.sort((left, right) => anchors[left] - anchors[right] || rank.get(left) - rank.get(right));
+    const shrink = {
+      label: { minWidth: 14, shrinkPriority: 10 }, countdown: { minWidth: 28, shrinkPriority: 11 },
+      seconds: { minWidth: 38, shrinkPriority: 12 }, date: { minWidth: 28, shrinkPriority: 13 },
+      reset: { minWidth: 34, shrinkPriority: 14 }, pace: { minWidth: 42, shrinkPriority: 15 },
+      runway: { minWidth: 42, shrinkPriority: 16 }, todayTokens: { minWidth: 42, shrinkPriority: 17 },
+      lifetimeTokens: { minWidth: 42, shrinkPriority: 18 }, value: { minWidth: 26, shrinkPriority: 20 },
+    };
+    const measurements = new Map();
+    const items = visible.map((module) => {
+      const node = nodes.get(module);
+      const rect = node.getBoundingClientRect();
+      const frozen = options.frozenMeasurements?.[module];
+      const naturalWidth = frozen
+        ? Math.max(1, Number(frozen.width) || 1)
+        : textLayoutModules.has(module)
+          ? Math.min(naturalInlineWidth(node), Math.max(1, bounds.right - bounds.left))
+          : Math.max(1, rect.width, Number(node.scrollWidth) || 0);
+      const naturalHeight = frozen ? Math.max(1, Number(frozen.height) || 1) : Math.max(1, rect.height);
+      measurements.set(module, { width: naturalWidth, height: naturalHeight });
+      const desiredAnchor = module === options.pinnedId && Number.isFinite(Number(options.pinnedAnchor))
+        ? Number(options.pinnedAnchor)
+        : anchors[module];
+      return {
+        id: module,
+        width: naturalWidth,
+        minWidth: shrink[module]?.minWidth ?? naturalWidth,
+        shrinkPriority: shrink[module]?.shrinkPriority ?? 100,
+        desiredCenter: bounds.left + desiredAnchor * (bounds.right - bounds.left),
+      };
+    });
+    const solved = solveFreeLayout(items, bounds, { gap: 6, pinnedId: options.pinnedId, preserveOrder: true });
+    surface.dataset.quotapinCrowded = String(solved.compressedModules.length > 0);
+    surface.dataset.quotapinCrowdedModules = solved.compressedModules.join(",");
+    const capacityNotice = panel?.querySelector('[data-layout-capacity="true"]');
+    if (capacityNotice instanceof HTMLElement) capacityNotice.hidden = solved.compressedModules.length === 0;
+    for (const module of visible) {
+      const node = nodes.get(module);
+      const position = solved.positions[module];
+      const measured = measurements.get(module);
+      if (!position || !measured) continue;
+      node.style.position = "absolute";
+      node.style.left = position.left - bounds.rowRect.left + "px";
+      node.style.top = Math.max(0, (bounds.rowRect.height - measured.height) / 2) + "px";
+      node.style.width = position.width + "px";
+      node.style.maxWidth = Math.max(1, bounds.right - bounds.left) + "px";
+      node.style.transform = "none";
+      node.style.overflow = positionedModuleOverflow(module);
+      node.style.textOverflow = positionedModuleOverflow(module) === "hidden" && module !== "dot" ? "ellipsis" : "clip";
+      node.style.whiteSpace = "nowrap";
+      node.style.transition = options.dragging === true && module !== options.pinnedId
+        ? "left 84ms cubic-bezier(.22,.82,.24,1.08)"
+        : "none";
+    }
+    return { ...solved, anchors, bounds, measurements };
   }
 
   function enableLiveRowEditing(badge, profile) {
@@ -1780,13 +1871,15 @@ const installScript = String.raw`(() => {
     const nodes = [...group.querySelectorAll('[data-quotapin-remote-module]')]
       .filter((node) => node instanceof HTMLElement);
     if (!nodes.length) return;
-
+    const layoutMode = cleanLayoutMode(profile.layoutMode);
+    const magnetic = layoutMode === "auto";
+    let anchors = cleanModuleAnchors(profile.moduleAnchors);
     let order = cleanModuleOrder(profile.moduleOrder);
+    paintRemoteModuleLayout({ ...profile, moduleAnchors: anchors, moduleOrder: order });
     const original = new Map(nodes.map((node) => [node, {
       cursor: node.style.cursor,
       touchAction: node.style.touchAction,
       zIndex: node.style.zIndex,
-      transform: node.style.transform,
       outline: node.style.outline,
       outlineOffset: node.style.outlineOffset,
       title: node.getAttribute("title"),
@@ -1799,36 +1892,8 @@ const installScript = String.raw`(() => {
       node.style.outline = "1px solid rgba(110,231,183,.28)";
       node.style.outlineOffset = "2px";
       node.setAttribute("aria-grabbed", "false");
-      node.title = t("Drag modules to arrange this surface");
+      node.title = t(magnetic ? "Drag modules with alignment guides" : "Drag modules to place them freely");
     }
-
-    const arrange = (nextOrder, activeNode = null, animate = false) => {
-      const byModule = new Map(nodes.map((node) => [node.dataset.quotapinRemoteModule, node]));
-      const before = new Map(nodes.map((node) => [node, node.getBoundingClientRect()]));
-      if (activeNode instanceof HTMLElement) activeNode.style.transform = "none";
-      const ordered = cleanModuleOrder(nextOrder).map((module) => byModule.get(module)).filter(Boolean);
-      ordered.forEach((node, index) => {
-        const current = group.children[index];
-        if (current !== node) group.insertBefore(node, current ?? null);
-      });
-      if (animate) {
-        for (const node of nodes) {
-          if (node === activeNode || typeof node.animate !== "function") continue;
-          const previous = before.get(node);
-          const current = node.getBoundingClientRect();
-          const dx = previous.left - current.left;
-          if (Math.abs(dx) <= .5) continue;
-          for (const animation of node.getAnimations()) {
-            if (animation.id === "quotapin-remote-reorder") animation.cancel();
-          }
-          const animation = node.animate([
-            { transform: "translateX(" + dx + "px)" },
-            { transform: "translateX(0)" },
-          ], { duration: 92, easing: "cubic-bezier(.22,.82,.24,1.08)" });
-          animation.id = "quotapin-remote-reorder";
-        }
-      }
-    };
 
     let drag = null;
     const finish = (event, cancelled = false) => {
@@ -1837,17 +1902,28 @@ const installScript = String.raw`(() => {
       drag = null;
       endLayoutDrag();
       try { completed.node.releasePointerCapture(event.pointerId); } catch {}
-      completed.node.style.transform = "none";
       completed.node.style.cursor = "grab";
       completed.node.style.zIndex = original.get(completed.node)?.zIndex ?? "";
       completed.node.setAttribute("aria-grabbed", "false");
       delete group.dataset.quotapinLayoutDragging;
+      delete group.dataset.quotapinMagnetTarget;
       if (cancelled) {
-        order = cleanModuleOrder(completed.previousOrder);
-        arrange(order);
+        anchors = cleanModuleAnchors(completed.previousLayout.moduleAnchors);
+        order = cleanModuleOrder(completed.previousLayout.moduleOrder);
+        paintRemoteModuleLayout({ ...profile, moduleAnchors: anchors, moduleOrder: order });
       } else if (completed.moved) {
+        const settledAnchors = cleanModuleAnchors(completed.resolvedAnchors ?? anchors);
+        if (magnetic) {
+          anchors = cleanModuleAnchors(completed.baseAnchors);
+          anchors[completed.module] = settledAnchors[completed.module];
+        } else anchors = settledAnchors;
+        profile.moduleAnchors = anchors;
         profile.moduleOrder = cleanModuleOrder(order);
-        sendAction({ type: "updateProfile", id: profile.id, patch: { moduleOrder: profile.moduleOrder } }, {
+        sendAction({
+          type: "updateProfile",
+          id: profile.id,
+          patch: { layoutMode, moduleAnchors: profile.moduleAnchors, moduleOrder: profile.moduleOrder },
+        }, {
           onAck: (_ack, draft) => {
             const saved = draft?.profiles?.find((candidate) => candidate.id === profile.id);
             if (saved) Object.assign(profile, saved);
@@ -1863,6 +1939,8 @@ const installScript = String.raw`(() => {
       const node = event.currentTarget;
       const module = node.dataset.quotapinRemoteModule;
       const rect = node.getBoundingClientRect();
+      const frozenBounds = remoteLayoutBounds(surface);
+      if (!frozenBounds) return;
       const frozenRects = Object.fromEntries(nodes.map((candidate) => {
         const box = candidate.getBoundingClientRect();
         return [candidate.dataset.quotapinRemoteModule, {
@@ -1872,8 +1950,10 @@ const installScript = String.raw`(() => {
           height: Math.max(1, box.height),
         }];
       }));
+      const frozenMeasurements = Object.fromEntries(Object.entries(frozenRects).map(([id, box]) => [id, { width: box.width, height: box.height }]));
       beginLayoutDrag(group, node, event.pointerId);
       group.dataset.quotapinLayoutDragging = "true";
+      delete group.dataset.quotapinMagnetTarget;
       drag = {
         node,
         module,
@@ -1881,8 +1961,17 @@ const installScript = String.raw`(() => {
         startClientX: event.clientX,
         startClientY: event.clientY,
         pointerToCenter: rect.left + rect.width / 2 - event.clientX,
+        frozenBounds,
         frozenRects,
-        previousOrder: cleanModuleOrder(order),
+        resolvedRects: { ...frozenRects },
+        frozenMeasurements,
+        baseAnchors: magnetic
+          ? cleanModuleAnchors(profile.moduleAnchors)
+          : anchorsFromRects(frozenRects, frozenBounds, anchors),
+        previousLayout: {
+          moduleOrder: cleanModuleOrder(profile.moduleOrder),
+          moduleAnchors: cleanModuleAnchors(profile.moduleAnchors),
+        },
         moved: false,
       };
       node.style.cursor = "grabbing";
@@ -1898,17 +1987,45 @@ const installScript = String.raw`(() => {
       const dy = event.clientY - drag.startClientY;
       if (!drag.moved && Math.hypot(dx, dy) < 5) return;
       drag.moved = true;
-      const surfaceRect = surface.getBoundingClientRect();
-      const moduleWidth = drag.frozenRects[drag.module]?.width ?? drag.node.getBoundingClientRect().width;
-      const minimum = surfaceRect.left + moduleWidth / 2;
-      const maximum = surfaceRect.right - moduleWidth / 2;
-      const desiredCenter = Math.max(minimum, Math.min(maximum, event.clientX + drag.pointerToCenter));
-      const nextOrder = orderForPointer(order, drag.module, desiredCenter, drag.frozenRects);
-      const changed = nextOrder.some((module, index) => module !== order[index]);
-      order = nextOrder;
-      arrange(order, drag.node, changed);
-      const baseRect = drag.node.getBoundingClientRect();
-      drag.node.style.transform = "translateX(" + (desiredCenter - (baseRect.left + baseRect.width / 2)) + "px)";
+      const requestedCenter = event.clientX + drag.pointerToCenter;
+      const neighbours = stableMagneticNeighbours(drag.frozenRects, drag.resolvedRects, drag.module, 1);
+      const magneticResult = magnetic
+        ? snapMagneticCenter(requestedCenter, drag.frozenMeasurements[drag.module]?.width, drag.frozenBounds, neighbours, {
+          gap: 6,
+          threshold: Number(profile.snapThreshold),
+          targets: profile.snapTargets,
+        })
+        : { center: requestedCenter, target: null };
+      const desiredCenter = magneticResult.center;
+      const target = String(magneticResult.target ?? "");
+      if (target) group.dataset.quotapinMagnetTarget = target;
+      else delete group.dataset.quotapinMagnetTarget;
+      if (target === "left") order = moveModule(order, drag.module, 0);
+      else if (target === "right") order = moveModule(order, drag.module, layoutModules.length);
+      else if (target.startsWith("before:") || target.startsWith("after:")) {
+        const [side, neighbour] = target.split(":", 2);
+        const withoutDragged = cleanModuleOrder(order).filter((candidate) => candidate !== drag.module);
+        const neighbourIndex = withoutDragged.indexOf(neighbour);
+        if (neighbourIndex >= 0) order = moveModule(order, drag.module, neighbourIndex + (side === "after" ? 1 : 0));
+      } else order = orderForPointer(order, drag.module, desiredCenter, drag.frozenRects);
+      const anchor = Math.max(0, Math.min(1, (desiredCenter - drag.frozenBounds.left) / Math.max(1, drag.frozenBounds.right - drag.frozenBounds.left)));
+      anchors = { ...drag.baseAnchors, [drag.module]: Math.round(anchor * 10_000) / 10_000 };
+      const solved = paintRemoteModuleLayout({ ...profile, moduleAnchors: anchors, moduleOrder: order }, {
+        dragging: true,
+        pinnedId: drag.module,
+        pinnedAnchor: anchors[drag.module],
+        frozenBounds: drag.frozenBounds,
+        frozenMeasurements: drag.frozenMeasurements,
+      });
+      if (solved?.order?.length) {
+        drag.resolvedAnchors = anchorsFromRects(solved.positions, solved.bounds, anchors);
+        drag.resolvedRects = Object.fromEntries(Object.entries(solved.positions).map(([id, position]) => [id, {
+          left: position.left,
+          right: position.left + position.width,
+          width: position.width,
+          height: drag.frozenMeasurements[id]?.height ?? 1,
+        }]));
+      }
       event.preventDefault();
       event.stopPropagation();
     };
@@ -1926,6 +2043,7 @@ const installScript = String.raw`(() => {
       endLayoutDrag();
       delete group.dataset.quotapinEditing;
       delete group.dataset.quotapinLayoutDragging;
+      delete group.dataset.quotapinMagnetTarget;
       if (panel) delete panel.dataset.remoteEditing;
       for (const node of nodes) {
         const saved = original.get(node);
@@ -1937,7 +2055,6 @@ const installScript = String.raw`(() => {
         node.style.cursor = saved.cursor;
         node.style.touchAction = saved.touchAction;
         node.style.zIndex = saved.zIndex;
-        node.style.transform = saved.transform;
         node.style.outline = saved.outline;
         node.style.outlineOffset = saved.outlineOffset;
         if (saved.title == null) node.removeAttribute("title");
@@ -1955,7 +2072,7 @@ const installScript = String.raw`(() => {
       return rect.width > 0 && rect.height > 0;
     };
     if (painted(preferred)) return preferred;
-    if (activePlacementZone !== "account-row" && painted(placementPrimaryGroup)) return placementPrimaryGroup;
+    if (activePlacementZone !== "account-row" && painted(placementPrimarySurface)) return placementPrimarySurface;
     const row = badge?.closest('button[aria-haspopup="menu"]') ?? findAccountRow();
     if (!(row instanceof HTMLElement)) return painted(badge) ? badge : null;
     const surface = accountRowMode() === "beta" ? findAccountSurface(row) : row;
@@ -2455,6 +2572,8 @@ const installScript = String.raw`(() => {
     let quickShowReset = profile.showReset === true;
     let quickShowTodayTokens = profile.showTodayTokens === true;
     let quickShowLifetimeTokens = profile.showLifetimeTokens === true;
+    let quickShowPace = profile.showPace === true;
+    let quickShowRunway = profile.showRunway === true;
     let quickPlacement = cleanPlacement(profile.placement);
     let paintPlacementControls = () => {};
     const availableWindowCount = Number(state.view?.availableWindowCount) || 0;
@@ -2483,11 +2602,13 @@ const installScript = String.raw`(() => {
       quickShowReset = saved.showReset === true;
       quickShowTodayTokens = saved.showTodayTokens === true;
       quickShowLifetimeTokens = saved.showLifetimeTokens === true;
+      quickShowPace = saved.showPace === true;
+      quickShowRunway = saved.showRunway === true;
       quickPlacement = cleanPlacement(saved.placement);
       avatarVisible = !["hideAvatar", "quotaOnly"].includes(saved.identity);
       nameVisible = !["hideName", "quotaOnly"].includes(saved.identity);
       for (const [module, visible] of Object.entries({
-        avatar: avatarVisible, name: nameVisible, dot: quickShowDot, value: quickShowValue, todayTokens: quickShowTodayTokens, lifetimeTokens: quickShowLifetimeTokens,
+        avatar: avatarVisible, name: nameVisible, dot: quickShowDot, value: quickShowValue, pace: quickShowPace, runway: quickShowRunway, todayTokens: quickShowTodayTokens, lifetimeTokens: quickShowLifetimeTokens,
         label: availableWindowCount > 1 && quickShowLabel, countdown: quickShowCountdown, relative: quickShowRelative, seconds: quickShowSeconds, date: quickShowDate, reset: quickShowReset,
       })) moduleChips[module]?.setActive(Boolean(visible));
       quotaBarChip?.setActive(quickShowBar && quickBarScope === "quota");
@@ -2536,22 +2657,20 @@ const installScript = String.raw`(() => {
     const placementMap = document.createElement("div");
     placementMap.dataset.placementMap = "true";
     Object.assign(placementMap.style, {
-      position: "relative", height: "128px", overflow: "hidden", borderRadius: "10px",
+      position: "relative", height: "102px", overflow: "hidden", borderRadius: "10px",
       background: "var(--quotapin-panel-surface)", boxShadow: "inset 0 0 0 1px var(--quotapin-panel-line)",
     });
     const mapSidebar = document.createElement("span");
     const mapComposer = document.createElement("span");
-    Object.assign(mapSidebar.style, { position: "absolute", left: "7px", top: "7px", bottom: "7px", width: "66px", borderRadius: "7px", background: "var(--quotapin-panel-fill)" });
-    Object.assign(mapComposer.style, { position: "absolute", left: "104px", right: "55px", bottom: "12px", height: "34px", borderRadius: "9px", background: "var(--quotapin-panel-fill)" });
+    Object.assign(mapSidebar.style, { position: "absolute", left: "7px", top: "7px", bottom: "7px", width: "62px", borderRadius: "7px", background: "var(--quotapin-panel-fill)" });
+    Object.assign(mapComposer.style, { position: "absolute", left: "94px", right: "28px", bottom: "9px", height: "31px", borderRadius: "9px", background: "var(--quotapin-panel-fill)" });
     placementMap.append(mapSidebar, mapComposer);
     const placementButtons = new Map();
     const zoneVisuals = [
-      { value: "account-row", label: "Account footer", css: { left: "13px", bottom: "13px", width: "54px", height: "24px" } },
-      { value: "title-center", label: "Title center", css: { left: "50%", top: "8px", width: "76px", height: "24px", transform: "translateX(-50%)" } },
-      { value: "workspace-top-center", label: "Workspace top", css: { left: "57%", top: "39px", width: "86px", height: "24px", transform: "translateX(-50%)" } },
-      { value: "workspace-bottom-start", label: "Bottom left", css: { left: "79px", bottom: "16px", width: "21px", height: "26px" } },
-      { value: "composer-center", label: "Composer center", css: { left: "50%", bottom: "17px", width: "82px", height: "24px", transform: "translateX(-50%)" } },
-      { value: "workspace-bottom-end", label: "Bottom right", css: { right: "10px", bottom: "16px", width: "39px", height: "26px" } },
+      { value: "account-row", label: "Account footer", css: { left: "12px", bottom: "11px", width: "52px", height: "22px" } },
+      { value: "title-center", label: "Title center", css: { left: "58%", top: "7px", width: "70px", height: "22px", transform: "translateX(-50%)" } },
+      { value: "workspace-top-center", label: "Workspace top", css: { left: "58%", top: "37px", width: "78px", height: "22px", transform: "translateX(-50%)" } },
+      { value: "composer-center", label: "Composer center", css: { left: "58%", bottom: "13px", width: "76px", height: "22px", transform: "translateX(-50%)" } },
     ];
     for (const option of zoneVisuals) {
       const button = document.createElement("button");
@@ -2559,7 +2678,7 @@ const installScript = String.raw`(() => {
       button.dataset.placementZone = option.value;
       button.setAttribute("aria-label", t(option.label));
       button.title = t(option.label);
-      button.textContent = option.value === "workspace-bottom-start" || option.value === "workspace-bottom-end" ? "•" : "42%";
+      button.textContent = "42%";
       Object.assign(button.style, option.css, {
         position: "absolute", padding: "0 5px", border: "0", borderRadius: "6px", font: "inherit", fontSize: "9px",
         fontWeight: "650", fontVariantNumeric: "tabular-nums", cursor: "pointer", transition: "opacity 120ms ease, background-color 120ms ease, color 120ms ease, transform 120ms ease",
@@ -2571,20 +2690,32 @@ const installScript = String.raw`(() => {
       placementButtons.set(option.value, button);
       placementMap.append(button);
     }
+    const placementStatus = document.createElement("div");
+    placementStatus.dataset.placementStatus = "true";
+    Object.assign(placementStatus.style, { minHeight: "14px", color: "var(--quotapin-panel-faint)", fontSize: "9px", lineHeight: "1.35" });
+    placementMap.setAttribute("role", "group");
+    placementMap.setAttribute("aria-label", t("Placement"));
     const railButtons = new Map();
     for (const option of [
-      { value: "account-row", label: "Account rail", css: { left: "13px", bottom: "9px", width: "54px" } },
-      { value: "composer-bottom", label: "Below composer", css: { left: "110px", right: "61px", bottom: "8px" } },
+      { value: "account-row", label: "Account rail", css: { left: "12px", bottom: "3px", width: "52px" } },
+      { value: "composer-bottom", label: "Below composer", css: { left: "94px", right: "28px", bottom: "3px" } },
     ]) {
       const button = document.createElement("button");
       button.type = "button";
       button.dataset.placementRail = option.value;
+      button.setAttribute("role", "radio");
       button.setAttribute("aria-label", t(option.label));
       button.title = t(option.label);
-      Object.assign(button.style, option.css, {
-        position: "absolute", height: "3px", padding: "0", border: "0", borderRadius: "999px", cursor: "pointer",
-        transition: "opacity 120ms ease, background-color 120ms ease",
+      const line = document.createElement("span");
+      line.dataset.placementRailLine = "true";
+      Object.assign(line.style, { display: "block", width: "100%", height: "2px", borderRadius: "999px", background: "currentColor" });
+      button.append(line);
+      Object.assign(button.style, {
+        position: "absolute", minWidth: "0", height: "8px", padding: "3px 0", border: "0", borderRadius: "4px", cursor: "pointer",
+        display: "flex", alignItems: "center", justifyContent: "center", font: "inherit",
+        transition: "opacity 120ms ease, background-color 120ms ease, color 120ms ease",
       });
+      Object.assign(button.style, option.css);
       button.addEventListener("click", () => {
         if (button.disabled) return;
         sendPlacement({ rail: option.value });
@@ -2592,9 +2723,6 @@ const installScript = String.raw`(() => {
       railButtons.set(option.value, button);
       placementMap.append(button);
     }
-    const placementStatus = document.createElement("div");
-    placementStatus.dataset.placementStatus = "true";
-    Object.assign(placementStatus.style, { marginTop: "6px", minHeight: "14px", color: "var(--quotapin-panel-faint)", fontSize: "9px", textAlign: "center", lineHeight: "1.35" });
     paintPlacementControls = () => {
       const currentRow = findAccountRow();
       const context = currentRow ? resolvePlacementContext(currentRow, quickPlacement) : { geometry: { zones: {}, rails: {} }, primary: "account-row", rail: "account-row" };
@@ -2615,15 +2743,20 @@ const installScript = String.raw`(() => {
         const selected = quickPlacement.rail === rail;
         button.disabled = !available;
         button.setAttribute("aria-pressed", String(selected));
-        button.style.background = selected ? "var(--quotapin-panel-accent)" : "var(--quotapin-panel-line-strong)";
-        button.style.opacity = available ? (selected ? "1" : ".58") : ".18";
+        button.setAttribute("aria-checked", String(selected));
+        button.style.background = selected ? "var(--quotapin-panel-accent-fill)" : "var(--quotapin-panel-fill)";
+        button.style.color = selected ? "var(--quotapin-panel-accent)" : "var(--quotapin-panel-faint)";
+        button.style.opacity = available ? (selected ? "1" : ".66") : ".24";
       }
       const requestedUnavailable = quickPlacement.primary !== context.primary;
+      const primaryLabel = t(zoneVisuals.find((item) => item.value === context.primary)?.label ?? "Account footer");
+      const railLabel = t(context.rail === "composer-bottom" ? "Below composer" : "Account rail");
       placementStatus.textContent = requestedUnavailable
         ? t("Unavailable in this window") + " · " + t("Using account footer")
-        : t(zoneVisuals.find((item) => item.value === context.primary)?.label ?? "Account footer") + " · " + t(context.rail === "composer-bottom" ? "Below composer" : "Account rail");
+        : primaryLabel + " · " + t("Quota rail") + ": " + railLabel;
     };
     const placementBody = document.createElement("div");
+    Object.assign(placementBody.style, { display: "grid", gap: "6px" });
     placementBody.append(placementMap, placementStatus);
     paintPlacementControls();
     const liveParts = state.view?.parts ?? {};
@@ -2669,6 +2802,8 @@ const installScript = String.raw`(() => {
     const secondsPreview = makeTextPreview("seconds", "04:08:00");
     const datePreview = makeTextPreview("date", "Aug 8");
     const resetPreview = makeTextPreview("reset", "Mon 12:30");
+    const pacePreview = makeTextPreview("pace", "1.8%/h");
+    const runwayPreview = makeTextPreview("runway", "≈2d 4h");
     const initialUsageCopy = profileUsageCopy();
     const todayTokensPreview = makeTextPreview("todayTokens", initialUsageCopy.todayTokens);
     const lifetimeTokensPreview = makeTextPreview("lifetimeTokens", initialUsageCopy.lifetimeTokens);
@@ -2680,6 +2815,8 @@ const installScript = String.raw`(() => {
     const resetChip = toggleChip("Show reset time", quickShowReset, (next, finish) => sendModuleVisibility("showReset", next, finish), resetPreview);
     const todayTokensChip = toggleChip("Show today's tokens", quickShowTodayTokens, (next, finish) => sendModuleVisibility("showTodayTokens", next, finish), todayTokensPreview);
     const lifetimeTokensChip = toggleChip("Show lifetime tokens", quickShowLifetimeTokens, (next, finish) => sendModuleVisibility("showLifetimeTokens", next, finish), lifetimeTokensPreview);
+    const paceChip = toggleChip("Show burn pace", quickShowPace, (next, finish) => sendModuleVisibility("showPace", next, finish), pacePreview);
+    const runwayChip = toggleChip("Show estimated runway", quickShowRunway, (next, finish) => sendModuleVisibility("showRunway", next, finish), runwayPreview);
     const liveRow = findAccountRow();
     const liveAccountModules = liveRow ? findAccountModules(liveRow, badge) : {};
     const avatarPreview = liveAccountModules.avatar instanceof HTMLImageElement
@@ -2737,7 +2874,7 @@ const installScript = String.raw`(() => {
         },
       });
     }, namePreview);
-    const textPreviews = { value: valuePreview, todayTokens: todayTokensPreview, lifetimeTokens: lifetimeTokensPreview, label: labelPreview, countdown: countdownPreview, relative: relativePreview, seconds: secondsPreview, date: datePreview, reset: resetPreview };
+    const textPreviews = { value: valuePreview, pace: pacePreview, runway: runwayPreview, todayTokens: todayTokensPreview, lifetimeTokens: lifetimeTokensPreview, label: labelPreview, countdown: countdownPreview, relative: relativePreview, seconds: secondsPreview, date: datePreview, reset: resetPreview };
     paintQuickPreview = () => {
       if (!panel || !quickGrid) return;
       const currentRow = findAccountRow();
@@ -2749,8 +2886,8 @@ const installScript = String.raw`(() => {
       const currentUsageCopy = profileUsageCopy();
       const moduleMode = currentView.displayMode !== "template";
       const fallbackCopy = moduleMode
-          ? { value: currentCopy.parts?.value ?? currentCopy.text ?? "--%", todayTokens: currentUsageCopy.todayTokens, lifetimeTokens: currentUsageCopy.lifetimeTokens, label: currentCopy.parts?.label ?? "", countdown: currentCopy.parts?.countdown ?? "--", relative: currentCopy.parts?.relative ?? "--", seconds: currentCopy.parts?.seconds ?? "--:--:--", date: currentCopy.parts?.date ?? "--", reset: currentCopy.parts?.reset ?? "--" }
-          : { value: currentCopy.text ?? "--%", todayTokens: "", lifetimeTokens: "", label: "", countdown: "", relative: "", seconds: "", date: "", reset: "" };
+          ? { value: currentCopy.parts?.value ?? currentCopy.text ?? "--%", pace: currentCopy.parts?.pace ?? "…", runway: currentCopy.parts?.runway ?? "…", todayTokens: currentUsageCopy.todayTokens, lifetimeTokens: currentUsageCopy.lifetimeTokens, label: currentCopy.parts?.label ?? "", countdown: currentCopy.parts?.countdown ?? "--", relative: currentCopy.parts?.relative ?? "--", seconds: currentCopy.parts?.seconds ?? "--:--:--", date: currentCopy.parts?.date ?? "--", reset: currentCopy.parts?.reset ?? "--" }
+          : { value: currentCopy.text ?? "--%", pace: "", runway: "", todayTokens: "", lifetimeTokens: "", label: "", countdown: "", relative: "", seconds: "", date: "", reset: "" };
       for (const [module, preview] of Object.entries(textPreviews)) {
         const source = currentModules[module];
         preview.textContent = source?.textContent?.trim() || fallbackCopy[module] || "--";
@@ -2813,7 +2950,7 @@ const installScript = String.raw`(() => {
       quotaBarChip?.setPreviewSurface?.(previewSurface);
       rowBarChip?.setPreviewSurface?.(previewSurface);
     };
-    moduleChips = { avatar: avatarChip, name: nameChip, dot: dotChip, value: valueChip, todayTokens: todayTokensChip, lifetimeTokens: lifetimeTokensChip, label: labelChip, countdown: countdownChip, relative: relativeChip, seconds: secondsChip, date: dateChip, reset: resetChip };
+    moduleChips = { avatar: avatarChip, name: nameChip, dot: dotChip, value: valueChip, pace: paceChip, runway: runwayChip, todayTokens: todayTokensChip, lifetimeTokens: lifetimeTokensChip, label: labelChip, countdown: countdownChip, relative: relativeChip, seconds: secondsChip, date: dateChip, reset: resetChip };
     const initialPreviewSurface = hostPreviewSurface(liveRow ?? row);
     for (const chip of Object.values(moduleChips)) chip.setPreviewSurface?.(initialPreviewSurface);
     quotaBarChip.setPreviewSurface?.(initialPreviewSurface);
@@ -2830,22 +2967,32 @@ const installScript = String.raw`(() => {
       // a drop. Status dot and quota bar share one row because they express the
       // same severity state even though the production bar spans the row below.
       const groups = [
-        ["identity", ["avatar", "name"]],
-        ["quota", ["value", "label"]],
-        ["status", ["dot"]],
-        ["usage", ["todayTokens", "lifetimeTokens"]],
-        ["time", ["countdown", "relative", "seconds", "date", "reset"]],
+        ["identity", "Identity", ["avatar", "name"]],
+        ["quota", "Quota", ["value", "label"]],
+        ["forecast", "Forecast", ["pace", "runway"]],
+        ["status", "Signals", ["dot"]],
+        ["usage", "Usage", ["todayTokens", "lifetimeTokens"]],
+        ["time", "Time", ["countdown", "relative", "seconds", "date", "reset"]],
       ];
-      for (const [id, modules] of groups) {
+      for (const [id, labelText, modules] of groups) {
         const group = document.createElement("div");
         group.dataset.moduleGroup = id;
-        Object.assign(group.style, { display: "flex", flexWrap: "wrap", alignItems: "center", justifyContent: "center", gap: "5px", minHeight: "30px" });
+        Object.assign(group.style, { display: "grid", gridTemplateColumns: "52px minmax(0,1fr)", alignItems: "center", gap: "6px", minHeight: "30px" });
+        const label = document.createElement("span");
+        label.textContent = t(labelText);
+        Object.assign(label.style, { color: "var(--quotapin-panel-faint)", fontSize: "9px", lineHeight: "1.2", overflow: "hidden", textOverflow: "ellipsis" });
+        const controls = document.createElement("div");
+        controls.dataset.moduleControls = id;
+        Object.assign(controls.style, { display: "flex", flexWrap: "wrap", alignItems: "center", justifyContent: "flex-start", gap: "5px", minWidth: "0" });
         for (const module of modules) {
           if (module === "label" && availableWindowCount <= 1) continue;
-          group.append(moduleChips[module]);
+          controls.append(moduleChips[module]);
         }
-        if (id === "status") group.append(quotaBarChip, rowBarChip);
-        if (group.childElementCount) elementRows.append(group);
+        if (id === "status") controls.append(quotaBarChip, rowBarChip);
+        if (controls.childElementCount) {
+          group.append(label, controls);
+          elementRows.append(group);
+        }
       }
     }
     mountModuleChips();
@@ -3103,9 +3250,9 @@ const installScript = String.raw`(() => {
     const presetRow = document.createElement("div");
     Object.assign(presetRow.style, { display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: "6px" });
     const codePresets = [
-      { id: "minimal", label: "Minimal", patch: { displayMode: "modules", template: "{remaining}%", hoverTemplate: "", window: "auto", showValue: true, showDot: false, showBar: false, showLabel: false, showCountdown: false, showRelative: false, showSeconds: false, showDate: false, showReset: false, showTodayTokens: false, showLifetimeTokens: false, valueColor: "muted", dotColor: "muted", identityColor: "inherit", moduleOrder: [...defaultModuleOrder], moduleAnchors: { ...defaultModuleAnchors }, identity: "show", avatarShape: "native", effect: "none", effectTarget: "dot", effectAt: "critical" } },
-      { id: "deadline", label: "Deadline", patch: { displayMode: "modules", template: "{remaining}% · {seconds}", hoverTemplate: "{remaining}% left · resets in {countdown} ({date}, {reset})", window: "auto", showValue: true, showDot: false, showBar: false, showLabel: false, showCountdown: false, showRelative: false, showSeconds: true, showDate: false, showReset: false, showTodayTokens: false, showLifetimeTokens: false, valueColor: "severity", dotColor: "severity", identityColor: "inherit", moduleOrder: [...defaultModuleOrder], moduleAnchors: { ...defaultModuleAnchors }, identity: "show", avatarShape: "native", effect: "pulse", effectTarget: "dot", effectAt: "critical" } },
-      { id: "signal", label: "Signal", patch: { displayMode: "modules", template: "{remaining}%", hoverTemplate: "{remaining}% left · resets in {countdown} ({date}, {reset})", window: "auto", showValue: false, showDot: true, showBar: false, showLabel: false, showCountdown: false, showRelative: false, showSeconds: false, showDate: false, showReset: false, showTodayTokens: false, showLifetimeTokens: false, valueColor: "severity", dotColor: "severity", identityColor: "inherit", moduleOrder: [...defaultModuleOrder], moduleAnchors: { ...defaultModuleAnchors }, identity: "show", avatarShape: "native", effect: "pulse", effectTarget: "dot", effectAt: "warning" } },
+      { id: "minimal", label: "Minimal", patch: { displayMode: "modules", template: "{remaining}%", hoverTemplate: "", window: "auto", showValue: true, showDot: false, showBar: false, showLabel: false, showCountdown: false, showRelative: false, showSeconds: false, showDate: false, showReset: false, showTodayTokens: false, showLifetimeTokens: false, showPace: false, showRunway: false, valueColor: "muted", dotColor: "muted", identityColor: "inherit", moduleOrder: [...defaultModuleOrder], moduleAnchors: { ...defaultModuleAnchors }, identity: "show", avatarShape: "native", effect: "none", effectTarget: "dot", effectAt: "critical" } },
+      { id: "deadline", label: "Deadline", patch: { displayMode: "modules", template: "{remaining}% · {seconds}", hoverTemplate: "{remaining}% left · resets in {countdown} ({date}, {reset})", window: "auto", showValue: true, showDot: false, showBar: false, showLabel: false, showCountdown: false, showRelative: false, showSeconds: true, showDate: false, showReset: false, showTodayTokens: false, showLifetimeTokens: false, showPace: false, showRunway: false, valueColor: "severity", dotColor: "severity", identityColor: "inherit", moduleOrder: [...defaultModuleOrder], moduleAnchors: { ...defaultModuleAnchors }, identity: "show", avatarShape: "native", effect: "pulse", effectTarget: "dot", effectAt: "critical" } },
+      { id: "signal", label: "Signal", patch: { displayMode: "modules", template: "{remaining}%", hoverTemplate: "{remaining}% left · resets in {countdown} ({date}, {reset})", window: "auto", showValue: false, showDot: true, showBar: false, showLabel: false, showCountdown: false, showRelative: false, showSeconds: false, showDate: false, showReset: false, showTodayTokens: false, showLifetimeTokens: false, showPace: false, showRunway: false, valueColor: "severity", dotColor: "severity", identityColor: "inherit", moduleOrder: [...defaultModuleOrder], moduleAnchors: { ...defaultModuleAnchors }, identity: "show", avatarShape: "native", effect: "pulse", effectTarget: "dot", effectAt: "warning" } },
     ];
     const visibleEditorPreferences = (source) => {
       const visible = JSON.parse(JSON.stringify(source));
@@ -3120,7 +3267,7 @@ const installScript = String.raw`(() => {
     jsonCaption.textContent = t("Configuration JSON");
     Object.assign(jsonCaption.style, { color: "var(--quotapin-panel-muted)", fontSize: "10px", fontWeight: "600", letterSpacing: ".035em" });
     const configReference = document.createElement("a");
-    configReference.href = sourceRepository + "/blob/main/docs/configuration.md#configuration-json-schema-18";
+    configReference.href = sourceRepository + "/blob/main/docs/configuration.md#configuration-json-schema-19";
     configReference.target = "_blank";
     configReference.rel = "noreferrer";
     configReference.textContent = t("Configuration reference");
@@ -3659,8 +3806,8 @@ const installScript = String.raw`(() => {
       });
     };
     for (const [module, control] of [
-      ["avatar", avatarChip], ["name", nameChip], ["dot", dotChip], ["value", valueChip],
-      ["label", labelChip], ["countdown", countdownChip], ["relative", relativeChip], ["seconds", secondsChip], ["date", dateChip], ["reset", resetChip],
+      ["avatar", avatarChip], ["name", nameChip], ["dot", dotChip], ["value", valueChip], ["pace", paceChip], ["runway", runwayChip],
+      ["todayTokens", todayTokensChip], ["lifetimeTokens", lifetimeTokensChip], ["label", labelChip], ["countdown", countdownChip], ["relative", relativeChip], ["seconds", secondsChip], ["date", dateChip], ["reset", resetChip],
     ]) {
       control.dataset.layoutModule = module;
       control.addEventListener("keydown", (event) => {
@@ -3729,11 +3876,14 @@ const installScript = String.raw`(() => {
     const badge = document.getElementById(badgeId);
     const accountRow = findAccountRow();
     if (!badge || !accountRow) return null;
-    if (placementPrimaryGroup instanceof HTMLElement
-      && placementPrimaryGroup.isConnected
-      && placementPrimarySurface?.style.display !== "none"
-      && placementPrimaryGroup.contains(target)) {
-      return { badge, remote: true, captureTarget: placementPrimaryGroup, anchorTarget: placementPrimaryGroup };
+    const remoteSurfaceActive = activePlacementZone !== "account-row"
+      && placementPrimarySurface instanceof HTMLElement
+      && placementPrimarySurface.isConnected
+      && placementPrimarySurface.style.display !== "none";
+    if (remoteSurfaceActive) {
+      return placementPrimarySurface.contains(target)
+        ? { badge, remote: true, captureTarget: placementPrimarySurface, anchorTarget: placementPrimarySurface }
+        : null;
     }
     const surface = accountRowMode() === "beta" ? findAccountSurface(accountRow) : accountRow;
     return surface?.contains(target) ? { badge, remote: false, captureTarget: badge, anchorTarget: surface } : null;
@@ -4045,7 +4195,7 @@ const installScript = String.raw`(() => {
       }
     }
     badge.style.display = options.primaryRemote === true ? "none" : "contents";
-    for (const module of ["dot", "value", "todayTokens", "lifetimeTokens", "label", "countdown", "relative", "seconds", "date", "reset"]) {
+    for (const module of ["dot", "value", "pace", "runway", "todayTokens", "lifetimeTokens", "label", "countdown", "relative", "seconds", "date", "reset"]) {
       const node = modules[module];
       node.style.flex = "0 0 auto";
       node.style.alignItems = "center";
@@ -4117,9 +4267,9 @@ const installScript = String.raw`(() => {
     const results = [];
     const identities = ["show", "hideName", "hideAvatar", "quotaOnly"];
     const cases = [
-      ["avatar", "name", "dot", "value", "todayTokens", "lifetimeTokens", "label", "countdown", "relative", "seconds", "date", "reset"],
-      ["value", "todayTokens", "lifetimeTokens", "countdown", "relative", "seconds", "date", "avatar", "name", "dot", "label", "reset"],
-      ["avatar", "value", "todayTokens", "name", "countdown", "relative", "seconds", "date", "lifetimeTokens", "dot", "label", "reset"],
+      ["avatar", "name", "dot", "value", "pace", "runway", "todayTokens", "lifetimeTokens", "label", "countdown", "relative", "seconds", "date", "reset"],
+      ["value", "pace", "runway", "todayTokens", "lifetimeTokens", "countdown", "relative", "seconds", "date", "avatar", "name", "dot", "label", "reset"],
+      ["avatar", "value", "pace", "runway", "todayTokens", "name", "countdown", "relative", "seconds", "date", "lifetimeTokens", "dot", "label", "reset"],
     ];
     for (const moduleOrder of cases) {
       for (const identity of identities) {
@@ -4578,13 +4728,11 @@ const installScript = String.raw`(() => {
     placementPrimarySurface.dataset.quotapinPlacementSurface = "primary";
     Object.assign(placementPrimarySurface.style, {
       position: "fixed",
-      display: "flex",
-      alignItems: "center",
-      justifyContent: "center",
+      display: "block",
       overflow: "hidden",
       whiteSpace: "nowrap",
       pointerEvents: "none",
-      cursor: "default",
+      cursor: "pointer",
       boxSizing: "border-box",
     });
     placementPrimaryGroup = document.createElement("div");
@@ -4592,11 +4740,9 @@ const installScript = String.raw`(() => {
     placementPrimaryGroup.setAttribute("role", "status");
     placementPrimaryGroup.setAttribute("aria-live", "off");
     Object.assign(placementPrimaryGroup.style, {
-      display: "inline-flex",
-      alignItems: "center",
-      justifyContent: "center",
-      gap: "8px",
-      maxWidth: "100%",
+      position: "absolute",
+      inset: "0",
+      display: "block",
       overflow: "visible",
       whiteSpace: "nowrap",
       pointerEvents: "auto",
@@ -4645,6 +4791,7 @@ const installScript = String.raw`(() => {
     const rect = context.geometry?.zones?.[context.primary]?.rect;
     if (!context.primaryRemote || !paintFixedRect(placementPrimarySurface, rect)) {
       placementPrimarySurface.style.display = "none";
+      placementPrimarySurface.style.pointerEvents = "none";
       placementPrimaryGroup.replaceChildren();
       return;
     }
@@ -4663,14 +4810,13 @@ const installScript = String.raw`(() => {
       if (clone.textContent !== source.textContent) clone.textContent = source.textContent;
       if (clone.title !== source.title) clone.title = source.title;
       clone.style.cssText = source.style.cssText;
-      clone.style.position = "relative";
+      clone.style.position = "absolute";
       clone.style.left = "0";
       clone.style.top = "0";
       clone.style.transform = "none";
       clone.style.transition = "none";
-      clone.style.maxWidth = "100%";
+      clone.style.maxWidth = "none";
       clone.style.marginInline = "0";
-      clone.style.flex = "0 0 auto";
       clone.style.pointerEvents = "auto";
       if (module !== "dot") clone.style.width = "auto";
       if (placementPrimaryGroup.dataset.quotapinEditing === "true") {
@@ -4689,12 +4835,15 @@ const installScript = String.raw`(() => {
     });
     placementPrimarySurface.dataset.placementZone = context.primary;
     placementPrimarySurface.style.display = desired.length ? "flex" : "none";
+    placementPrimarySurface.style.pointerEvents = desired.length ? "auto" : "none";
     placementPrimarySurface.style.fontFamily = getComputedStyle(row).fontFamily;
     placementPrimarySurface.style.fontSize = badge.style.fontSize;
     placementPrimarySurface.style.fontWeight = badge.style.fontWeight;
     placementPrimarySurface.style.lineHeight = badge.style.lineHeight;
     placementPrimaryGroup.title = badge.title;
     placementPrimaryGroup.setAttribute("aria-label", badge.getAttribute("aria-label") ?? t("Codex remaining quota"));
+    placementPrimarySurface.setAttribute("aria-label", badge.getAttribute("aria-label") ?? t("Codex remaining quota"));
+    paintRemoteModuleLayout(view.layout ?? {});
   }
 
   function syncRemoteQuotaRail(row, badge, view, context, valueColor) {
@@ -4754,7 +4903,7 @@ const installScript = String.raw`(() => {
     syncRemoteQuotaRail(row, badge, view, context, valueColor);
     if (editingSurfaceChanged && panel) {
       panelAnchorElement = context.primaryRemote
-        ? panelAnchorFor(badge, placementPrimaryGroup)
+        ? panelAnchorFor(badge, placementPrimarySurface)
         : panelAnchorFor(badge);
     }
     if (panel) syncPanelGeometry();
@@ -4821,6 +4970,12 @@ const installScript = String.raw`(() => {
       const value = document.createElement("span");
       value.dataset.part = "value";
       value.dataset.quotapinModule = "value";
+      const pace = document.createElement("span");
+      pace.dataset.part = "pace";
+      pace.dataset.quotapinModule = "pace";
+      const runway = document.createElement("span");
+      runway.dataset.part = "runway";
+      runway.dataset.quotapinModule = "runway";
       const todayTokens = document.createElement("span");
       todayTokens.dataset.part = "todayTokens";
       todayTokens.dataset.quotapinModule = "todayTokens";
@@ -4851,10 +5006,10 @@ const installScript = String.raw`(() => {
       const barFill = document.createElement("span");
       barFill.dataset.part = "bar-fill";
       bar.append(barFill);
-      for (const node of [value, todayTokens, lifetimeTokens, label, countdown, relative, seconds, date, reset]) Object.assign(node.style, { minWidth: "0", flex: "0 0 auto", fontVariantNumeric: "tabular-nums" });
+      for (const node of [value, pace, runway, todayTokens, lifetimeTokens, label, countdown, relative, seconds, date, reset]) Object.assign(node.style, { minWidth: "0", flex: "0 0 auto", fontVariantNumeric: "tabular-nums" });
       Object.assign(bar.style, { position: "absolute", left: "8px", right: "8px", bottom: "2px", height: "2px", overflow: "hidden", borderRadius: "999px", background: "rgba(127,127,127,.18)", pointerEvents: "none", zIndex: "1" });
       Object.assign(barFill.style, { display: "block", width: "0%", height: "100%", borderRadius: "inherit", transition: "width 240ms cubic-bezier(.2,.8,.2,1)", background: "currentColor" });
-      badge.append(dot, value, todayTokens, lifetimeTokens, label, countdown, relative, seconds, date, reset, bar);
+      badge.append(dot, value, pace, runway, todayTokens, lifetimeTokens, label, countdown, relative, seconds, date, reset, bar);
     }
     if (badge.parentElement !== row) row.appendChild(badge);
     badge.dataset.quotapinInstance = instanceId;
@@ -4878,9 +5033,9 @@ const installScript = String.raw`(() => {
     const moduleMode = view.displayMode !== "template";
     const usageCopy = profileUsageCopy();
     const copy = moduleMode
-      ? { value: liveCopy.parts?.value ?? liveCopy.text ?? "--%", todayTokens: usageCopy.todayTokens, lifetimeTokens: usageCopy.lifetimeTokens, label: liveCopy.parts?.label ?? "", countdown: liveCopy.parts?.countdown ?? "--", relative: liveCopy.parts?.relative ?? "--", seconds: liveCopy.parts?.seconds ?? "--:--:--", date: liveCopy.parts?.date ?? "--", reset: liveCopy.parts?.reset ?? "--" }
-      : { value: liveCopy.text ?? "--%", todayTokens: "", lifetimeTokens: "", label: "", countdown: "", relative: "", seconds: "", date: "", reset: "" };
-    for (const module of ["value", "todayTokens", "lifetimeTokens", "label", "countdown", "relative", "seconds", "date", "reset"]) {
+      ? { value: liveCopy.parts?.value ?? liveCopy.text ?? "--%", pace: liveCopy.parts?.pace ?? "…", runway: liveCopy.parts?.runway ?? "…", todayTokens: usageCopy.todayTokens, lifetimeTokens: usageCopy.lifetimeTokens, label: liveCopy.parts?.label ?? "", countdown: liveCopy.parts?.countdown ?? "--", relative: liveCopy.parts?.relative ?? "--", seconds: liveCopy.parts?.seconds ?? "--:--:--", date: liveCopy.parts?.date ?? "--", reset: liveCopy.parts?.reset ?? "--" }
+      : { value: liveCopy.text ?? "--%", pace: "", runway: "", todayTokens: "", lifetimeTokens: "", label: "", countdown: "", relative: "", seconds: "", date: "", reset: "" };
+    for (const module of ["value", "pace", "runway", "todayTokens", "lifetimeTokens", "label", "countdown", "relative", "seconds", "date", "reset"]) {
       if (modules[module] && modules[module].textContent !== copy[module]) modules[module].textContent = copy[module];
     }
     const visibility = {
@@ -4888,6 +5043,8 @@ const installScript = String.raw`(() => {
       value: view.showValue !== false,
       todayTokens: moduleMode && view.showTodayTokens === true,
       lifetimeTokens: moduleMode && view.showLifetimeTokens === true,
+      pace: moduleMode && view.showPace === true,
+      runway: moduleMode && view.showRunway === true,
       label: moduleMode && view.showLabel === true,
       countdown: moduleMode && view.showCountdown === true,
       relative: moduleMode && view.showRelative === true,
@@ -4895,7 +5052,7 @@ const installScript = String.raw`(() => {
       date: moduleMode && view.showDate === true,
       reset: moduleMode && view.showReset === true,
     };
-    for (const module of ["dot", "value", "todayTokens", "lifetimeTokens", "label", "countdown", "relative", "seconds", "date", "reset"]) {
+    for (const module of ["dot", "value", "pace", "runway", "todayTokens", "lifetimeTokens", "label", "countdown", "relative", "seconds", "date", "reset"]) {
       if (!modules[module]) continue;
       modules[module].style.display = visibility[module] ? (module === "dot" ? "inline-block" : "inline-flex") : "none";
       modules[module].style.opacity = "1";
@@ -4913,7 +5070,7 @@ const installScript = String.raw`(() => {
     const valueColor = view.valueColor === "muted" ? muted : automaticContrast(view.valueColor ?? muted, view.valueColorMode ?? "severity", hostSurface, 4.5);
     const dotColor = view.dotColor === "muted" ? muted : automaticContrast(view.dotColor ?? muted, view.dotColorMode ?? "severity", hostSurface, 3);
     const identityColor = view.identityColor === "inherit" ? "inherit" : automaticContrast(view.identityColor, view.identityColorMode ?? "inherit", hostSurface, 4.5);
-    for (const module of ["value", "todayTokens", "lifetimeTokens", "label", "countdown", "relative", "seconds", "date", "reset"]) if (modules[module]) modules[module].style.color = valueColor;
+    for (const module of ["value", "pace", "runway", "todayTokens", "lifetimeTokens", "label", "countdown", "relative", "seconds", "date", "reset"]) if (modules[module]) modules[module].style.color = valueColor;
     if (modules.dot) modules.dot.style.background = dotColor;
     if (bar instanceof HTMLElement && barFill instanceof HTMLElement) {
       const percent = Math.max(0, Math.min(100, Number(view.remainingPercent) || 0));
@@ -4938,7 +5095,7 @@ const installScript = String.raw`(() => {
         : "quotapin-rainbow-value 3.6s linear infinite";
       return view.effect === "blink" ? "quotapin-blink .9s steps(2,end) infinite" : "quotapin-pulse 1.4s ease-in-out infinite";
     };
-    for (const module of ["value", "todayTokens", "lifetimeTokens", "label", "countdown", "relative", "seconds", "date", "reset"]) if (modules[module]) modules[module].style.animation = ["value", "both"].includes(view.effectTarget) ? animationFor("value") : "none";
+    for (const module of ["value", "pace", "runway", "todayTokens", "lifetimeTokens", "label", "countdown", "relative", "seconds", "date", "reset"]) if (modules[module]) modules[module].style.animation = ["value", "both"].includes(view.effectTarget) ? animationFor("value") : "none";
     if (modules.dot) modules.dot.style.animation = ["dot", "both"].includes(view.effectTarget) ? animationFor("dot") : "none";
     updateOverdriveEasterEgg(badge, view);
     syncPlacementPresentation(row, badge, { ...view, layout: renderLayout }, placementContext, valueColor);
@@ -4971,13 +5128,15 @@ const installScript = String.raw`(() => {
     const usageCopy = profileUsageCopy();
     const moduleMode = view.displayMode !== "template";
     const expectedCopy = moduleMode
-      ? { value: liveCopy.parts?.value ?? liveCopy.text ?? "--%", todayTokens: usageCopy.todayTokens, lifetimeTokens: usageCopy.lifetimeTokens, label: liveCopy.parts?.label ?? "", countdown: liveCopy.parts?.countdown ?? "--", relative: liveCopy.parts?.relative ?? "--", seconds: liveCopy.parts?.seconds ?? "--:--:--", date: liveCopy.parts?.date ?? "--", reset: liveCopy.parts?.reset ?? "--" }
-      : { value: liveCopy.text ?? "--%", todayTokens: "", lifetimeTokens: "", label: "", countdown: "", relative: "", seconds: "", date: "", reset: "" };
+      ? { value: liveCopy.parts?.value ?? liveCopy.text ?? "--%", pace: liveCopy.parts?.pace ?? "…", runway: liveCopy.parts?.runway ?? "…", todayTokens: usageCopy.todayTokens, lifetimeTokens: usageCopy.lifetimeTokens, label: liveCopy.parts?.label ?? "", countdown: liveCopy.parts?.countdown ?? "--", relative: liveCopy.parts?.relative ?? "--", seconds: liveCopy.parts?.seconds ?? "--:--:--", date: liveCopy.parts?.date ?? "--", reset: liveCopy.parts?.reset ?? "--" }
+      : { value: liveCopy.text ?? "--%", pace: "", runway: "", todayTokens: "", lifetimeTokens: "", label: "", countdown: "", relative: "", seconds: "", date: "", reset: "" };
     const expectedVisibility = {
       dot: view.showDot !== false,
       value: view.showValue !== false,
       todayTokens: moduleMode && view.showTodayTokens === true,
       lifetimeTokens: moduleMode && view.showLifetimeTokens === true,
+      pace: moduleMode && view.showPace === true,
+      runway: moduleMode && view.showRunway === true,
       label: moduleMode && view.showLabel === true,
       countdown: moduleMode && view.showCountdown === true,
       relative: moduleMode && view.showRelative === true,
@@ -4986,7 +5145,7 @@ const installScript = String.raw`(() => {
       reset: moduleMode && view.showReset === true,
     };
     const modules = findAccountModules(row, badge);
-    for (const module of ["dot", "value", "todayTokens", "lifetimeTokens", "label", "countdown", "relative", "seconds", "date", "reset"]) {
+    for (const module of ["dot", "value", "pace", "runway", "todayTokens", "lifetimeTokens", "label", "countdown", "relative", "seconds", "date", "reset"]) {
       const node = modules[module];
       if (!(node instanceof HTMLElement)) return true;
       if ((node.style.display !== "none") !== expectedVisibility[module]) return true;
@@ -5460,10 +5619,17 @@ const localTokenUsageRuntime = new LocalTokenUsageRuntime({
   log,
   onChange: () => broadcastClientState(null, "local-usage"),
 });
+const quotaPaceRuntime = new QuotaPaceRuntime({
+  statePath: configPath ? path.join(path.dirname(configPath), "quota-pace.json") : null,
+  log,
+});
 
 function clientState(settingsAck = null) {
   return {
-    ...configRuntime.clientState(appServerRuntime.getUsage(), settingsAck),
+    ...configRuntime.clientState({
+      ...appServerRuntime.getUsage(),
+      quotaPace: quotaPaceRuntime.getState(appServerRuntime.getUsage()),
+    }, settingsAck),
     update: updateRuntime.clientState(),
     localTokenUsage: localTokenUsageRuntime.getState(),
   };
@@ -5488,7 +5654,10 @@ const appServerRuntime = new AppServerRuntime({
   commandResolver: () => resolveCodexAppServerCommand(),
   writeLifecycleState,
   log,
-  onUsage: () => broadcastClientState(null, "quota"),
+  onUsage: (usage) => {
+    quotaPaceRuntime.observe(usage);
+    broadcastClientState(null, "quota");
+  },
 });
 
 cdpRuntime = new CdpTargetRuntime({

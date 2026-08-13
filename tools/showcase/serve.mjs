@@ -12,6 +12,8 @@ import { createColorStateToolkit } from "../../src/renderer/color-state.mjs";
 import { createTimeStateToolkit } from "../../src/renderer/time-state.mjs";
 import { createCodeConfigStateToolkit } from "../../src/renderer/code-config-state.mjs";
 import { createProfileUsageStateToolkit } from "../../src/renderer/profile-usage-state.mjs";
+import { createDeliveryStateToolkit } from "../../src/renderer/delivery-state.mjs";
+import { createPlacementToolkit } from "../../src/core/placement.mjs";
 import { DEFAULT_CONFIG, applyConfigAction, sanitizeConfig } from "../../src/core/config.mjs";
 import { formatQuota } from "../../src/core/format.mjs";
 import { normalizeRateLimits } from "../../src/core/model.mjs";
@@ -28,7 +30,9 @@ const renderer = `globalThis.__quotaPinRendererToolkits = {
   color: ${createColorStateToolkit.toString()},
   time: ${createTimeStateToolkit.toString()},
   codeConfig: ${createCodeConfigStateToolkit.toString()},
-  profileUsage: ${createProfileUsageStateToolkit.toString()}
+  profileUsage: ${createProfileUsageStateToolkit.toString()},
+  delivery: ${createDeliveryStateToolkit.toString()},
+  placement: ${createPlacementToolkit.toString()}
 };\n${loadRendererSource()}`;
 
 const clone = (value) => JSON.parse(JSON.stringify(value));

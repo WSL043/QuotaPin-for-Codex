@@ -49,7 +49,7 @@ QuotaPin keeps the useful part visible in the account row, so checking quota bec
 
 Latest stable: **v1.2.1**.
 
-2.x beta line: **v2.0.0-beta.1**. It develops multi-surface placement and never replaces the stable Latest channel until it passes beta acceptance.
+2.x beta line: **v2.0.0-beta.2**. It develops multi-surface placement and account-wide quota forecasting, and never replaces the stable Latest channel until it passes beta acceptance.
 
 | Platform | Status |
 |---|---|
@@ -119,6 +119,7 @@ The default keeps the original Codex avatar and account name and adds only the r
 You can independently show, hide, and reorder:
 
 - remaining percentage;
+- recent account-wide burn pace and estimated runway, derived from the official remaining percentage;
 - status dot and a quota line that can follow the quota modules or span the account row;
 - time left and second-by-second countdown;
 - reset date and reset time;
@@ -133,7 +134,7 @@ Save useful combinations as named views and switch between them without rebuildi
 
 Short-click the account row and Codex behaves normally. Hold the same row to open QuotaPin. Press it again—or click outside—to close the open panel. The native help button, avatar, account name, and normal account menu stay in place.
 
-In the 2.x placement beta, the interaction moves with the quota group: hold the visible group and the editor opens beside that surface. Every supported surface keeps the same reorder gesture and editing frames.
+In the 2.x placement beta, the interaction moves with the visible quota surface: hold anywhere in that surface and the editor opens beside it. The title center, workspace top, composer top, and account row share the same drag, collision, and alignment behavior. The experimental composer side slots were removed rather than leaving inconsistent hit areas.
 
 <p align="center">
   <img src="assets/screenshots/drag-layout.gif" width="405" alt="Dragging a QuotaPin module to the left, right, and center while neighboring modules make room">

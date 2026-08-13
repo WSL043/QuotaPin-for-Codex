@@ -3,9 +3,7 @@ export function createPlacementToolkit() {
     "account-row",
     "title-center",
     "workspace-top-center",
-    "workspace-bottom-start",
     "composer-center",
-    "workspace-bottom-end",
   ]);
   const railZones = Object.freeze(["account-row", "composer-bottom"]);
   const defaultPlacement = Object.freeze({
@@ -175,20 +173,6 @@ export function createPlacementToolkit() {
       const toolbarTop = composer.bottom - toolbarHeight;
       const slotTop = toolbarTop + 2;
       const slotHeight = Math.max(20, toolbarHeight - 6);
-      const sidebarRight = sidebar?.right ?? 0;
-      const startLeft = Math.max(sidebarRight + 8, 8);
-      const startRight = composer.left - 8;
-      const endLeft = composer.right + 8;
-      const endRight = viewport.right - 8;
-      const startRect = startRight - startLeft >= 88
-        ? cleanRect({ left: startLeft, top: slotTop, width: startRight - startLeft, height: slotHeight })
-        : null;
-      const endRect = endRight - endLeft >= 88
-        ? cleanRect({ left: endLeft, top: slotTop, width: endRight - endLeft, height: slotHeight })
-        : null;
-      zones["workspace-bottom-start"] = { available: Boolean(startRect), rect: startRect };
-      zones["workspace-bottom-end"] = { available: Boolean(endRect), rect: endRect };
-
       const composerBounds = cleanRect({
         left: composer.left + 10,
         top: slotTop,
@@ -213,9 +197,7 @@ export function createPlacementToolkit() {
         : null;
       rails["composer-bottom"] = { available: Boolean(railRect), passive: true, rect: railRect };
     } else {
-      for (const zone of ["workspace-bottom-start", "composer-center", "workspace-bottom-end"]) {
-        zones[zone] = { available: false, rect: null };
-      }
+      zones["composer-center"] = { available: false, rect: null };
       rails["composer-bottom"] = { available: false, rect: null };
     }
     return { zones, rails };

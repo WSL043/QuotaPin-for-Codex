@@ -18,8 +18,8 @@ using Microsoft.Win32;
 [assembly: AssemblyCompany("QuotaPin contributors")]
 [assembly: AssemblyProduct("QuotaPin")]
 [assembly: AssemblyCopyright("Copyright 2026 QuotaPin contributors")]
-[assembly: AssemblyVersion("2.0.0.1")]
-[assembly: AssemblyFileVersion("2.0.0.1")]
+[assembly: AssemblyVersion("2.0.0.2")]
+[assembly: AssemblyFileVersion("2.0.0.2")]
 
 namespace QuotaPin.Tray
 {
@@ -326,24 +326,32 @@ namespace QuotaPin.Tray
                 value["sourcePid"] = attempt.CodexPid;
                 value["sourceCreationTimeUtc"] = DateTime.FromFileTimeUtc(attempt.VerifiedCreationFileTime).ToString("o", CultureInfo.InvariantCulture);
                 value["writtenAt"] = DateTimeOffset.UtcNow.ToString("o", CultureInfo.InvariantCulture);
-                var temporary = path + "." + Guid.NewGuid().ToString("N") + ".tmp";
-                File.WriteAllText(temporary, new JavaScriptSerializer().Serialize(value));
-                if (File.Exists(path))
-                {
-                    try { File.Replace(temporary, path, null); }
-                    catch
-                    {
-                        File.Copy(temporary, path, true);
-                        File.Delete(temporary);
-                    }
-                }
-                else File.Move(temporary, path);
+                WriteJsonAtomic(path, value);
                 return true;
             }
             catch (Exception error)
             {
                 WriteLog("attach guard write failed: " + error.GetType().Name);
                 return false;
+            }
+        }
+
+        private void ClearHandoffPendingGuard(AttachAttempt attempt)
+        {
+            if (attempt == null || string.IsNullOrEmpty(attempt.Generation)) return;
+            try
+            {
+                var path = Path.Combine(installRoot, "logs", "auto-attach-guard.json");
+                if (!File.Exists(path)) return;
+                var state = new JavaScriptSerializer().DeserializeObject(File.ReadAllText(path)) as Dictionary<string, object>;
+                object generation;
+                if (state == null || !state.TryGetValue("generation", out generation)
+                    || !string.Equals(Convert.ToString(generation, CultureInfo.InvariantCulture), attempt.Generation, StringComparison.Ordinal)) return;
+                File.Delete(path);
+            }
+            catch (Exception error)
+            {
+                WriteLog("attach guard cleanup skipped: " + error.GetType().Name);
             }
         }
 
@@ -369,19 +377,7 @@ namespace QuotaPin.Tray
                 value["agentPid"] = agentPid;
                 value["port"] = port;
                 value["writtenAt"] = DateTimeOffset.UtcNow.ToString("o", CultureInfo.InvariantCulture);
-                var path = Path.Combine(installRoot, "logs", "auto-attach-guard.json");
-                var temporary = path + "." + Guid.NewGuid().ToString("N") + ".tmp";
-                File.WriteAllText(temporary, new JavaScriptSerializer().Serialize(value));
-                if (File.Exists(path))
-                {
-                    try { File.Replace(temporary, path, null); }
-                    catch
-                    {
-                        File.Copy(temporary, path, true);
-                        File.Delete(temporary);
-                    }
-                }
-                else File.Move(temporary, path);
+                WriteJsonAtomic(Path.Combine(installRoot, "logs", "auto-attach-guard.json"), value);
             }
             catch (Exception error)
             {
@@ -539,6 +535,7 @@ namespace QuotaPin.Tray
             }
             attachAttempts.Remove(attempt.CodexPid);
             ignoredCodexRoots.Add(attempt.CodexPid);
+            ClearHandoffPendingGuard(attempt);
             WriteLifecycleState("degraded", attempt.CodexPid, 0, 0, attempt.Number, reason);
             WriteLog("attach exhausted pid=" + attempt.CodexPid.ToString(CultureInfo.InvariantCulture) + " attempt=" + attempt.Number.ToString(CultureInfo.InvariantCulture) + " reason=" + reason);
         }

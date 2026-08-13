@@ -2,7 +2,7 @@
 
 | QuotaPin | Codex Desktop | Platform | Status |
 |---|---|---|---|
-| 2.0.0-beta.2 | isolated production renderer; signed-in local acceptance pending | Windows 11 development host | 🧪 Beta development line; v1.2.1 remains Latest |
+| 2.0.0-beta.2 | 26.803.10989.0 x64; production DOM fixture and signed-in local setup update | Windows 11 development host | 🧪 Verified beta; v1.2.1 remains Latest |
 | 1.2.1 | 26.803.10989.0 x64; production DOM fixture and package gates | Windows 11; macOS 15/26 native arm64 and x86_64 runners | ✅ Current stable; real-Mac acceptance pending |
 | 1.2.0 | 26.803.5235.0 x64; production DOM fixture and package gates | Windows 11; macOS 15/26 native arm64 and x86_64 runners | Previous stable; guided tray attach is fixed in 1.2.1 |
 | 1.1.2 | 26.803.5235.0 x64; production DOM fixture and package gates | Windows 11; macOS 15/26 native arm64 and x86_64 runners | Superseded; Windows panel update needs a one-time external repair before 1.2.0 |
@@ -16,7 +16,7 @@ The one-line command accepts x64 Windows 10 version 2004 (build 19041) and later
 
 ## Published artifact evidence
 
-- **2.0.0-beta.2:** continues the semantic placement beta on the v1.2.1 stability baseline. It is a prerelease and does not replace v1.2.1 as Latest.
+- **2.0.0-beta.2:** continues the semantic placement beta on the v1.2.1 stability baseline. The full local gate passed 312 tests. A setup-owned update from beta.1 preserved the running Codex root process and saved profile identities, migrated configuration from schema 18 to 19, retained one Agent and one tray, and returned to `quota-ready` with zero Agent stderr. A read-only signed-in inspection then reported the beta.2 renderer, current delivery, zero rejected deliveries, zero integrity repairs, and no stale transition. It is a prerelease and does not replace v1.2.1 as Latest.
 - **1.2.1:** the guided tray now passes the generation-bound source PID, creation time, and atomic handoff ticket required by `launch.ps1`; failed handoffs clear only their own pending ticket, while successful handoffs publish a verified successor receipt. This closes the 1.2.0 tray/launcher contract gap without changing the running Codex process during installation or update.
 - **1.2.0:** Windows update launch uses an attached PowerShell launcher and a bounded on-disk start receipt, so the Agent reports success only after the updater has actually crossed the process boundary. Setup-started handoff waits for that receipt before supervising the replacement Agent, preventing duplicate ownership. Equivalent renderer deliveries are suppressed, quota-line geometry remains stable during sidebar resize, and macOS runtime rediscovery backs off instead of spinning. The macOS package replaces the embedded runtime with a thin integrity-verifying native host that uses the signed runtime inside official Codex. Tagged package evidence is added only after the public release gate passes.
 - **1.1.2:** exact-PID Agent supervision is covered for guided Windows, quiet Windows, and macOS ownership paths with bounded recovery that never reopens Codex. Renderer heartbeats replace a missed-delivery value with an unavailable state, and App Server recovery no longer becomes permanently exhausted after repeated timeouts. The isolated Chromium product fixture verifies module-width, Legacy full-row, and Beta full-row quota-line bounds against the real account-row rectangles without changing row geometry. Command-mode hot resume republishes exact watcher ownership after update. Tagged package evidence is added only after the public release gate passes.
@@ -29,6 +29,7 @@ The one-line command accepts x64 Windows 10 version 2004 (build 19041) and later
 ## Automated evidence
 
 - The quota value and time modules come only from the windows returned by Codex.
+- Pace and runway use only recent official remaining-percentage observations for the matching account window. Calibration survives an Agent restart, resets on quota renewal, and treats corrupt local history as unavailable rather than blocking fresh observations.
 - App Server reads are single-flight; a response made stale by a newer quota notification is rejected before it can reach the renderer.
 - Complete renderer states carry monotonic delivery sequences. A 240-cycle Chromium stress case deliberately delivers an older value and ten disabled modules after each current state; every stale state is rejected, while a newer control state proves the detector can observe the same flash when it is legitimately accepted.
 - Unchanged CDP target polls and unchanged ten-second local token scans do not rebroadcast the renderer document. A replacement Agent receives a distinct renderer instance id, so same-version hot-resume replaces old code without restarting Codex.

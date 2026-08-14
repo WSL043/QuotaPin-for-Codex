@@ -300,11 +300,15 @@ before(async () => {
   origin = `http://127.0.0.1:${server.address().port}`;
   userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "quotapin-panel-ui-"));
   browser = spawn(browserPath, [
-    "--headless=new", "--disable-gpu", "--no-first-run", "--no-default-browser-check", "--remote-debugging-port=0",
+    "--headless=new", "--disable-gpu", "--disable-background-networking", "--disable-component-update",
+    "--disable-default-apps", "--disable-extensions", "--no-first-run", "--no-default-browser-check", "--remote-debugging-port=0",
     `--user-data-dir=${userDataDir}`, "about:blank",
   ], { stdio: "ignore", windowsHide: true });
   const activePortPath = path.join(userDataDir, "DevToolsActivePort");
-  const debugPort = await waitFor(() => fs.existsSync(activePortPath) && Number(fs.readFileSync(activePortPath, "utf8").split(/\r?\n/)[0]));
+  const debugPort = await waitFor(() => {
+    if (browser.exitCode !== null) throw new Error(`Isolated panel browser exited before CDP became ready (${browser.exitCode})`);
+    return fs.existsSync(activePortPath) && Number(fs.readFileSync(activePortPath, "utf8").split(/\r?\n/)[0]);
+  }, 90_000);
   const target = await waitFor(async () => {
     const targets = await fetch(`http://127.0.0.1:${debugPort}/json/list`).then((response) => response.json());
     return targets.find((item) => item.type === "page" && item.webSocketDebuggerUrl);

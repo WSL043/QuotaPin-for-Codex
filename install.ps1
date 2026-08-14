@@ -17,6 +17,19 @@ function ConvertTo-QuotaPinWindowsFileVersion([string]$SemanticVersion) {
     $Revision = if ($Match.Groups[2].Success) { $Match.Groups[2].Value } else { '0' }
     return '{0}.{1}' -f $Match.Groups[1].Value, $Revision
 }
+
+function Get-QuotaPinSha256([string]$Path) {
+    if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) { throw "Release file not found: $Path" }
+    $Stream = [IO.File]::Open($Path, [IO.FileMode]::Open, [IO.FileAccess]::Read, [IO.FileShare]::Read)
+    $Hasher = [Security.Cryptography.SHA256]::Create()
+    try {
+        ([BitConverter]::ToString($Hasher.ComputeHash($Stream))).Replace('-', '').ToLowerInvariant()
+    }
+    finally {
+        $Hasher.Dispose()
+        $Stream.Dispose()
+    }
+}
 $ReleaseApiUrl = if ($RequestedVersion) {
     "https://api.github.com/repos/WSL043/QuotaPin-for-Codex/releases/tags/v$RequestedVersion"
 }
@@ -166,7 +179,7 @@ try {
         }
         $PackagePath = Join-Path $TempRoot $PackageName
         Receive-QuotaPinBootstrapFile $PackageUrl $PackagePath $WindowsPackageMaximumBytes 900 $PackageName $PackageBytes
-        $ActualDigest = 'sha256:' + (Get-FileHash -Algorithm SHA256 -LiteralPath $PackagePath).Hash.ToLowerInvariant()
+        $ActualDigest = 'sha256:' + (Get-QuotaPinSha256 $PackagePath)
         if ($ActualDigest -cne $PackageDigest) { throw 'The downloaded QuotaPin installer failed SHA-256 verification.' }
         $PackageVersionInfo = (Get-Item -LiteralPath $PackagePath).VersionInfo
         $PackageVersion = ([string]$PackageVersionInfo.ProductVersion).Trim()

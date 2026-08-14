@@ -212,7 +212,13 @@ try {
     Write-QuotaPinUpdateResult 'started' 'downloading' 'QuotaPin is downloading the verified release.'
     Receive-QuotaPinInstaller $AssetUrl $PackagePath $PackageName $AssetBytes
     Write-QuotaPinUpdateResult 'started' 'verifying' 'QuotaPin is verifying the downloaded release.'
-    $ActualDigest = 'sha256:' + (Get-FileHash -Algorithm SHA256 -LiteralPath $PackagePath).Hash.ToLowerInvariant()
+    # Keep the updater independent of PowerShell module discovery.  Some
+    # otherwise healthy Windows PowerShell 5.1 hosts can resolve the web
+    # cmdlets but fail to auto-load a module-provided hash command in a
+    # detached update process.
+    # runtime-trust.ps1 is already loaded above and its .NET SHA-256 helper is
+    # part of the same trust boundary used for release payload verification.
+    $ActualDigest = 'sha256:' + (Get-QuotaPinSha256 $PackagePath)
     if ($ActualDigest -cne $AssetDigest) { throw 'The downloaded QuotaPin installer failed SHA-256 verification.' }
     $VersionInfo = (Get-Item -LiteralPath $PackagePath).VersionInfo
     $ExpectedPackageVersion = ConvertTo-QuotaPinWindowsFileVersion $Version

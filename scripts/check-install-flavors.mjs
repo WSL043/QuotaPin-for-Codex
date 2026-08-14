@@ -333,6 +333,8 @@ has(windowsArm64Acceptance, "QuotaPin.Tray", "the Windows Arm64 gate must exerci
 has(windowsArm64Acceptance, "unins000.exe", "the Windows Arm64 gate must exercise the native uninstaller");
 has(installerBuilder, 'ProductVersion -ne $FileVersion', "the installer build must reject a Windows file-version mismatch");
 has(installerBuilder, '"/DMyFileVersion=$FileVersion"', "prerelease SemVer must map to a numeric Windows file version");
+has(agentBuilder, "foreach ($Attempt in 1..5)", "the Agent build must bound retries around transient executable locks");
+has(agentBuilder, "Copy-Item -LiteralPath $NodePath -Destination $OutputPath -Force", "every Agent injection retry must start from a clean executable");
 has(codexHelpers, "Get-AuthenticodeSignature", "app-managed Codex command must be signature-checked");
 has(codexHelpers, "Modules\\Microsoft.PowerShell.Security\\Microsoft.PowerShell.Security.psd1", "runtime must load the signature module from PSHOME");
 has(prerequisites, "Modules\\Microsoft.PowerShell.Security\\Microsoft.PowerShell.Security.psd1", "Setup must load the signature module from PSHOME");
@@ -368,7 +370,10 @@ has(tray, "CreateToolhelp32Snapshot", "Setup tray must observe Codex launches wi
 lacks(read("scripts/build-tray.ps1"), "/reference:System.Management.dll", "tray build must not depend on a WMI process-event subscription");
 has(read("scripts/build-tray.ps1"), "Updater.cs", "tray build must include the in-place updater");
 has(updater, "ReleaseDownloadPrefix", "updates must accept only the project release asset origin");
-has(commandUpdater, "Get-FileHash -Algorithm SHA256", "the shared update transaction must verify the downloaded installer before launch");
+has(commandUpdater, "Get-QuotaPinSha256 $PackagePath", "the shared update transaction must verify the downloaded installer before launch");
+lacks(commandUpdater, "Get-FileHash", "the shared updater must not depend on PowerShell module auto-loading for SHA-256 verification");
+has(bootstrap, "Get-QuotaPinSha256 $PackagePath", "the public bootstrap must verify the downloaded installer without PowerShell module auto-loading");
+lacks(bootstrap, "Get-FileHash", "the public bootstrap must not depend on PowerShell module auto-loading for SHA-256 verification");
 has(updateLauncher, "Start-Process -FilePath $PowerShellPath", "the Windows Agent must delegate update survival to an attached PowerShell launcher");
 has(updateLauncher, "did not publish its launch receipt", "the Windows update launcher must fail closed without a fresh updater receipt");
 has(updateRuntime, 'launcherName = this.platform === "win32" ? "update-launcher.ps1"', "the panel update path must use the Windows launch handshake");

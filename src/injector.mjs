@@ -23,7 +23,7 @@ import { createDeliveryStateToolkit } from "./renderer/delivery-state.mjs";
 import { createPlacementToolkit } from "./core/placement.mjs";
 import { BUILD_COMMIT } from "./core/build-origin.mjs";
 
-const VERSION = "2.0.0-beta.2";
+const VERSION = "2.0.0-beta.3";
 const SOURCE_REPOSITORY = "https://github.com/WSL043/QuotaPin-for-Codex";
 const MAIN_TARGET_URL = "app://-/index.html";
 const portIndex = process.argv.indexOf("--port");
@@ -126,7 +126,7 @@ const installScript = String.raw`(() => {
     resolveRailZone
   } = rendererToolkits.placement();
   delete globalThis.__quotaPinRendererToolkits;
-  const version = "2.0.0-beta.2";
+  const version = "2.0.0-beta.3";
   const instanceId = "__QUOTAPIN_RENDERER_INSTANCE_ID__";
   const sourceRepository = "https://github.com/WSL043/QuotaPin-for-Codex";
   const previous = window.__quotaPinController;

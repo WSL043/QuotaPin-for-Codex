@@ -263,13 +263,13 @@ Only compatible, immutable releases with an exact public package set are eligibl
 The remote bootstrap without `-Version` resolves GitHub's immutable latest stable release. Supplying an exact reviewed stable or beta version permits an explicit install, repair, or compatible rollback. A beta never appears in the normal in-product update feed, even for a user already running a beta; moving between betas remains an intentional exact-version install. Reinstalling the same version follows the same transactional replacement path and does not reset configuration.
 
 ```powershell
-& ([scriptblock]::Create((irm https://raw.githubusercontent.com/WSL043/QuotaPin-for-Codex/main/install.ps1))) -Version '1.2.1'
+& ([scriptblock]::Create((irm https://raw.githubusercontent.com/WSL043/QuotaPin-for-Codex/main/install.ps1))) -Version '1.3.1'
 ```
 
 On macOS, the equivalent exact-version boundary is:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/WSL043/QuotaPin-for-Codex/main/install-macos.sh | bash -s -- --version 1.2.1
+curl -fsSL https://raw.githubusercontent.com/WSL043/QuotaPin-for-Codex/main/install-macos.sh | bash -s -- --version 1.3.1
 ```
 
 The in-product picker exposes only releases at or above the maintained support floor, currently 1.2.0. Older GitHub Releases remain immutable history, not supported rollback targets. An explicit bootstrap pin can still reproduce a published historical package for audit or recovery, but compatibility with current Codex and current configuration is not promised. If an older Agent encounters a configuration from a newer schema, it opens that configuration read-only instead of overwriting it. Published update behavior is counted as supported only after the corresponding path appears in [observed compatibility](compatibility.md).

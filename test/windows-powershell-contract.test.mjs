@@ -66,6 +66,30 @@ Write-Output 'parsed'
   assert.match(result.stdout, /parsed/);
 });
 
+test("Windows updater hashing works when PowerShell module auto-loading is unavailable", { skip: process.platform !== "win32" }, (t) => {
+  const fixture = fs.mkdtempSync(path.join(os.tmpdir(), "quotapin-update-hash-"));
+  t.after(() => fs.rmSync(fixture, { recursive: true, force: true }));
+  const payload = path.join(fixture, "payload.bin");
+  fs.writeFileSync(payload, "QuotaPin module-independent updater hash\n", "utf8");
+  const trustPath = path.join(root, "src", "runtime-trust.ps1").replaceAll("'", "''");
+  const payloadPath = payload.replaceAll("'", "''");
+  const script = String.raw`
+$ErrorActionPreference = 'Stop'
+$PSModuleAutoLoadingPreference = 'None'
+Import-Module ($PSHOME + '\Modules\Microsoft.PowerShell.Management\Microsoft.PowerShell.Management.psd1') -ErrorAction Stop
+. '${trustPath}'
+if (Get-Command Get-FileHash -ErrorAction SilentlyContinue) { throw 'Get-FileHash unexpectedly resolved in the isolated host.' }
+Get-QuotaPinSha256 '${payloadPath}'
+`;
+  const encoded = Buffer.from(script, "utf16le").toString("base64");
+  const result = spawnSync(powershell, ["-NoLogo", "-NoProfile", "-EncodedCommand", encoded], {
+    encoding: "utf8",
+    env: { ...process.env, PSModulePath: "" },
+  });
+  assert.equal(result.status, 0, result.stderr || result.stdout);
+  assert.equal(result.stdout.trim().toLowerCase(), "2042f1d5973fde487a944046195d05080bab338df85e73340d7410ec77ea5f03");
+});
+
 test("Windows update launcher hands off to a child that survives the launcher", { skip: process.platform !== "win32" }, async (t) => {
   const fixture = fs.mkdtempSync(path.join(os.tmpdir(), "quotapin-update-launcher-"));
   t.after(() => fs.rmSync(fixture, { recursive: true, force: true }));
@@ -379,5 +403,7 @@ test("command updater contract keeps exact platform-package trust, cleanup, and 
   assert.match(updater, /Resume-QuotaPinTrustedRuntime/);
   assert.match(updater, /update-completion\.json/);
   assert.match(updater, /cleanup-warning temp-root/);
+  assert.match(updater, /Get-QuotaPinSha256 \$PackagePath/);
+  assert.doesNotMatch(updater, /Get-FileHash/);
   assert.doesNotMatch(updater, /Start-Process[^\r\n]*(?:ChatGPT|Codex\.exe|launch\.ps1)/i);
 });

@@ -47,9 +47,9 @@ QuotaPin keeps the useful part visible in the account row, so checking quota bec
 
 ## Platform status
 
-Latest stable: **v1.2.1**.
+Latest stable: **v1.3.1**.
 
-2.x beta line: **v2.0.0-beta.2**. It develops multi-surface placement and account-wide quota forecasting, and never replaces the stable Latest channel until it passes beta acceptance.
+2.x beta line: **v2.0.0-beta.3**. It develops multi-surface placement and account-wide quota forecasting, and never replaces the stable Latest channel until it passes beta acceptance.
 
 | Platform | Status |
 |---|---|

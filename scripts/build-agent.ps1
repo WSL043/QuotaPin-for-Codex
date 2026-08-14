@@ -47,12 +47,27 @@ $SeaConfig = [ordered]@{
 & $NodePath --experimental-sea-config $SeaConfigPath
 if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $BlobPath)) { throw 'Agent SEA blob preparation failed.' }
 
-Copy-Item -LiteralPath $NodePath -Destination $OutputPath -Force
-& $Rcedit $OutputPath --set-icon $Icon --set-file-version $Version --set-product-version $Version --set-version-string ProductName QuotaPin --set-version-string FileDescription "QuotaPin | $OfficialProjectUrl" --set-version-string CompanyName 'QuotaPin contributors' --set-version-string LegalCopyright 'Copyright (c) 2026 WSL043' --set-version-string Comments "Official source: $OfficialProjectUrl | Support: $OfficialSupportUrl | Source: $SourceUrl" --set-version-string OriginalFilename 'QuotaPin.Agent.exe'
-if ($LASTEXITCODE -ne 0) { throw 'Agent executable metadata update failed.' }
+$ExecutablePrepared = $false
+foreach ($Attempt in 1..5) {
+    try {
+        # Start every attempt from a clean Node executable.  Metadata stamping
+        # can wake a security scanner that briefly holds the file before SEA
+        # injection; retrying a partially injected executable is not safe.
+        Copy-Item -LiteralPath $NodePath -Destination $OutputPath -Force
+        & $Rcedit $OutputPath --set-icon $Icon --set-file-version $Version --set-product-version $Version --set-version-string ProductName QuotaPin --set-version-string FileDescription "QuotaPin | $OfficialProjectUrl" --set-version-string CompanyName 'QuotaPin contributors' --set-version-string LegalCopyright 'Copyright (c) 2026 WSL043' --set-version-string Comments "Official source: $OfficialProjectUrl | Support: $OfficialSupportUrl | Source: $SourceUrl" --set-version-string OriginalFilename 'QuotaPin.Agent.exe'
+        if ($LASTEXITCODE -ne 0) { throw 'Agent executable metadata update failed.' }
 
-& $Postject $OutputPath NODE_SEA_BLOB $BlobPath --sentinel-fuse NODE_SEA_FUSE_fce680ab2cc467b6e072b8b5df1996b2
-if ($LASTEXITCODE -ne 0) { throw 'Agent executable injection failed.' }
+        & $Postject $OutputPath NODE_SEA_BLOB $BlobPath --sentinel-fuse NODE_SEA_FUSE_fce680ab2cc467b6e072b8b5df1996b2
+        if ($LASTEXITCODE -ne 0) { throw 'Agent executable injection failed.' }
+        $ExecutablePrepared = $true
+        break
+    }
+    catch {
+        if ($Attempt -eq 5) { throw }
+        Start-Sleep -Milliseconds (250 * $Attempt)
+    }
+}
+if (-not $ExecutablePrepared) { throw 'Agent executable preparation failed.' }
 
 function Invoke-AgentProbe([string]$Argument) {
     foreach ($Attempt in 1..5) {

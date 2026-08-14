@@ -10,12 +10,19 @@ $ExpectedVersion = (Get-Content -Raw -LiteralPath (Join-Path $RepositoryRoot 'VE
 $InstallRoot = Join-Path $env:LOCALAPPDATA 'QuotaPin'
 $RunKey = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run'
 
-function Wait-ProcessExit([Diagnostics.Process]$Process, [int]$TimeoutMilliseconds, [string]$Operation) {
+function Wait-ProcessExit([Diagnostics.Process]$Process, [int]$TimeoutMilliseconds, [string]$Operation, [string]$FailureLog = '') {
     if (-not $Process.WaitForExit($TimeoutMilliseconds)) {
         try { $Process.Kill() } catch {}
         throw "$Operation timed out after $([Math]::Round($TimeoutMilliseconds / 1000)) seconds."
     }
-    if ($Process.ExitCode -ne 0) { throw "$Operation failed with exit code $($Process.ExitCode)." }
+    if ($Process.ExitCode -ne 0) {
+        $Detail = ''
+        if ($FailureLog -and (Test-Path -LiteralPath $FailureLog -PathType Leaf)) {
+            $Tail = @(Get-Content -LiteralPath $FailureLog -Tail 80 -ErrorAction SilentlyContinue)
+            if ($Tail.Count) { $Detail = "`r`nInstaller log tail:`r`n" + ($Tail -join "`r`n") }
+        }
+        throw "$Operation failed with exit code $($Process.ExitCode).$Detail"
+    }
 }
 
 function Get-PeMachine([string]$Path) {
@@ -42,13 +49,16 @@ if (Test-Path -LiteralPath $InstallRoot) {
 }
 
 try {
+    $InstallerLog = Join-Path $env:RUNNER_TEMP 'quotapin-arm64-install.log'
     $Installer = Start-Process -FilePath $PackagePath -ArgumentList @(
         '/VERYSILENT',
         '/SUPPRESSMSGBOXES',
         '/NORESTART',
-        '/SP-'
+        '/SP-',
+        '/CIARM64ACCEPTANCE=1',
+        ('/LOG="' + $InstallerLog + '"')
     ) -PassThru
-    Wait-ProcessExit $Installer 120000 'QuotaPin Arm64-emulation install'
+    Wait-ProcessExit $Installer 120000 'QuotaPin Arm64-emulation install' $InstallerLog
 
     $AgentPath = Join-Path $InstallRoot 'QuotaPin.Agent.exe'
     $TrayPath = Join-Path $InstallRoot 'QuotaPin.Tray.exe'

@@ -315,6 +315,7 @@ has(agentBuilder, "--agent-version", "agent build must self-check the produced e
 has(windowsBuilder, "build-installer.ps1", "the Windows build must include the versioned installer");
 has(windowsBuilder, "[switch]$ReleaseManifest", "local Windows builds must make cross-platform release metadata explicit");
 has(setup, "ArchitecturesAllowed=x64compatible", "Setup must allow the x64 package on Windows 11 Arm64 emulation");
+has(setup, "/CIARM64ACCEPTANCE=1", "the exact public package needs a bounded native Arm64 acceptance path on a clean hosted runner");
 has(release, ".\\scripts\\build-windows.ps1 -ReleaseManifest", "public releases must bind Windows and macOS package metadata together");
 has(checkWorkflow, "runs-on: windows-11-arm", "checks must exercise the x64 Windows package on a native Windows 11 Arm64 runner");
 has(checkWorkflow, ".\\scripts\\test-windows-arm64-emulation.ps1", "checks must run the Windows Arm64 emulation lifecycle gate");
@@ -322,6 +323,8 @@ has(release, "runs-on: windows-11-arm", "releases must accept the exact Windows 
 has(release, "needs: [build, windows-arm64-emulation]", "publishing must wait for Windows 11 Arm64 emulation acceptance");
 has(release, ".\\scripts\\test-windows-arm64-emulation.ps1", "release acceptance must run the shared Windows Arm64 lifecycle gate");
 has(windowsArm64Acceptance, "OSArchitecture", "the Windows Arm64 gate must verify the native host architecture");
+has(windowsArm64Acceptance, "/CIARM64ACCEPTANCE=1", "only the native Arm64 gate may bypass the user-facing Codex prerequisite");
+has(windowsArm64Acceptance, "Installer log tail", "a failed Arm64 install must preserve its actionable Inno Setup evidence");
 has(windowsArm64Acceptance, "0x8664", "the Windows Arm64 gate must verify that Agent and tray exercise x64 emulation");
 has(windowsArm64Acceptance, "--agent-version", "the Windows Arm64 gate must execute the self-contained Agent");
 has(windowsArm64Acceptance, "QuotaPin.Tray", "the Windows Arm64 gate must exercise the tray lifecycle");

@@ -106,6 +106,8 @@ has(stopScript, "if ($LASTEXITCODE -ne 0)", "command uninstall must not treat a 
 has(stopScript, "[switch]$InstallerHandoff", "guided updates need an explicit verified handoff cleanup mode");
 has(stopScript, "installer-handoff.json", "guided cleanup deferral must require the captured runtime handoff");
 has(stopScript, "$InstallerHandoffVerified", "guided cleanup deferral must remain fail-closed without a fresh verified handoff");
+has(stopScript, "if ($InstallerHandoff -and (Test-Path -LiteralPath $InstallerHandoffPath -PathType Leaf))", "a fresh install without an existing runtime must use ordinary empty cleanup instead of failing handoff verification");
+lacks(stopScript, "QuotaPin installer handoff is unavailable.", "a missing optional handoff snapshot must not block a fresh install");
 matches(
   stopScript,
   /if \(-not \$InstallerHandoffVerified\) \{[\s\S]*?Remove-ItemProperty[\s\S]*?StartupShortcut/,

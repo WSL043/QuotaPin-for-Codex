@@ -1,13 +1,18 @@
 const HOUR_MS = 60 * 60 * 1000;
-const HISTORY_MS = 24 * HOUR_MS;
+const MODEL_HISTORY_MS = 24 * HOUR_MS;
+const ACTIVE_EPOCH_MS = 7 * 24 * HOUR_MS;
 const KEEP_MS = 8 * 24 * HOUR_MS;
 const PLATEAU_SAMPLE_MS = 15 * 60 * 1000;
 const RESET_TOLERANCE_SECONDS = 5 * 60;
 const MINIMUM_SPAN_MS = 30 * 60 * 1000;
 const MINIMUM_DELTA_PERCENT = 1;
-const MAXIMUM_SAMPLES = 192;
+const FAST_WINDOW_MS = 3 * HOUR_MS;
+const SLOW_WINDOW_MS = 12 * HOUR_MS;
+const MAXIMUM_SAMPLES = 768;
+const MINIMUM_RATE = 0.02;
 
 const finite = (value) => Number.isFinite(Number(value));
+const finiteValue = (value) => value !== null && value !== undefined && value !== "" && finite(value);
 const clampPercent = (value) => Math.max(0, Math.min(100, Number(value)));
 
 function windowKey(windowState = {}) {
@@ -90,7 +95,7 @@ export function observeQuotaPace(previous, usage, now = Date.now()) {
     if (shouldAppend) {
       current.samples.push({ at: observedAt, remainingPercent });
       current.samples = current.samples
-        .filter((sample) => sample.at >= observedAt - HISTORY_MS)
+        .filter((sample) => sample.at >= observedAt - ACTIVE_EPOCH_MS)
         .slice(-MAXIMUM_SAMPLES);
       changed = true;
     }
@@ -127,10 +132,83 @@ function weightedSlope(samples) {
   return denominator > 0 ? numerator / denominator : 0;
 }
 
-function confidenceFor(samples, spanMs, deltaPercent) {
+function rateOverWindow(samples, windowMs) {
+  const last = samples.at(-1);
+  const threshold = last.at - windowMs;
+  const candidates = samples.filter((sample) => sample.at >= threshold);
+  const first = candidates[0] ?? samples[0];
+  const spanHours = (last.at - first.at) / HOUR_MS;
+  if (spanHours <= 0) return { rate: null, spanMs: 0, consumedPercent: 0 };
+  const consumedPercent = Math.max(0, first.remainingPercent - last.remainingPercent);
+  return {
+    rate: consumedPercent / spanHours,
+    spanMs: last.at - first.at,
+    consumedPercent,
+  };
+}
+
+function lastConsumptionAt(samples) {
+  for (let index = samples.length - 1; index > 0; index -= 1) {
+    if (samples[index].remainingPercent < samples[index - 1].remainingPercent - 0.001) {
+      return samples[index].at;
+    }
+  }
+  return null;
+}
+
+function regimeFor({ baselineRate, fastRate, slowRate, samples, now }) {
+  const lastDropAt = lastConsumptionAt(samples);
+  const idleForMs = finiteValue(lastDropAt) ? Math.max(0, Number(now) - Number(lastDropAt)) : 0;
+  const expectedDropMs = baselineRate >= MINIMUM_RATE ? HOUR_MS / baselineRate : 4 * HOUR_MS;
+  const idleThresholdMs = Math.max(90 * 60 * 1000, Math.min(4 * HOUR_MS, expectedDropMs * 1.8));
+  if ((!finiteValue(fastRate) || fastRate < MINIMUM_RATE) && idleForMs >= idleThresholdMs) {
+    return { regime: "idle", idleForMs };
+  }
+  if (finiteValue(fastRate) && fastRate >= MINIMUM_RATE && fastRate >= baselineRate * 1.5 && fastRate - baselineRate >= 0.3) {
+    return { regime: "accelerating", idleForMs };
+  }
+  if (finiteValue(fastRate) && fastRate < baselineRate * 0.55 && baselineRate - fastRate >= 0.3 && idleForMs >= HOUR_MS) {
+    return { regime: "cooling", idleForMs };
+  }
+  const rates = [baselineRate, fastRate, slowRate].filter((value) => finiteValue(value) && value >= MINIMUM_RATE);
+  if (rates.length >= 2 && Math.max(...rates) / Math.min(...rates) >= 1.8) {
+    return { regime: "volatile", idleForMs };
+  }
+  return { regime: "steady", idleForMs };
+}
+
+function forecastBand({ remaining, baselineRate, fastRate, slowRate, regime, resetSeconds }) {
+  const rates = [baselineRate, fastRate, slowRate].filter((value) => finiteValue(value) && value >= MINIMUM_RATE);
+  if (!rates.length) return { lowSeconds: null, highSeconds: null, reachesReset: false, spreadRatio: null };
+  const lowSeconds = remaining / Math.max(...rates) * 3600;
+  let highSeconds = remaining / Math.min(...rates) * 3600;
+  let reachesReset = Number.isFinite(resetSeconds) && resetSeconds > 0 && highSeconds >= resetSeconds;
+  if (["idle", "cooling"].includes(regime) && Number.isFinite(resetSeconds) && resetSeconds > 0) {
+    highSeconds = Math.max(highSeconds, resetSeconds);
+    reachesReset = true;
+  }
+  const cappedLow = reachesReset ? Math.min(lowSeconds, resetSeconds) : lowSeconds;
+  const cappedHigh = reachesReset ? Math.min(highSeconds, resetSeconds) : highSeconds;
+  return {
+    lowSeconds: cappedLow,
+    highSeconds: Math.max(cappedLow, cappedHigh),
+    reachesReset,
+    spreadRatio: Math.max(...rates) / Math.min(...rates) - 1,
+  };
+}
+
+function evidenceConfidenceFor(samples, spanMs, deltaPercent) {
   const distinct = new Set(samples.map((sample) => sample.remainingPercent)).size;
   if (spanMs >= 6 * HOUR_MS && deltaPercent >= 5 && distinct >= 6) return "high";
   if (spanMs >= 2 * HOUR_MS && deltaPercent >= 2 && distinct >= 4) return "medium";
+  return "low";
+}
+
+function forecastConfidenceFor(evidenceConfidence, regime, spreadRatio) {
+  if (evidenceConfidence === "low") return "low";
+  if (regime !== "steady") return "low";
+  if (evidenceConfidence === "high" && finiteValue(spreadRatio) && spreadRatio <= 0.35) return "high";
+  if (finiteValue(spreadRatio) && spreadRatio <= 0.8) return "medium";
   return "low";
 }
 
@@ -150,13 +228,22 @@ export function estimateQuotaPace(previous, usage, now = Date.now()) {
       runwaySeconds: null,
       survivesReset: false,
       confidence: "low",
+      evidenceConfidence: "low",
+      forecastVersion: 2,
+      regime: "calibrating",
+      currentPacePerHour: null,
+      slowPacePerHour: null,
+      runwayLowSeconds: null,
+      runwayHighSeconds: null,
+      rangeSurvivesReset: false,
+      idleForMs: 0,
       sampleCount: 0,
       observedSpanMs: 0,
       consumedPercent: 0,
     };
     if (!record || !sameReset(record.resetsAt, windowState.resetsAt)) return base;
     const samples = record.samples
-      .filter((sample) => sample.at >= now - HISTORY_MS && sample.at <= now + 60_000)
+      .filter((sample) => sample.at >= now - MODEL_HISTORY_MS && sample.at <= now + 60_000)
       .sort((left, right) => left.at - right.at);
     if (!samples.length) return base;
     const spanMs = samples.at(-1).at - samples[0].at;
@@ -164,17 +251,49 @@ export function estimateQuotaPace(previous, usage, now = Date.now()) {
     const summary = { ...base, sampleCount: samples.length, observedSpanMs: spanMs, consumedPercent };
     if (samples.length < 3 || spanMs < MINIMUM_SPAN_MS || consumedPercent < MINIMUM_DELTA_PERCENT) return summary;
     const pacePerHour = weightedSlope(samples);
-    if (!Number.isFinite(pacePerHour) || pacePerHour < 0.02) return { ...summary, status: "idle" };
+    if (!Number.isFinite(pacePerHour) || pacePerHour < MINIMUM_RATE) return { ...summary, status: "idle", regime: "idle" };
+    const fast = rateOverWindow(samples, FAST_WINDOW_MS);
+    const slow = rateOverWindow(samples, SLOW_WINDOW_MS);
+    const currentPacePerHour = fast.spanMs >= HOUR_MS
+      ? fast.rate
+      : pacePerHour;
+    const slowPacePerHour = slow.spanMs >= 2 * HOUR_MS
+      ? slow.rate
+      : pacePerHour;
+    const { regime, idleForMs } = regimeFor({
+      baselineRate: pacePerHour,
+      fastRate: currentPacePerHour,
+      slowRate: slowPacePerHour,
+      samples,
+      now,
+    });
     const remaining = clampPercent(windowState.remainingPercent);
     const runwaySeconds = remaining / pacePerHour * 3600;
     const resetSeconds = finite(windowState.resetsAt) ? Number(windowState.resetsAt) - Number(now) / 1000 : null;
+    const band = forecastBand({
+      remaining,
+      baselineRate: pacePerHour,
+      fastRate: currentPacePerHour,
+      slowRate: slowPacePerHour,
+      regime,
+      resetSeconds,
+    });
+    const evidenceConfidence = evidenceConfidenceFor(samples, spanMs, consumedPercent);
     return {
       ...summary,
       status: "ready",
       pacePerHour,
+      currentPacePerHour,
+      slowPacePerHour,
       runwaySeconds,
+      runwayLowSeconds: band.lowSeconds,
+      runwayHighSeconds: band.highSeconds,
       survivesReset: Number.isFinite(resetSeconds) && resetSeconds > 0 && runwaySeconds >= resetSeconds,
-      confidence: confidenceFor(samples, spanMs, consumedPercent),
+      rangeSurvivesReset: band.reachesReset,
+      regime,
+      idleForMs,
+      evidenceConfidence,
+      confidence: forecastConfidenceFor(evidenceConfidence, regime, band.spreadRatio),
     };
   });
 }

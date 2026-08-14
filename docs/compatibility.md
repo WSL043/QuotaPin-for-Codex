@@ -12,7 +12,7 @@
 | 1.0.3 | CI package lifecycle | Windows 11 runner; macOS 15/26 native arm64 and x86_64 runners | Withdrawn; release transition was incompatible |
 | 1.0.2 | 26.803.5235.0 x64 | Windows 11 10.0.26200 | Withdrawn; updater required one-asset releases |
 
-The one-line command accepts x64 Windows 10 version 2004 (build 19041) and later. Current end-to-end evidence is from Windows 11, so Windows 10 remains best-effort until a real-device report is recorded. Windows ARM64 is not supported.
+The one-line command, guided installer, and current Codex package share Windows 10 version 2004 (build 19041) as their x64 minimum. Windows 10 x64 is therefore a supported baseline, while the signed-in real-device acceptance record remains Windows 11. Windows 11 Arm64 can run the same x64 Codex and QuotaPin packages under the operating system's x64 emulation; the release gate exercises that exact install, Agent, tray, and uninstall lifecycle on a native Arm64 runner. Windows 10 Arm64 is not supported because that operating system emulates x86 applications but not x64 applications.
 
 ## Published artifact evidence
 
@@ -56,10 +56,11 @@ The one-line command accepts x64 Windows 10 version 2004 (build 19041) and later
 - short press, hold, second-press close, outside-click close, and three-module drag feel;
 - first-launch handoff and degraded circuit-breaker recovery on a clean installed copy;
 - update from a tagged GitHub release, including user confirmation, progress, preserved settings, and a recoverable failure result;
-- high-DPI behavior and Windows 10 real-device coverage.
+- high-DPI behavior and Windows 10 x64 real-device coverage;
+- signed-in Codex attachment on a physical Windows 11 Arm64 device after the emulated package lifecycle passes CI.
 
 Host UI changes can invalidate an otherwise compatible release. QuotaPin fails closed when it cannot identify the account row uniquely or detects a native persistent quota indicator inside that row. The current quota value inside the opened Codex account menu does not collide with QuotaPin's inline account-row placement.
 
-Development evidence is marked as development. A tagged release is added only after the same checks are repeated against its published artifacts. Windows 10 remains best-effort until a real-device report is recorded.
+Development evidence is marked as development. A tagged release is added only after the same checks are repeated against its published artifacts. Windows 10 x64 is an intended supported baseline; its current evidence is the shared build-19041 contract plus the cross-version Windows API and PowerShell gates, not a signed-in physical Windows 10 acceptance run.
 
 The macOS package is CI-validated and included in 1.2.1. Real signed-in Codex and Gatekeeper acceptance remains provisional; see [the macOS implementation and acceptance boundary](macos.md).

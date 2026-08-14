@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import { applyConfigAction, CURRENT_CONFIG_VERSION, DEFAULT_CONFIG, DEFAULT_MODULE_ANCHORS, LAYOUT_MODULES, MAX_PROFILES, sanitizeConfig } from "../src/core/config.mjs";
-import { formatLocalizedRemainingTime, formatPreciseRemainingTime, formatQuota, formatRemainingTime, formatResetDate, selectWindows } from "../src/core/format.mjs";
+import { formatForecastRange, formatLocalizedRemainingTime, formatPacePerHour, formatPreciseRemainingTime, formatQuota, formatRemainingTime, formatResetDate, selectWindows } from "../src/core/format.mjs";
 import { mergeRateLimits, normalizeRateLimits } from "../src/core/model.mjs";
 
 const now = Date.UTC(2026, 7, 3, 0, 0, 0);
@@ -428,12 +428,11 @@ test("retired quota-fire settings migrate to the sidebar fire", () => {
 test("built-in hover text follows the selected language without rewriting custom text", () => {
   const base = sanitizeConfig();
   const english = formatQuota(weekly, base, now, "en-US").tooltip;
-  assert.equal(english.startsWith("Codex 7d: 42% left"), true);
-  assert.match(english, /resets in 4d 8h/);
+  assert.equal(english.startsWith("42% remaining\nReset in 4d 8h"), true);
+  assert.doesNotMatch(english, /Codex|7d:/);
   assert.equal(english.includes(formatResetDate(weekly.windows[0].resetsAt, "en-US")), true);
-  assert.equal(english.includes(`${weekly.windows[0].displayLabel}:`), true);
-  assert.match(formatQuota(weekly, base, now, "zh-CN").tooltip, /^Codex 7d：剩余 42% · 4d 8h 后重置/);
-  assert.match(formatQuota(weekly, base, now, "ja-JP").tooltip, /^Codex 7d：残り 42% · リセットまで 4d 8h/);
+  assert.match(formatQuota(weekly, base, now, "zh-CN").tooltip, /^剩余 42%\n重置 4d 8h/);
+  assert.match(formatQuota(weekly, base, now, "ja-JP").tooltip, /^残り 42%\nリセットまで 4d 8h/);
 
   const migrated = sanitizeConfig({
     version: 5,
@@ -465,7 +464,8 @@ test("extra quota buckets never enter the ordinary quota view or change its geom
 
   const defaultView = formatQuota(usage, sanitizeConfig(), now, "en-US");
   assert.equal(defaultView.text, "42%");
-  assert.match(defaultView.tooltip, /^Codex 7d: 42% left/m);
+  assert.match(defaultView.tooltip, /^42% remaining/m);
+  assert.doesNotMatch(defaultView.tooltip, /Codex 7d/);
   assert.doesNotMatch(defaultView.tooltip, /Spark/i);
 
   const merged = mergeRateLimits(response, { limitId: "codex_bengalfox", primary: { usedPercent: 10, windowDurationMins: 10080, resetsAt: now / 1000 + 5 * 86400 } });
@@ -494,7 +494,7 @@ test("formatted views expose the number of windows returned independently of sel
   const view = formatQuota({ status: "ready", windows }, shortest, now, "en-US");
   assert.equal(view.availableWindowCount, 2);
   assert.equal(view.parts.label, "brief");
-  assert.equal(view.tooltip.startsWith("brief:"), true);
+  assert.equal(view.tooltip.startsWith("brief\n70% remaining"), true);
   assert.equal(formatQuota({ status: "loading", windows: [] }, shortest, now, "en-US").availableWindowCount, 0);
 });
 
@@ -510,6 +510,8 @@ test("window selection uses returned durations without named-window assumptions"
 
 test("remaining-time formatter uses compact decision-friendly units", () => {
   assert.equal(formatRemainingTime(now / 1000 + 3900, now), "1h 5m");
+  assert.equal(formatRemainingTime(now / 1000 + 3599, now), "59m 59s");
+  assert.equal(formatRemainingTime(now / 1000 + 59, now), "59s");
   assert.equal(formatRemainingTime(now / 1000 + 3900, now, "zh-CN"), "1h 5m");
   assert.equal(formatRemainingTime(now / 1000 + 3900, now, "ja-JP"), "1h 5m");
   assert.equal(formatRemainingTime(now / 1000 - 1, now), "now");
@@ -571,10 +573,48 @@ test("account-wide pace and runway remain optional modules backed by official qu
   assert.equal(view.text, "70% 2%/h ≈1d 11h");
   assert.equal(view.parts.pace, "2%/h");
   assert.equal(view.parts.runway, "≈1d 11h");
-  assert.match(view.tooltip, /平均消耗 2%\/h · 预计可用 1天11小时/);
+  assert.match(view.tooltip, /速度 2%\/h · 预计 ≈1天11小时/);
 
   const code = withProfile({ template: "{remaining}% {pace} {runway}" }, config);
   assert.equal(formatQuota(snapshot, code, now, "en-US").text, "70% 2%/h ≈1d 11h");
+
+  const shortSnapshot = {
+    ...snapshot,
+    quotaPace: { windows: [{ ...snapshot.quotaPace.windows[0], runwaySeconds: 35 * 60 + 9 }] },
+  };
+  const shortView = formatQuota(shortSnapshot, config, now, "zh-CN");
+  assert.equal(shortView.parts.runway, "≈35m 9s");
+  assert.equal(shortView.runtimeWindows[0].runwayPrefix, "≈");
+  assert.equal(shortView.runtimeWindows[0].runwayEndsAt, now / 1000 + 35 * 60 + 9);
+});
+
+test("forecast v2 keeps one compact runway inline and one direct forecast line in hover", () => {
+  const config = withProfile({ showPace: true, showRunway: true });
+  const reset = now / 1000 + 5 * 86400;
+  const snapshot = {
+    status: "ready",
+    windows: [{ id: "codex:10080", sourceId: "codex", label: "7d", displayLabel: "Weekly", windowDurationMins: 10080, remainingPercent: 67, resetsAt: reset }],
+    quotaPace: { windows: [{
+      id: "codex:10080", sourceId: "codex", windowDurationMins: 10080, resetsAt: reset,
+      status: "ready", forecastVersion: 2, regime: "accelerating", confidence: "low",
+      pacePerHour: .92, currentPacePerHour: 2.36, slowPacePerHour: 1.09,
+      runwaySeconds: 73 * 3600, runwayLowSeconds: 28 * 3600, runwayHighSeconds: 61 * 3600,
+      survivesReset: false, rangeSurvivesReset: false,
+    }] },
+  };
+  const view = formatQuota(snapshot, config, now, "zh-CN");
+
+  assert.equal(view.parts.pace, "2.4%/h");
+  assert.equal(view.parts.runway, "≈3d 1h");
+  assert.equal(view.runtimeWindows[0].runwayRange, true);
+  assert.equal(view.runtimeWindows[0].runwayEndsAt, now / 1000 + 73 * 3600);
+  assert.equal(view.runtimeWindows[0].runwayLowEndsAt, now / 1000 + 28 * 3600);
+  assert.equal(view.runtimeWindows[0].runwayHighEndsAt, now / 1000 + 61 * 3600);
+  assert.match(view.tooltip, /速度 2.4%\/h · 预计 ≈3天1小时/);
+  assert.doesNotMatch(view.tooltip, /基线|用量正在|1天4小时–2天13小时/);
+  assert.equal(view.renderForecastTooltip, true);
+  assert.equal(formatForecastRange(28 * 3600, 61 * 3600, "en-US"), "1d 4h–2d 13h");
+  assert.equal(formatPacePerHour(0), "0%/h");
 });
 
 test("schema-eighteen layouts gain forecast modules without restoring retired side placements", () => {

@@ -83,7 +83,7 @@ const fixtureScript = `(() => {
   }
   function syncView() {
     const profile = activeProfile();
-    for (const key of ["displayMode", "showValue", "showDot", "showBar", "showLabel", "showCountdown", "showRelative", "showSeconds", "showDate", "showReset", "showTodayTokens", "showLifetimeTokens", "effect", "effectTarget", "effectAt"]) view[key] = profile[key];
+    for (const key of ["displayMode", "showValue", "showDot", "showBar", "showLabel", "showCountdown", "showRelative", "showSeconds", "showDate", "showReset", "showTodayTokens", "showLifetimeTokens", "showPace", "showRunway", "effect", "effectTarget", "effectAt"]) view[key] = profile[key];
     view.profileId = profile.id;
     view.profileName = profile.name;
     view.accountRowMode = preferences.accountRowMode;
@@ -126,6 +126,17 @@ const fixtureScript = `(() => {
     view.dotColor = dotColor;
     publish();
   };
+  window.__fixtureSetForecast = (seconds) => {
+    const profile = activeProfile();
+    profile.showRunway = true;
+    view.showRunway = true;
+    const runwayEndsAt = Date.now() / 1000 + Number(seconds);
+    view.parts.runway = '≈' + Math.floor(Number(seconds) / 60) + 'm';
+    if (Array.isArray(view.runtimeWindows) && view.runtimeWindows.length === 1) {
+      Object.assign(view.runtimeWindows[0], { runway: view.parts.runway, runwayPrefix: '≈', runwayEndsAt });
+    }
+    publish();
+  };
   window.__fixtureSetLocalUsage = (todayTokens) => publish({
     localTokenUsage: { status: 'ready', todayTokens, receivedAt: Date.now(), complete: true, scannedFiles: 1 }
   });
@@ -144,8 +155,9 @@ html,body{height:100%;margin:0;background:#050505;color:#eee;font:14px system-ui
 #composer{position:fixed;left:380px;right:140px;bottom:14px;height:92px;border-radius:16px;background:#111}
 #composer .editor-inner{position:absolute;left:0;right:0;top:0;bottom:8px;background:transparent}
 #composer textarea{position:absolute;left:18px;right:18px;top:14px;width:calc(100% - 36px);height:30px;resize:none;background:transparent;color:#ddd;border:0}
-#composer .tool{position:absolute;bottom:12px;width:26px;height:26px;border:0;border-radius:50%;background:#222;color:#aaa}.tool.left{left:14px}.tool.right{right:14px}
-</style></head><body><aside id="sidebar"><div id="account-footer"><button id="account" aria-haspopup="menu"><img src="/avatar.png" alt=""><span class="name">Aster</span></button><button id="native-help" aria-label="Help">?</button></div></aside><main><div id="composer"><div class="editor-inner"><textarea aria-label="Message"></textarea></div><button class="tool left">+</button><button class="tool right">↗</button></div></main><script src="/renderer.js"></script><script src="/fixture.js"></script></body></html>`;
+#composer .tool{position:absolute;bottom:12px;width:26px;height:26px;border:0;border-radius:50%;background:#222;color:#aaa}.tool.left{left:14px}.tool.right{right:14px}#native-context{position:absolute;right:188px;bottom:10px;width:30px;height:30px;border-radius:50%;background:#292929}
+#detached-model{position:fixed;right:184px;bottom:26px;width:130px;height:26px;border:0;border-radius:8px;background:#222;color:#aaa}
+</style></head><body><aside id="sidebar"><div id="account-footer"><button id="account" aria-haspopup="menu"><img src="/avatar.png" alt=""><span class="name">Aster</span></button><button id="native-help" aria-label="Help">?</button></div></aside><main><div id="composer"><div class="editor-inner"><textarea aria-label="Message"></textarea></div><button class="tool left" data-native-composer-control>+</button><div id="native-context" role="progressbar" aria-label="Context status" aria-valuenow="43" data-native-composer-control></div><button class="tool right" data-native-composer-control>↗</button></div><button id="detached-model" data-native-composer-control aria-haspopup="menu">Model</button></main><script src="/renderer.js"></script><script src="/fixture.js"></script></body></html>`;
 const avatar = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=", "base64");
 
 class CdpClient {
@@ -553,6 +565,12 @@ test("Quick placement uses semantic Codex slots, keeps identity native, and move
   await navigate("en");
   await openPanel();
   await client.evaluate(`window.__placementPanel = document.querySelector('#quotapin-profile-editor')`);
+  const quickOrder = await client.evaluate(`(() => {
+    const modules = document.querySelector('[data-quick-preview="avatar"]')?.closest('section');
+    const placement = document.querySelector('[data-placement-map="true"]')?.closest('section');
+    return Boolean(modules && placement && (modules.compareDocumentPosition(placement) & Node.DOCUMENT_POSITION_FOLLOWING));
+  })()`);
+  assert.equal(quickOrder, true, "Quick must choose visible modules before their destination");
   const availability = await client.evaluate(`(() => Object.fromEntries([...document.querySelectorAll('[data-placement-zone]')].map((node)=>[node.dataset.placementZone,!node.disabled])))()`);
   assert.deepEqual(availability, {
     "account-row": true,
@@ -589,6 +607,7 @@ test("Quick placement uses semantic Codex slots, keeps identity native, and move
       surfaceCenter:rect.left+rect.width/2,
       viewportCenter:document.documentElement.clientWidth/2,
       modules:[...surface.querySelectorAll('[data-quotapin-remote-module]')].map((node)=>node.dataset.quotapinRemoteModule),
+      noDrag:surface.style.getPropertyValue('-webkit-app-region'),
       saved:window.__quotaPinController.preferences.profiles[0].placement,
     };
   })()`);
@@ -599,7 +618,24 @@ test("Quick placement uses semantic Codex slots, keeps identity native, and move
   assert.ok(remote.surfaceTop < 40, JSON.stringify(remote));
   assert.ok(Math.abs(remote.surfaceCenter - remote.viewportCenter) <= 1, JSON.stringify(remote));
   assert.ok(remote.modules.includes("value"), JSON.stringify(remote));
+  assert.equal(remote.noDrag, "no-drag", "the title placement must opt out of Electron window dragging");
   assert.deepEqual(remote.saved, { primary: "title-center", fallback: "account-row", rail: "account-row" });
+
+  await client.evaluate(`document.querySelector('[data-placement-zone="composer-center"]').click()`);
+  await waitFor(() => client.evaluate(`document.querySelector('[data-quotapin-placement-surface="primary"]')?.dataset.placementZone === 'composer-center'`));
+  const composerSlot = await client.evaluate(`(() => {
+    const surface=document.querySelector('[data-quotapin-placement-surface="primary"]').getBoundingClientRect();
+    const controls=[...document.querySelectorAll('[data-native-composer-control]')].map((node)=>node.getBoundingClientRect());
+    const tooClose=controls.some((rect)=>!(surface.right + 9 <= rect.left || rect.right + 9 <= surface.left || surface.bottom <= rect.top || rect.bottom <= surface.top));
+    const centers=controls.map((rect)=>(rect.top+rect.bottom)/2).sort((a,b)=>a-b);
+    const middle=Math.floor(centers.length/2);
+    const controlCenter=centers.length%2?centers[middle]:(centers[middle-1]+centers[middle])/2;
+    const context=document.querySelector('#native-context').getBoundingClientRect();
+    return {tooClose,surfaceCenter:(surface.top+surface.bottom)/2,controlCenter,surfaceRight:surface.right,contextLeft:context.left};
+  })()`);
+  assert.equal(composerSlot.tooClose, false, JSON.stringify(composerSlot));
+  assert.ok(Math.abs(composerSlot.surfaceCenter - composerSlot.controlCenter) <= 1, JSON.stringify(composerSlot));
+  assert.ok(composerSlot.surfaceRight + 9 <= composerSlot.contextLeft, JSON.stringify(composerSlot));
 
   const quietBefore = await client.evaluate(`window.__quotaPinController.inspectLayoutRuntime()`);
   await new Promise((resolve) => setTimeout(resolve, 250));
@@ -754,10 +790,12 @@ test("every remote placement carries the same module frames, drag contract, and 
         order:modules.map((node)=>node.dataset.quotapinRemoteModule),
         framed:modules.every((node)=>getComputedStyle(node).outlineStyle === 'solid' && Number.parseFloat(getComputedStyle(node).outlineWidth) >= 1),
         separated:panelRect.bottom <= groupRect.top - 8 || panelRect.top >= groupRect.bottom + 8,
+        noDrag:surface.style.getPropertyValue('-webkit-app-region'),
       };
     })()`);
     assert.equal(before.framed, true, `${zone} did not expose the same module editing frames`);
     assert.equal(before.separated, true, `${zone} panel covered its long-press surface`);
+    assert.equal(before.noDrag, "no-drag", `${zone} remained owned by Electron window dragging`);
     const valueBeforeDot = before.order.indexOf("value") < before.order.indexOf("dot");
     const liveDrag = await client.evaluate(`(() => {
       const value=document.querySelector('[data-quotapin-remote-module="value"]');
@@ -980,8 +1018,27 @@ test("the seconds module ticks through the narrow time path instead of full rend
   assert.notEqual(result.after.text, result.before.text, JSON.stringify(result));
   assert.equal(result.after.runtime.renders, result.before.runtime.renders, JSON.stringify(result));
   assert.ok(result.after.runtime.liveTimeUpdates > result.before.runtime.liveTimeUpdates, JSON.stringify(result));
-  assert.ok(result.after.runtime.liveTimeLayoutPasses > result.before.runtime.liveTimeLayoutPasses, JSON.stringify(result));
+  assert.equal(result.after.runtime.liveTimeLayoutPasses, result.before.runtime.liveTimeLayoutPasses, JSON.stringify(result));
   assert.equal(result.after.runtime.integrityRepairs, result.before.runtime.integrityRepairs, JSON.stringify(result));
+});
+
+test("the runway module counts down and changes units through the same narrow time path", { skip: !canRun }, async () => {
+  await navigate("en");
+  const result = await client.evaluate(`(async () => {
+    window.__fixtureSetForecast(3599);
+    await new Promise((resolve) => setTimeout(resolve, 180));
+    const controller = window.__quotaPinController;
+    const runway = document.querySelector('[data-part="runway"]');
+    const before = { runtime: controller.inspectLayoutRuntime(), text: runway.textContent };
+    await new Promise((resolve) => setTimeout(resolve, 1250));
+    const after = { runtime: controller.inspectLayoutRuntime(), text: runway.textContent };
+    return { before, after };
+  })()`);
+  assert.match(result.before.text, /^≈59m \d+s$/, JSON.stringify(result));
+  assert.notEqual(result.after.text, result.before.text, JSON.stringify(result));
+  assert.equal(result.after.runtime.renders, result.before.runtime.renders, JSON.stringify(result));
+  assert.ok(result.after.runtime.liveTimeUpdates > result.before.runtime.liveTimeUpdates, JSON.stringify(result));
+  assert.equal(result.after.runtime.liveTimeLayoutPasses, result.before.runtime.liveTimeLayoutPasses, JSON.stringify(result));
 });
 
 test("the hidden idea route appears only after discovery and opens the public feature form", { skip: !canRun }, async () => {
@@ -1286,9 +1343,9 @@ test("repeated usage refreshes measure current glyphs instead of recycling a sta
     assert.ok(Math.abs(sample.width - sample.glyph) < 0.75, JSON.stringify(sample));
   }
   assert.notEqual(result.before.text, result.changed.text);
-  assert.match(result.before.title, /Tokens processed on this device today: 9,900,000/);
-  assert.match(result.changed.title, /Tokens processed on this device today: 10,000,000/);
-  assert.match(result.changed.badgeTitle, /Lifetime tokens: —/);
+  assert.match(result.before.title, /This device today 9,900,000/);
+  assert.match(result.changed.title, /This device today 10,000,000/);
+  assert.doesNotMatch(result.changed.badgeTitle, /Total|Lifetime|—/);
   assert.ok(result.repeated.every((sample) => Math.abs(sample.left - result.changed.left) < 0.25));
   assert.ok(result.repeated.every((sample) => Math.abs(sample.right - result.changed.right) < 0.25));
 });

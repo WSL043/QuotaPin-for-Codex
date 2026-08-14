@@ -26,12 +26,12 @@ The active tab owns its content scrolling. Opening a long list does not create a
 | `name` | `Aster` | The existing Codex account name. |
 | `dot` | colored dot | Compact status based on the saved thresholds. |
 | `value` | `42%` | Remaining percentage. |
-| `pace` | `1.8%/h` | Recent account-wide burn pace estimated from changes in the official remaining percentage. |
-| `runway` | `≈2d 4h` | Estimated time until the current quota reaches zero at that recent pace. `≥` means the estimate reaches the official reset first. |
+| `pace` | `2.4%/h` | Responsive three-hour account-wide burn pace estimated from changes in the official remaining percentage. |
+| `runway` | `≈2d 4h` | Compact stable-baseline runway. It counts down as `d+h`, `h+m`, then `m+s`. `≥` means the official reset arrives first. |
 | `todayTokens` | `Today 12.4M` | Tokens processed on this device during the current local calendar day, derived from Codex's local `token_count` events. |
 | `lifetimeTokens` | `Total 44B` | Account lifetime tokens from Codex's settled profile statistics. |
 | `label` | period name | The label Codex returns when more than one quota period exists. |
-| `countdown` | `4d 8h` | Universal compact time until reset. It keeps `d / h / m` in every language. |
+| `countdown` | `4d 8h` | Universal compact time until reset. It keeps `d / h / m / s` in every language and switches from `d+h` to `h+m` to `m+s` as the deadline approaches. |
 | `relative` | `4 days 8 hours` | Worded time in the selected language: `4 days 8 hours`, `4天8小时`, or `4日8時間`. |
 | `seconds` | `104:00:00` | Precise time until reset as accumulated `HH:MM:SS`; days stay in the separate compact countdown module. |
 | `date` | `Aug 9` | Localized reset calendar date. |
@@ -41,7 +41,7 @@ Quick shows each module as it looks now instead of asking you to decode setting 
 
 The two token counters are optional and start off. Today's counter reads only numeric `token_count` fields from local Codex session logs; it never reads message bodies and refreshes from newly appended events. It therefore describes this computer, and two computers can show different Today values. Fork replays and repeated cumulative snapshots are deduplicated. The compact module stays clean; if bounded startup backfill cannot prove full-day coverage, the localized hover copy identifies the exact value as "at least" rather than presenting a lower bound as exact. Total uses Codex's account profile summary and is account-wide; that summary may settle later than the local counter. Neither value is written into the QuotaPin configuration or log, and an unavailable source stays `—` rather than becoming zero.
 
-Pace and runway are a separate account-wide estimate. QuotaPin samples only the official remaining percentage and reset identity returned by Codex, keeps at most 24 hours of recent observations, and starts a new calibration epoch after a reset or a confirmed percentage increase. It needs at least three observations, 30 minutes, and one percentage point of movement before showing a number; until then the optional modules show `…`. The calculation deliberately excludes prompts, local token totals, model choice, cache accounting, and API pricing. Work performed on another computer is still reflected when the official account percentage reaches this computer, although the estimate naturally cannot observe time when no QuotaPin instance is sampling.
+Pace and runway are a separate account-wide estimate. QuotaPin samples only the official remaining percentage and reset identity returned by Codex. It retains the current weekly epoch for up to seven days while bounding each calculation to the latest 24 hours. Forecast v2 compares a responsive three-hour pace, the existing six-hour exponentially weighted baseline, and a slower 12-hour pace. The `pace` module shows the responsive value; `runway` stays one compact stable-baseline estimate. It needs at least three observations, 30 minutes, and one percentage point of movement before showing a forecast; until then the optional modules show `…`. The calculation deliberately excludes prompts, local token totals, model choice, cache accounting, and API pricing. Work performed on another computer is reflected when the official account percentage reaches this computer, although the estimate cannot observe periods when no QuotaPin instance is sampling. Inline runway values count down from absolute forecast deadlines between official observations. Evidence confidence and forecast stability are separate: many samples do not make changing future behavior certain.
 
 ### Avatar shape
 
@@ -188,7 +188,7 @@ A compact valid document looks like this:
 
 ### Placement
 
-Quick exposes placement as one small map of the current Codex work surface. The four quota targets and two line targets are selected directly on that map; unavailable host targets are visibly disabled. Saved settings contain semantic zone names rather than screen pixels, so resizing or moving the window does not corrupt a layout. The title-bar slot and the lower workspace-top slot are separate targets. `composer-center` sits above the composer instead of inside its editable area. `composer-bottom` follows the painted rounded composer shell and paints immediately after its outside bottom edge, not after a transparent inner editor wrapper.
+Quick exposes placement as one small map of the current Codex work surface. The four quota targets and two line targets are selected directly on that map; unavailable host targets are visibly disabled. Saved settings contain semantic zone names rather than screen pixels, so resizing or moving the window does not corrupt a layout. The title-bar slot and the lower workspace-top slot are separate targets. `composer-center` uses the free part of the composer toolbar, aligns to the native control centerline, and keeps a safety gutter around Codex controls. `composer-bottom` follows the painted rounded composer shell and paints immediately after its outside bottom edge, not after a transparent inner editor wrapper.
 
 Quota modules move as one stable semantic surface in the 2.x beta. Their DOM nodes are updated in place, so live quota refreshes do not reset a drag. The whole visible surface owns the hold target, including its empty padding; the old account row no longer keeps a hidden QuotaPin hold target after quota moves elsewhere. While Quick or Customize is open, every enabled position uses the same anchors, pointer-following drag, collision solver, magnetic targets, and editing frames as the account row. The editor anchors beside that real surface instead of returning to the lower-left account row. A short press there is not replayed into a distant Codex control. The native account row remains the fallback and keeps its normal short-click menu contract.
 
@@ -218,12 +218,12 @@ Code templates accept:
 - `{seconds}` — precise time until reset as accumulated `HH:MM:SS`;
 - `{date}` — localized reset date;
 - `{reset}` — localized reset weekday and time.
-- `{pace}` — recent official account-wide burn rate, such as `1.8%/h`;
-- `{runway}` — recent estimated runway, such as `≈2d 4h`.
+- `{pace}` — responsive official account-wide burn rate, such as `2.4%/h`;
+- `{runway}` — compact stable estimated runway, such as `≈2d 4h`.
 
 In `template` mode, `showValue` controls the combined result and `showDot` remains independent. The other time/label modules are not duplicated alongside the template.
 
-The built-in hover is intentionally fuller than the inline row: it lists every ordinary quota period with remaining percentage, compact time to reset, localized reset date, and localized weekday/time. Once calibrated, it also includes the recent official account-wide burn pace and estimated runway. It then includes exact, grouped token counts for this device today and the account lifetime total when those sources are available; inline modules remain compact. A custom quota `hoverTemplate` remains fully user-controlled without suppressing the token details.
+The built-in hover uses a fixed scan order: remaining quota, reset, pace/runway, then exact token totals when available. A single ordinary quota period has no source or duration heading; multiple periods keep only the minimum period label needed to tell them apart. Unavailable token rows are omitted. A custom quota `hoverTemplate` remains fully user-controlled, while available token totals stay on one compact final line.
 
 ## Recovery
 

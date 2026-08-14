@@ -42,7 +42,9 @@ const firstRun = read("src/first-run.ps1");
 const ui = read("src/ui.ps1");
 const verifierSafety = read("scripts/verify-safety.mjs");
 const setup = read("installer/QuotaPin.iss");
+const checkWorkflow = read(".github/workflows/check.yml");
 const release = read(".github/workflows/release.yml");
+const windowsArm64Acceptance = read("scripts/test-windows-arm64-emulation.ps1");
 const publicRelease = read("scripts/public-release.mjs");
 const readmes = [read("README.md"), read("README.zh-CN.md"), read("README.ja.md")];
 const compatibility = read("docs/compatibility.md");
@@ -101,6 +103,14 @@ has(stopScript, "watcher.json", "shared cleanup must verify the recorded watcher
 has(stopScript, "Get-QuotaPinTrustedRuntime", "shared cleanup must recover a strictly verified renderer even after the persistent Agent exits");
 has(stopScript, "if (-not $HasRuntimeTrustHelper)", "legacy cleanup fallback must remain disabled after strict runtime trust is installed");
 has(stopScript, "if ($LASTEXITCODE -ne 0)", "command uninstall must not treat a failed renderer cleanup as success");
+has(stopScript, "[switch]$InstallerHandoff", "guided updates need an explicit verified handoff cleanup mode");
+has(stopScript, "installer-handoff.json", "guided cleanup deferral must require the captured runtime handoff");
+has(stopScript, "$InstallerHandoffVerified", "guided cleanup deferral must remain fail-closed without a fresh verified handoff");
+matches(
+  stopScript,
+  /if \(-not \$InstallerHandoffVerified\) \{[\s\S]*?Remove-ItemProperty[\s\S]*?StartupShortcut/,
+  "a failed guided update must not remove the user's startup preference before Setup commits",
+);
 matches(
   stopScript,
   /Stop-OwnedProcesses 'QuotaPin\.Agent' \$AgentPath[\s\S]*?& \$AgentPath --cleanup --port \$CleanupPort/,
@@ -249,6 +259,7 @@ has(setup, "HasCommandLineSwitch('/COMMANDINSTALL=1') and (not ExistingSetupInst
 has(setup, "else if ExistingInstall then", "both installation flavors must preserve an explicitly disabled startup preference during update");
 has(setup, "'/DEFERHANDOFF=1'", "wrapper-driven updates must suppress the installer's duplicate runtime handoff");
 has(setup, "installer-handoff.ps1", "direct installer upgrades must retain a best-effort verified runtime handoff");
+has(setup, "-InstallerHandoff", "direct installer upgrades must allow the replacement Agent to retire a temporarily unreachable renderer");
 has(setup, "ExistingAutoAttach", "Setup upgrades must preserve the user's startup choice");
 has(setup, "UninstallDisplayIcon={app}\\QuotaPin.Tray.exe", "Setup must register its Apps-list identity");
 has(setup, "UninstallDisplayName=QuotaPin", "Setup must use a clean Apps-list display name");
@@ -303,7 +314,18 @@ has(agentBuilder, "NODE_SEA_BLOB", "agent build must inject a self-contained pay
 has(agentBuilder, "--agent-version", "agent build must self-check the produced executable");
 has(windowsBuilder, "build-installer.ps1", "the Windows build must include the versioned installer");
 has(windowsBuilder, "[switch]$ReleaseManifest", "local Windows builds must make cross-platform release metadata explicit");
+has(setup, "ArchitecturesAllowed=x64compatible", "Setup must allow the x64 package on Windows 11 Arm64 emulation");
 has(release, ".\\scripts\\build-windows.ps1 -ReleaseManifest", "public releases must bind Windows and macOS package metadata together");
+has(checkWorkflow, "runs-on: windows-11-arm", "checks must exercise the x64 Windows package on a native Windows 11 Arm64 runner");
+has(checkWorkflow, ".\\scripts\\test-windows-arm64-emulation.ps1", "checks must run the Windows Arm64 emulation lifecycle gate");
+has(release, "runs-on: windows-11-arm", "releases must accept the exact Windows package on a native Windows 11 Arm64 runner");
+has(release, "needs: [build, windows-arm64-emulation]", "publishing must wait for Windows 11 Arm64 emulation acceptance");
+has(release, ".\\scripts\\test-windows-arm64-emulation.ps1", "release acceptance must run the shared Windows Arm64 lifecycle gate");
+has(windowsArm64Acceptance, "OSArchitecture", "the Windows Arm64 gate must verify the native host architecture");
+has(windowsArm64Acceptance, "0x8664", "the Windows Arm64 gate must verify that Agent and tray exercise x64 emulation");
+has(windowsArm64Acceptance, "--agent-version", "the Windows Arm64 gate must execute the self-contained Agent");
+has(windowsArm64Acceptance, "QuotaPin.Tray", "the Windows Arm64 gate must exercise the tray lifecycle");
+has(windowsArm64Acceptance, "unins000.exe", "the Windows Arm64 gate must exercise the native uninstaller");
 has(installerBuilder, 'ProductVersion -ne $FileVersion', "the installer build must reject a Windows file-version mismatch");
 has(installerBuilder, '"/DMyFileVersion=$FileVersion"', "prerelease SemVer must map to a numeric Windows file version");
 has(codexHelpers, "Get-AuthenticodeSignature", "app-managed Codex command must be signature-checked");

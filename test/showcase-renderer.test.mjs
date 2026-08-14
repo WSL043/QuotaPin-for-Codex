@@ -106,7 +106,8 @@ test("Preview Lab controls the real formatter instead of a parallel mock", () =>
   assert.equal(countdown.view.parts.value, "24%");
   assert.equal(countdown.view.parts.countdown, "4d");
   assert.equal(countdown.view.showCountdown, true);
-  assert.match(countdown.view.tooltip, /^Codex 7d：剩余 24%/);
+  assert.match(countdown.view.tooltip, /^剩余 24%\n重置/);
+  assert.doesNotMatch(countdown.view.tooltip, /Codex 7d/);
 
   const custom = buildPreviewScenario({ preset: "default", remaining: 9, modules: "dot,date" }, previewNow);
   assert.equal(custom.view.severity, "critical");

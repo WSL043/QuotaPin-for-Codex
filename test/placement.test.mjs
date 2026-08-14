@@ -49,8 +49,13 @@ test("placement geometry exposes only proven centered surfaces", () => {
   assert.equal(geometry.rails["composer-bottom"].available, true);
   assert.ok(geometry.zones["workspace-top-center"].rect.top > geometry.zones["title-center"].rect.bottom);
   assert.equal(geometry.zones["workspace-top-center"].rect.top, 42);
-  assert.ok(geometry.zones["composer-center"].rect.left >= 588);
-  assert.ok(geometry.zones["composer-center"].rect.right <= 1002);
+  assert.ok(geometry.zones["composer-center"].rect.left >= 600, "composer modules need breathing room after the left native control");
+  assert.ok(geometry.zones["composer-center"].rect.right <= 990, "composer modules need breathing room before the right native control");
+  assert.equal(
+    geometry.zones["composer-center"].rect.top + geometry.zones["composer-center"].rect.height / 2,
+    828,
+    "composer modules must share the native toolbar center line",
+  );
   assert.equal(geometry.rails["composer-bottom"].rect.width, 716);
   assert.equal(geometry.rails["composer-bottom"].rect.top, 854);
 

@@ -18,15 +18,20 @@ test("live countdown scheduler targets the next true display boundary instead of
   assert.equal(toolkit.nextBoundaryDelay(windows, 5_401, 1_000, 12), 611);
   assert.equal(toolkit.nextBoundaryDelay(windows, 5_000, 1_000, 12), 1_012);
   assert.equal(toolkit.nextBoundaryDelay(windows, 5_401, 60_000, 12), 4_611);
+  assert.equal(toolkit.nextBoundaryDelay([{ resetsAt: 100, runwayEndsAt: 10 }], 5_401, 60_000, 12), 4_611);
+  assert.equal(toolkit.nextBoundaryDelay([{ runwayLowEndsAt: 10, runwayHighEndsAt: 100 }], 5_401, 60_000, 12), 4_611);
   assert.equal(toolkit.nextBoundaryDelay([{ resetsAt: 1 }], 2_000, 1_000), null);
 });
 
 test("seconds opt into one-second refresh while compact countdown stays minute-aligned", () => {
   assert.equal(toolkit.liveRefreshUnit({ displayMode: "modules", showSeconds: true }), 1_000);
   assert.equal(toolkit.liveRefreshUnit({ displayMode: "template", renderTemplate: "{remaining}% · {seconds}" }), 1_000);
-  assert.equal(toolkit.liveRefreshUnit({ displayMode: "modules", showCountdown: true }), 60_000);
-  assert.equal(toolkit.liveRefreshUnit({ displayMode: "modules", showRelative: true }), 60_000);
-  assert.equal(toolkit.liveRefreshUnit({ displayMode: "template", renderTemplate: "{relative}" }), 60_000);
+  assert.equal(toolkit.liveRefreshUnit({ displayMode: "modules", showCountdown: true }, [{ resetsAt: 7_200 }], 0), 60_000);
+  assert.equal(toolkit.liveRefreshUnit({ displayMode: "modules", showCountdown: true }, [{ resetsAt: 3_599 }], 0), 1_000);
+  assert.equal(toolkit.liveRefreshUnit({ displayMode: "modules", showRelative: true }, [{ resetsAt: 7_200 }], 0), 60_000);
+  assert.equal(toolkit.liveRefreshUnit({ displayMode: "template", renderTemplate: "{relative}" }, [{ resetsAt: 3_599 }], 0), 1_000);
+  assert.equal(toolkit.liveRefreshUnit({ displayMode: "modules", showRunway: true }, [{ runwayEndsAt: 3_599 }], 0), 1_000);
+  assert.equal(toolkit.liveRefreshUnit({ displayMode: "modules", showRunway: true }, [{ runwayLowEndsAt: 3_599, runwayHighEndsAt: 7_200 }], 0), 1_000);
   assert.equal(toolkit.liveRefreshUnit({ displayMode: "modules", showValue: true }), null);
 });
 
@@ -36,6 +41,11 @@ test("live compact and localized countdowns share one absolute clock", () => {
   assert.equal(toolkit.formatLocalizedRemainingTime(resetsAt, 0, "zh-CN"), "4天8小时");
   assert.equal(toolkit.formatLocalizedRemainingTime(resetsAt, 0, "ja-JP"), "4日8時間");
   assert.equal(toolkit.formatLocalizedRemainingTime(resetsAt, 0, "en-US"), "4 days 8 hours");
+  assert.equal(toolkit.formatRemainingTime(3_605, 0, "en-US"), "1h 1m");
+  assert.equal(toolkit.formatRemainingTime(3_599, 0, "en-US"), "59m 59s");
+  assert.equal(toolkit.formatLocalizedRemainingTime(3_599, 0, "zh-CN"), "59分钟59秒");
+  assert.equal(toolkit.formatLocalizedRemainingTime(3_599, 0, "ja-JP"), "59分59秒");
+  assert.equal(toolkit.formatLocalizedRemainingTime(3_599, 0, "en-US"), "59 minutes 59 seconds");
 });
 
 test("live and initial time formatters stay byte-for-byte aligned", () => {

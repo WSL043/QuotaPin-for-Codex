@@ -14,6 +14,15 @@ export function createPlacementToolkit() {
 
   const finite = (value) => Number.isFinite(Number(value));
   const clamp = (value, minimum, maximum) => Math.max(minimum, Math.min(maximum, value));
+  const median = (values, fallback = 0) => {
+    const sorted = (Array.isArray(values) ? values : [])
+      .map(Number)
+      .filter(Number.isFinite)
+      .sort((left, right) => left - right);
+    if (!sorted.length) return fallback;
+    const middle = Math.floor(sorted.length / 2);
+    return sorted.length % 2 ? sorted[middle] : (sorted[middle - 1] + sorted[middle]) / 2;
+  };
 
   function cleanPlacement(value = {}, fallback = defaultPlacement) {
     const source = value && typeof value === "object" ? value : {};
@@ -169,17 +178,41 @@ export function createPlacementToolkit() {
     };
 
     if (composer) {
-      const toolbarHeight = clamp(Number(input.composerToolbarHeight) || 34, 26, Math.min(48, composer.height));
-      const toolbarTop = composer.bottom - toolbarHeight;
-      const slotTop = toolbarTop + 2;
-      const slotHeight = Math.max(20, toolbarHeight - 6);
+      const toolbarControls = (Array.isArray(input.composerOccupied) ? input.composerOccupied : [])
+        .map(cleanRect)
+        .filter(Boolean)
+        .filter((rect) => rect.right > composer.left
+          && rect.left < composer.right
+          && rect.bottom <= composer.bottom + 2
+          && rect.bottom > composer.top + composer.height * .55);
+      const fallbackToolbarHeight = clamp(Number(input.composerToolbarHeight) || 34, 26, Math.min(48, composer.height));
+      const fallbackToolbarTop = composer.bottom - fallbackToolbarHeight;
+      // Toolbars are a visual row, not the union of every control box. A taller
+      // context indicator or an off-by-a-few-pixels model selector must not pull
+      // the quota away from the row baseline. Median centers/heights keep the
+      // placement stable while every control still participates in collision
+      // avoidance below.
+      const fallbackCenter = fallbackToolbarTop + fallbackToolbarHeight / 2;
+      const controlCenter = clamp(median(toolbarControls.map((rect) => (rect.top + rect.bottom) / 2), fallbackCenter), composer.top + 10, composer.bottom - 10);
+      const slotHeight = clamp(median(toolbarControls.map((rect) => rect.height), fallbackToolbarHeight - 6), 20, 34);
+      const slotTop = controlCenter - slotHeight / 2;
       const composerBounds = cleanRect({
         left: composer.left + 10,
         top: slotTop,
         width: Math.max(1, composer.width - 20),
         height: slotHeight,
       });
-      const composerGap = preferredGap(composerBounds, input.composerOccupied, {
+      // Native controls can paint a focus ring or icon just beyond their
+      // measured border box. Keep a real optical gutter instead of consuming
+      // the entire mathematical gap.
+      const composerSafetyGap = 12;
+      const paddedControls = toolbarControls.map((rect) => ({
+        left: rect.left - composerSafetyGap,
+        top: rect.top,
+        width: rect.width + composerSafetyGap * 2,
+        height: rect.height,
+      }));
+      const composerGap = preferredGap(composerBounds, paddedControls, {
         minimumWidth: 96,
         preferredCenter: composer.left + composer.width / 2,
       });

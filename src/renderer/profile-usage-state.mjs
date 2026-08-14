@@ -76,35 +76,25 @@ export function createProfileUsageStateToolkit() {
   function formatProfileUsageParts(usage, locale = "en") {
     const language = String(locale ?? "").toLowerCase();
     const labels = language.startsWith("zh")
-      ? { today: "今日", lifetime: "累计", todayTitle: "今天已用 token", lifetimeTitle: "累计 token" }
+      ? { today: "今日", lifetime: "累计", deviceToday: "本机今日" }
       : language.startsWith("ja")
-        ? { today: "今日", lifetime: "累計", todayTitle: "今日使用したトークン", lifetimeTitle: "累計トークン" }
-        : { today: "Today", lifetime: "Total", todayTitle: "Tokens used today", lifetimeTitle: "Lifetime tokens" };
+        ? { today: "今日", lifetime: "累計", deviceToday: "この端末・今日" }
+        : { today: "Today", lifetime: "Total", deviceToday: "This device today" };
     const today = formatTokenCount(usage?.todayTokens, locale);
     const lifetime = formatTokenCount(usage?.lifetimeTokens, locale);
     const todayExact = formatExactTokenCount(usage?.todayTokens, locale);
     const lifetimeExact = formatExactTokenCount(usage?.lifetimeTokens, locale);
     const todayEstimated = usage?.todayEstimated === true && today !== "—";
-    const todayTitle = usage?.todaySource === "device"
-      ? language.startsWith("zh")
-        ? "今天在这台设备处理的 token"
-        : language.startsWith("ja")
-          ? "今日このデバイスで処理したトークン"
-          : "Tokens processed on this device today"
-      : labels.todayTitle;
-    const lowerBound = todayEstimated
-      ? language.startsWith("zh")
-        ? "（至少）"
-        : language.startsWith("ja")
-          ? "（少なくとも）"
-          : " (at least)"
-      : "";
+    const todayTitle = usage?.todaySource === "device" ? labels.deviceToday : labels.today;
+    const lowerBound = todayEstimated ? "≥" : "";
+    const todayTokensTitle = todayExact === "—" ? "" : `${todayTitle} ${lowerBound}${todayExact}`;
+    const lifetimeTokensTitle = lifetimeExact === "—" ? "" : `${labels.lifetime} ${lifetimeExact}`;
     return {
       todayTokens: `${labels.today} ${today}`,
       lifetimeTokens: `${labels.lifetime} ${lifetime}`,
-      todayTokensTitle: `${todayTitle}${lowerBound}: ${todayExact}`,
-      lifetimeTokensTitle: `${labels.lifetimeTitle}: ${lifetimeExact}`,
-      tooltip: `${todayTitle}${lowerBound}: ${todayExact}\n${labels.lifetimeTitle}: ${lifetimeExact}`,
+      todayTokensTitle,
+      lifetimeTokensTitle,
+      tooltip: [todayTokensTitle, lifetimeTokensTitle].filter(Boolean).join(" · "),
     };
   }
 

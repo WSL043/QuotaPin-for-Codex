@@ -783,7 +783,7 @@ test("i18n state keeps renderer labels and option contracts in one toolkit", () 
   assert.equal(toolkit.translate("zh-CN", "QuotaPin settings modes"), "QuotaPin 设置模式");
   assert.equal(toolkit.translate("ja", "Code draft not applied"), "コードの下書きは未適用です");
   assert.equal(toolkit.translate("zh-CN", "Current view"), "当前搭配");
-  assert.equal(toolkit.translate("ja", "Click to show or hide. Drag the live row below to arrange."), "クリックで表示を切り替え、下の実際のアカウント欄をドラッグして並べ替えます。");
+  assert.equal(toolkit.translate("ja", "Click to show or hide. Close the panel, then drag modules at their display position."), "クリックで表示を切り替えます。パネルを閉じると、実際の表示位置で項目をドラッグして並べ替えられます。");
   assert.equal(toolkit.translate("zh-CN", "Choose an attention effect first."), "请先选择提醒效果。");
   assert.equal(toolkit.translate("ja", "Updates"), "アップデート");
   assert.equal(toolkit.updateIntent("0.3.0-alpha.25", "0.3.0-alpha.26"), "update");

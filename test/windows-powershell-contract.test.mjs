@@ -47,8 +47,8 @@ $AsDate = ConvertTo-QuotaPinInstant ([DateTime]::Parse('2026-08-06T00:28:37.4510
   }
 });
 
-test("update PowerShell sources parse in Windows PowerShell 5.1", { skip: process.platform !== "win32" }, () => {
-  const files = ["scripts/update.ps1", "scripts/update-launcher.ps1", "scripts/installer-handoff.ps1", "src/runtime-trust.ps1", "src/lifecycle.ps1"]
+test("release and update PowerShell sources parse in Windows PowerShell 5.1", { skip: process.platform !== "win32" }, () => {
+  const files = ["scripts/test-windows-arm64-emulation.ps1", "scripts/update.ps1", "scripts/update-launcher.ps1", "scripts/installer-handoff.ps1", "src/runtime-trust.ps1", "src/lifecycle.ps1"]
     .map((relative) => path.join(root, relative).replaceAll("'", "''"));
   const script = String.raw`
 $ErrorActionPreference = 'Stop'

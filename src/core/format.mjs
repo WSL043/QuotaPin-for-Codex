@@ -8,12 +8,12 @@ const DEFAULT_HOVER_TEMPLATE = "{remaining}% left · resets in {countdown} ({dat
 function localizedDefaultHover(locale, includeLabel = false) {
   const language = String(locale ?? "").toLowerCase();
   const body = language.startsWith("zh")
-    ? "剩余 {remaining}% · {countdown} 后重置（{date}，{reset}）"
+    ? "剩余 {remaining}%\n重置 {countdown} · {date} {reset}"
     : language.startsWith("ja")
-      ? "残り {remaining}% · リセットまで {countdown}（{date}、{reset}）"
-      : DEFAULT_HOVER_TEMPLATE;
+      ? "残り {remaining}%\nリセットまで {countdown} · {date} {reset}"
+      : "{remaining}% remaining\nReset in {countdown} · {date} {reset}";
   if (!includeLabel) return body;
-  return language.startsWith("zh") || language.startsWith("ja") ? `{label}：${body}` : `{label}: ${body}`;
+  return `{label}\n${body}`;
 }
 
 function waitingTooltip(locale) {
@@ -45,13 +45,7 @@ export function formatRemainingTime(resetsAt, now = Date.now(), locale = "en") {
   const milliseconds = Number(resetsAt) * 1000 - now;
   if (!Number.isFinite(milliseconds)) return terminal.unknown;
   if (milliseconds <= 0) return terminal.now;
-  const totalMinutes = Math.max(1, Math.ceil(milliseconds / 60_000));
-  const days = Math.floor(totalMinutes / 1440);
-  const hours = Math.floor((totalMinutes % 1440) / 60);
-  const minutes = totalMinutes % 60;
-  if (days) return hours ? `${days}d ${hours}h` : `${days}d`;
-  if (hours) return minutes ? `${hours}h ${minutes}m` : `${hours}h`;
-  return `${minutes}m`;
+  return formatDuration(milliseconds / 1000, locale);
 }
 
 export function formatLocalizedRemainingTime(resetsAt, now = Date.now(), locale = "en") {
@@ -59,19 +53,44 @@ export function formatLocalizedRemainingTime(resetsAt, now = Date.now(), locale 
   const milliseconds = Number(resetsAt) * 1000 - now;
   if (!Number.isFinite(milliseconds)) return language.startsWith("zh") ? "未知" : language.startsWith("ja") ? "不明" : "unknown";
   if (milliseconds <= 0) return language.startsWith("zh") ? "现在" : language.startsWith("ja") ? "まもなく" : "now";
-  const totalMinutes = Math.max(1, Math.ceil(milliseconds / 60_000));
-  const days = Math.floor(totalMinutes / 1440);
-  const hours = Math.floor((totalMinutes % 1440) / 60);
-  const minutes = totalMinutes % 60;
-  const values = days ? [[days, "day"], ...(hours ? [[hours, "hour"]] : [])]
-    : hours ? [[hours, "hour"], ...(minutes ? [[minutes, "minute"]] : [])]
-      : [[minutes, "minute"]];
+  return formatDuration(milliseconds / 1000, locale, true);
+}
+
+function durationValues(seconds) {
+  const totalSeconds = Math.max(1, Math.ceil(Number(seconds)));
+  if (!Number.isFinite(totalSeconds)) return [];
+  if (totalSeconds >= 86_400) {
+    const totalHours = Math.ceil(totalSeconds / 3_600);
+    const days = Math.floor(totalHours / 24);
+    const hours = totalHours % 24;
+    return [[days, "day"], ...(hours ? [[hours, "hour"]] : [])];
+  }
+  if (totalSeconds >= 3_600) {
+    const totalMinutes = Math.ceil(totalSeconds / 60);
+    const hours = Math.floor(totalMinutes / 60);
+    const minutes = totalMinutes % 60;
+    return [[hours, "hour"], ...(minutes ? [[minutes, "minute"]] : [])];
+  }
+  const minutes = Math.floor(totalSeconds / 60);
+  const remainingSeconds = totalSeconds % 60;
+  if (minutes) return [[minutes, "minute"], ...(remainingSeconds ? [[remainingSeconds, "second"]] : [])];
+  return [[remainingSeconds || 1, "second"]];
+}
+
+export function formatDuration(seconds, locale = "en", localized = false) {
+  const values = durationValues(seconds);
+  if (!values.length) return "—";
+  if (!localized) {
+    const units = { day: "d", hour: "h", minute: "m", second: "s" };
+    return values.map(([value, unit]) => `${value}${units[unit]}`).join(" ");
+  }
+  const language = String(locale ?? "").toLowerCase();
   if (language.startsWith("zh")) {
-    const units = { day: "天", hour: "小时", minute: "分钟" };
+    const units = { day: "天", hour: "小时", minute: "分钟", second: "秒" };
     return values.map(([value, unit]) => `${value}${units[unit]}`).join("");
   }
   if (language.startsWith("ja")) {
-    const units = { day: "日", hour: "時間", minute: "分" };
+    const units = { day: "日", hour: "時間", minute: "分", second: "秒" };
     return values.map(([value, unit]) => `${value}${units[unit]}`).join("");
   }
   return values.map(([value, unit]) => `${value} ${unit}${value === 1 ? "" : "s"}`).join(" ");
@@ -107,25 +126,49 @@ export function formatResetTime(resetsAt, locale) {
 
 export function formatPacePerHour(value) {
   const rate = Number(value);
-  if (!Number.isFinite(rate) || rate < 0.02) return "—";
+  if (!Number.isFinite(rate) || rate < 0) return "—";
+  if (rate < 0.02) return "0%/h";
   const digits = rate < 10 ? 1 : 0;
   return `${rate.toFixed(digits).replace(/\.0$/, "")}%/h`;
 }
 
 function formatForecastDuration(seconds, locale, localized = false) {
-  const totalMinutes = Math.max(1, Math.ceil(Number(seconds) / 60));
-  if (!Number.isFinite(totalMinutes)) return "—";
-  const days = Math.floor(totalMinutes / 1440);
-  const hours = Math.floor((totalMinutes % 1440) / 60);
-  const minutes = totalMinutes % 60;
-  const compact = days ? `${days}d${hours ? ` ${hours}h` : ""}` : hours ? `${hours}h${minutes ? ` ${minutes}m` : ""}` : `${minutes}m`;
-  if (!localized) return compact;
-  const language = String(locale ?? "").toLowerCase();
-  if (language.startsWith("zh")) return days ? `${days}天${hours ? `${hours}小时` : ""}` : hours ? `${hours}小时${minutes ? `${minutes}分钟` : ""}` : `${minutes}分钟`;
-  if (language.startsWith("ja")) return days ? `${days}日${hours ? `${hours}時間` : ""}` : hours ? `${hours}時間${minutes ? `${minutes}分` : ""}` : `${minutes}分`;
-  return days ? `${days} day${days === 1 ? "" : "s"}${hours ? ` ${hours} hour${hours === 1 ? "" : "s"}` : ""}`
-    : hours ? `${hours} hour${hours === 1 ? "" : "s"}${minutes ? ` ${minutes} minute${minutes === 1 ? "" : "s"}` : ""}`
-      : `${minutes} minute${minutes === 1 ? "" : "s"}`;
+  return formatDuration(seconds, locale, localized);
+}
+
+export function formatForecastRange(lowSeconds, highSeconds, locale = "en", localized = false, reachesReset = false) {
+  const low = Number(lowSeconds);
+  const high = Number(highSeconds);
+  if (!Number.isFinite(low) || !Number.isFinite(high) || low <= 0 || high < low) return "—";
+  const lowText = formatForecastDuration(low, locale, localized);
+  const highText = formatForecastDuration(high, locale, localized);
+  if (lowText === highText) return reachesReset ? `≥${highText}` : highText;
+  return `${lowText}–${reachesReset ? "≥" : ""}${highText}`;
+}
+
+function forecastDisplay(windowState, estimate, now, locale) {
+  if (estimate?.status !== "ready") {
+    return { text: estimate?.status === "calibrating" ? "…" : "—", range: false, pointSeconds: null, lowSeconds: null, highSeconds: null };
+  }
+  const resetSeconds = Number(windowState.resetsAt) - now / 1000;
+  const pointSeconds = estimate.survivesReset && Number.isFinite(resetSeconds)
+    ? Math.max(60, resetSeconds)
+    : Number(estimate.runwaySeconds);
+  const lowSeconds = Number(estimate.runwayLowSeconds);
+  const highSeconds = Number(estimate.runwayHighSeconds);
+  const meaningfulRange = Number.isFinite(lowSeconds) && Number.isFinite(highSeconds)
+    && lowSeconds > 0 && highSeconds >= lowSeconds
+    && highSeconds - lowSeconds >= 3600
+    && highSeconds / lowSeconds >= 1.25;
+  return {
+    text: `${estimate.survivesReset ? "≥" : "≈"}${formatForecastDuration(pointSeconds, locale)}`,
+    // The account row is a glance surface. Keep one stable point estimate
+    // inline and reserve model disagreement for the complete hover copy.
+    range: meaningfulRange,
+    pointSeconds,
+    lowSeconds: meaningfulRange ? lowSeconds : pointSeconds,
+    highSeconds: meaningfulRange ? highSeconds : pointSeconds,
+  };
 }
 
 function replaceTokens(template, windowState, now, locale, estimate = null) {
@@ -135,6 +178,11 @@ function replaceTokens(template, windowState, now, locale, estimate = null) {
 
 function quotaParts(windowState, now, locale, estimate = null) {
   const remaining = String(clampPercent(windowState.remainingPercent));
+  const forecast = forecastDisplay(windowState, estimate, now, locale);
+  const currentPace = estimate?.currentPacePerHour !== null && estimate?.currentPacePerHour !== undefined
+    && Number.isFinite(Number(estimate.currentPacePerHour))
+    ? estimate.currentPacePerHour
+    : estimate?.pacePerHour;
   return {
     label: windowState.label,
     remaining,
@@ -146,17 +194,14 @@ function quotaParts(windowState, now, locale, estimate = null) {
     seconds: formatPreciseRemainingTime(windowState.resetsAt, now),
     date: formatResetDate(windowState.resetsAt, locale),
     reset: formatResetTime(windowState.resetsAt, locale),
-    pace: formatPacePerHour(estimate?.pacePerHour),
-    runway: estimate?.status === "ready"
-      ? `${estimate.survivesReset ? "≥" : "≈"}${formatForecastDuration(estimate.survivesReset
-        ? Math.max(60, Number(windowState.resetsAt) - now / 1000)
-        : estimate.runwaySeconds, locale)}`
-      : estimate?.status === "calibrating" ? "…" : "—",
+    pace: formatPacePerHour(currentPace),
+    runway: forecast.text,
   };
 }
 
 function runtimeWindow(windowState, now, locale, estimate = null) {
   const parts = quotaParts(windowState, now, locale, estimate);
+  const forecast = forecastDisplay(windowState, estimate, now, locale);
   return {
     label: parts.label,
     sourceId: windowState.sourceId ?? "codex",
@@ -171,6 +216,13 @@ function runtimeWindow(windowState, now, locale, estimate = null) {
     reset: parts.reset,
     pace: parts.pace,
     runway: parts.runway,
+    runwayPrefix: estimate?.status === "ready" ? (estimate.survivesReset ? "≥" : "≈") : "",
+    runwayEndsAt: Number.isFinite(forecast.pointSeconds) ? now / 1000 + forecast.pointSeconds : null,
+    runwayRange: forecast.range,
+    runwayLowEndsAt: forecast.range && Number.isFinite(forecast.lowSeconds) ? now / 1000 + forecast.lowSeconds : null,
+    runwayHighEndsAt: forecast.range && Number.isFinite(forecast.highSeconds) ? now / 1000 + forecast.highSeconds : null,
+    runwayHighPrefix: forecast.range && estimate?.rangeSurvivesReset === true ? "≥" : "",
+    forecastTooltip: localizedForecastTooltip(estimate, locale, now),
   };
 }
 
@@ -223,20 +275,19 @@ function paceEstimateFor(windowState, paceWindows) {
 
 function localizedForecastTooltip(estimate, locale, now) {
   if (estimate?.status !== "ready") return "";
-  const pace = formatPacePerHour(estimate.pacePerHour);
+  const currentPace = estimate.currentPacePerHour !== null && estimate.currentPacePerHour !== undefined
+    && Number.isFinite(Number(estimate.currentPacePerHour))
+    ? estimate.currentPacePerHour
+    : estimate.pacePerHour;
+  const pace = formatPacePerHour(currentPace);
   const language = String(locale ?? "").toLowerCase();
-  const runway = estimate.survivesReset && Number.isFinite(Number(estimate.resetsAt))
-    ? formatForecastDuration(Math.max(60, Number(estimate.resetsAt) - now / 1000), locale, true)
-    : formatForecastDuration(estimate.runwaySeconds, locale, true);
-  if (language.startsWith("zh")) return estimate.survivesReset
-    ? `平均消耗 ${pace} · 按当前速度可维持到本周期重置（至少 ${runway}）`
-    : `平均消耗 ${pace} · 预计可用 ${runway}`;
-  if (language.startsWith("ja")) return estimate.survivesReset
-    ? `平均消費 ${pace} · このペースならリセットまで持続（少なくとも ${runway}）`
-    : `平均消費 ${pace} · 使用可能見込み ${runway}`;
-  return estimate.survivesReset
-    ? `Average burn ${pace} · lasts through this reset (at least ${runway})`
-    : `Average burn ${pace} · estimated runway ${runway}`;
+  const runwaySeconds = estimate.survivesReset && Number.isFinite(Number(estimate.resetsAt))
+    ? Math.max(60, Number(estimate.resetsAt) - now / 1000)
+    : Number(estimate.runwaySeconds);
+  const runway = `${estimate.survivesReset ? "≥" : "≈"}${formatForecastDuration(runwaySeconds, locale, true)}`;
+  if (language.startsWith("zh")) return `速度 ${pace} · 预计 ${runway}`;
+  if (language.startsWith("ja")) return `ペース ${pace} · 目安 ${runway}`;
+  return `Pace ${pace} · Runway ${runway}`;
 }
 
 function resolveColor(mode, severity, palette, match) {
@@ -328,16 +379,16 @@ export function formatQuota(snapshot, config, now = Date.now(), locale) {
   }).join(profile.separator);
   const usesDefaultHover = [DEFAULT_HOVER_TEMPLATE, RECENT_DEFAULT_HOVER_TEMPLATE, PREVIOUS_DEFAULT_HOVER_TEMPLATE].includes(profile.hoverTemplate);
   const hoverTemplate = usesDefaultHover
-    ? localizedDefaultHover(locale, true)
+    ? localizedDefaultHover(locale, availableWindows.length > 1)
     : profile.hoverTemplate;
   const tooltip = hoverTemplate
     ? (usesDefaultHover ? availableWindows : selected).map((item) => {
-      const displayItem = usesDefaultHover ? { ...item, label: item.displayLabel ?? item.label } : item;
+      const displayItem = usesDefaultHover ? { ...item, label: item.label } : item;
       const estimate = paceEstimateFor(item, paceWindows);
       const main = replaceTokens(hoverTemplate, displayItem, now, locale, estimate);
       const forecast = usesDefaultHover ? localizedForecastTooltip(estimate, locale, now) : "";
       return [main, forecast].filter(Boolean).join("\n");
-    }).join("\n")
+    }).join(usesDefaultHover ? "\n\n" : "\n")
     : "";
   const lowest = Math.min(...selected.map((item) => Number(item.remainingPercent)).filter(Number.isFinite));
   const severity = lowest <= config.thresholds.critical
@@ -355,10 +406,12 @@ export function formatQuota(snapshot, config, now = Date.now(), locale) {
     runtimeWindows: selected.map((item, index) => runtimeWindow({ ...item, label: partSets[index].label }, now, locale, paceEstimateFor(item, paceWindows))),
     tooltipWindows: (usesDefaultHover ? availableWindows : selected).map((item) => runtimeWindow({
       ...item,
-      label: usesDefaultHover ? (item.displayLabel ?? item.label) : item.label,
+      label: item.label,
     }, now, locale, paceEstimateFor(item, paceWindows))),
     renderTemplate: profile.template,
     renderHoverTemplate: hoverTemplate,
+    renderForecastTooltip: usesDefaultHover,
+    renderHoverSeparator: usesDefaultHover ? "\n\n" : "\n",
     renderSeparator: profile.separator,
     tooltip,
     severity,

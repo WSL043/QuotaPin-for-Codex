@@ -5,13 +5,24 @@ export function createTimeStateToolkit() {
     const milliseconds = Number(resetsAt) * 1000 - Number(now);
     if (!Number.isFinite(milliseconds)) return { terminal: "unknown", values: [] };
     if (milliseconds <= 0) return { terminal: "now", values: [] };
-    const totalMinutes = Math.max(1, Math.ceil(milliseconds / 60_000));
-    const days = Math.floor(totalMinutes / 1440);
-    const hours = Math.floor((totalMinutes % 1440) / 60);
-    const minutes = totalMinutes % 60;
-    const values = days ? [[days, "day"], ...(hours ? [[hours, "hour"]] : [])]
-      : hours ? [[hours, "hour"], ...(minutes ? [[minutes, "minute"]] : [])]
-        : [[minutes, "minute"]];
+    const totalSeconds = Math.max(1, Math.ceil(milliseconds / 1_000));
+    let values;
+    if (totalSeconds >= 86_400) {
+      const totalHours = Math.ceil(totalSeconds / 3_600);
+      const days = Math.floor(totalHours / 24);
+      const hours = totalHours % 24;
+      values = [[days, "day"], ...(hours ? [[hours, "hour"]] : [])];
+    } else if (totalSeconds >= 3_600) {
+      const totalMinutes = Math.ceil(totalSeconds / 60);
+      const hours = Math.floor(totalMinutes / 60);
+      const minutes = totalMinutes % 60;
+      values = [[hours, "hour"], ...(minutes ? [[minutes, "minute"]] : [])];
+    } else {
+      const minutes = Math.floor(totalSeconds / 60);
+      const seconds = totalSeconds % 60;
+      values = minutes ? [[minutes, "minute"], ...(seconds ? [[seconds, "second"]] : [])]
+        : [[seconds || 1, "second"]];
+    }
     return { terminal: "", values };
   }
 
@@ -25,7 +36,7 @@ export function createTimeStateToolkit() {
   function formatRemainingTime(resetsAt, now = Date.now(), locale = "en") {
     const remaining = remainingParts(resetsAt, now);
     if (remaining.terminal) return localizedTerminal(remaining.terminal, locale);
-    const units = { day: "d", hour: "h", minute: "m" };
+    const units = { day: "d", hour: "h", minute: "m", second: "s" };
     return remaining.values.map(([value, unit]) => `${value}${units[unit]}`).join(" ");
   }
 
@@ -34,11 +45,11 @@ export function createTimeStateToolkit() {
     if (remaining.terminal) return localizedTerminal(remaining.terminal, locale);
     const language = String(locale ?? "").toLowerCase();
     if (language.startsWith("zh")) {
-      const units = { day: "天", hour: "小时", minute: "分钟" };
+      const units = { day: "天", hour: "小时", minute: "分钟", second: "秒" };
       return remaining.values.map(([value, unit]) => `${value}${units[unit]}`).join("");
     }
     if (language.startsWith("ja")) {
-      const units = { day: "日", hour: "時間", minute: "分" };
+      const units = { day: "日", hour: "時間", minute: "分", second: "秒" };
       return remaining.values.map(([value, unit]) => `${value}${units[unit]}`).join("");
     }
     return remaining.values.map(([value, unit]) => `${value} ${unit}${value === 1 ? "" : "s"}`).join(" ");
@@ -55,13 +66,27 @@ export function createTimeStateToolkit() {
     return [hours, minutes, seconds].map((value) => String(value).padStart(2, "0")).join(":");
   }
 
-  function liveRefreshUnit(view = {}) {
+  function liveRefreshUnit(view = {}, runtimeWindows = [], now = Date.now()) {
     const template = view.displayMode === "template" ? String(view.renderTemplate ?? "") : "";
     const hover = String(view.renderHoverTemplate ?? "");
     if (view.showSeconds === true || template.includes("{seconds}") || hover.includes("{seconds}")) return 1_000;
-    if (view.showCountdown === true || view.showRelative === true
+    const countdownWanted = view.showCountdown === true || view.showRelative === true
       || template.includes("{countdown}") || template.includes("{relative}")
-      || hover.includes("{countdown}") || hover.includes("{relative}")) return 60_000;
+      || hover.includes("{countdown}") || hover.includes("{relative}");
+    const runwayWanted = view.showRunway === true || template.includes("{runway}") || hover.includes("{runway}");
+    if (countdownWanted || runwayWanted) {
+      const current = Number(now);
+      const deadlines = (Array.isArray(runtimeWindows) ? runtimeWindows : []).flatMap((windowState) => [
+        ...(countdownWanted ? [Number(windowState?.resetsAt) * 1_000] : []),
+        ...(runwayWanted ? [
+          Number(windowState?.runwayEndsAt) * 1_000,
+          Number(windowState?.runwayLowEndsAt) * 1_000,
+          Number(windowState?.runwayHighEndsAt) * 1_000,
+        ] : []),
+      ]).filter((deadline) => Number.isFinite(deadline) && deadline > current);
+      if (deadlines.some((deadline) => deadline - current < 3_600_000)) return 1_000;
+      return 60_000;
+    }
     return null;
   }
 
@@ -70,7 +95,13 @@ export function createTimeStateToolkit() {
     const current = Number(now);
     if (!Number.isFinite(current)) return null;
     const delays = (Array.isArray(runtimeWindows) ? runtimeWindows : [])
-      .map((windowState) => Number(windowState?.resetsAt) * 1000 - current)
+      .flatMap((windowState) => [
+        windowState?.resetsAt,
+        windowState?.runwayEndsAt,
+        windowState?.runwayLowEndsAt,
+        windowState?.runwayHighEndsAt,
+      ])
+      .map((deadline) => Number(deadline) * 1000 - current)
       .filter((remaining) => Number.isFinite(remaining) && remaining > 0)
       .map((remaining) => {
         const bucket = Math.max(1, Math.ceil(remaining / unit));

@@ -231,3 +231,31 @@ jobs:
           finally {
             & git tag --delete $candidateTag | Out-Null
           }
+      - name: Upload the x64 Windows package for Arm64 emulation acceptance
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: QuotaPin-Windows-x64-${{ github.sha }}
+          if-no-files-found: error
+          retention-days: 2
+          path: dist/public/QuotaPin-*.exe
+
+  windows-arm64-emulation:
+    name: Windows 11 Arm64 x64-emulation lifecycle
+    needs: validate
+    runs-on: windows-11-arm
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Download the x64 Windows package
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: QuotaPin-Windows-x64-${{ github.sha }}
+          path: dist/arm64-acceptance
+      - name: Install, execute, and uninstall under x64 emulation
+        shell: powershell
+        run: |
+          $package = @(Get-ChildItem -LiteralPath 'dist\arm64-acceptance' -Filter 'QuotaPin-*.exe' -File)
+          if ($package.Count -ne 1) { throw "Expected one Windows package; found $($package.Count)." }
+          .\scripts\test-windows-arm64-emulation.ps1 -PackagePath $package[0].FullName

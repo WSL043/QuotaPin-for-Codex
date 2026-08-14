@@ -1,4 +1,7 @@
-param([switch]$TemporaryExit)
+param(
+    [switch]$TemporaryExit,
+    [switch]$InstallerHandoff
+)
 
 $ErrorActionPreference = 'Stop'
 $InstallRoot = Join-Path $env:LOCALAPPDATA 'QuotaPin'
@@ -9,6 +12,8 @@ $RuntimePath = Join-Path $LogRoot 'runtime.json'
 $LifecyclePath = Join-Path $LogRoot 'lifecycle.json'
 $WatcherStatePath = Join-Path $LogRoot 'watcher.json'
 $StartupShortcut = Join-Path ([Environment]::GetFolderPath('Startup')) 'QuotaPin Auto Attach.lnk'
+$InstallerHandoffPath = Join-Path $LogRoot 'installer-handoff.json'
+if ($TemporaryExit -and $InstallerHandoff) { throw 'Choose either TemporaryExit or InstallerHandoff.' }
 
 function Get-OwnedProcess([string]$Name, [string]$ExpectedPath) {
     $Expected = [IO.Path]::GetFullPath($ExpectedPath)
@@ -125,6 +130,31 @@ if (-not $HasRuntimeTrustHelper) {
     }
 }
 
+$InstallerHandoffVerified = $false
+if ($InstallerHandoff) {
+    if (-not (Test-Path -LiteralPath $InstallerHandoffPath -PathType Leaf)) {
+        throw 'QuotaPin installer handoff is unavailable.'
+    }
+    try {
+        $Handoff = Get-Content -Raw -LiteralPath $InstallerHandoffPath | ConvertFrom-Json
+        $CapturedAt = [DateTimeOffset]::Parse([string]$Handoff.capturedAt)
+        $HandoffAge = ([DateTimeOffset]::Now - $CapturedAt).TotalMinutes
+        $ExpectedPort = [int]$Handoff.expectedRuntime.port
+        $ExpectedGeneration = [string]$Handoff.expectedRuntime.generation
+        if ([int]$Handoff.schema -ne 1) { throw 'QuotaPin installer handoff schema is invalid.' }
+        if ($HandoffAge -lt -1 -or $HandoffAge -gt 10) { throw 'QuotaPin installer handoff is stale.' }
+        if ($ExpectedPort -lt 1024 -or $ExpectedPort -gt 65535) { throw 'QuotaPin installer handoff port is invalid.' }
+        if ($ExpectedGeneration -notmatch '^[0-9a-f]{32}$') { throw 'QuotaPin installer handoff generation is invalid.' }
+        if ($CleanupPort -and $ExpectedPort -ne [int]$CleanupPort) {
+            throw 'QuotaPin installer handoff does not match the trusted runtime.'
+        }
+        $InstallerHandoffVerified = $true
+    }
+    catch {
+        throw [InvalidOperationException]::new('QuotaPin installer handoff could not be verified.', $_.Exception)
+    }
+}
+
 # Stop the persistent session before asking a short-lived helper to clean the
 # renderer.  Cleaning first allowed the live Agent's next two-second sync to
 # re-inject QuotaPin in the small race before Stop-Process ran.
@@ -141,14 +171,22 @@ $null = Stop-OwnedWatcher
 
 if (-not $TemporaryExit) {
     Stop-OwnedProcesses 'QuotaPin.Tray' $TrayPath
-    Remove-ItemProperty -Path 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run' -Name 'QuotaPin' -ErrorAction SilentlyContinue
-    if (Test-Path -LiteralPath $StartupShortcut) { Remove-Item -LiteralPath $StartupShortcut -Force }
+    # Setup has already captured the current startup preference. Keep its
+    # durable entry in place until the new installation commits so a failed
+    # PrepareToInstall cannot silently disable automatic attachment.
+    if (-not $InstallerHandoffVerified) {
+        Remove-ItemProperty -Path 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run' -Name 'QuotaPin' -ErrorAction SilentlyContinue
+        if (Test-Path -LiteralPath $StartupShortcut) { Remove-Item -LiteralPath $StartupShortcut -Force }
+    }
 }
 
 Start-Sleep -Milliseconds 200
 $Remaining = @(Get-OwnedProcess 'QuotaPin.Agent' $AgentPath).Count
 if (-not $TemporaryExit) { $Remaining += @(Get-OwnedProcess 'QuotaPin.Tray' $TrayPath).Count }
 if ($Remaining -gt 0) { throw "QuotaPin could not stop $Remaining owned process(es)." }
-if ($CleanupFailed -and -not $TemporaryExit) {
+if ($CleanupFailed -and -not $TemporaryExit -and -not $InstallerHandoffVerified) {
     throw 'QuotaPin stopped, but its renderer cleanup could not be confirmed. Close and reopen Codex, then retry uninstall.'
+}
+if ($CleanupFailed -and $InstallerHandoffVerified) {
+    Write-Warning 'Renderer cleanup was deferred to the verified replacement Agent.'
 }

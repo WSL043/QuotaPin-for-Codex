@@ -62,9 +62,9 @@ test("token modules use concise locale-aware labels and explicit unavailable mar
   const chinese = toolkit.formatProfileUsageParts(usage, "zh-CN");
   assert.match(chinese.todayTokens, /^今日 /);
   assert.match(chinese.lifetimeTokens, /^累计 /);
-  assert.equal(chinese.todayTokensTitle, "今天已用 token: 12,345,678");
-  assert.equal(chinese.lifetimeTokensTitle, "累计 token: 44,020,000,000");
-  assert.equal(chinese.tooltip, "今天已用 token: 12,345,678\n累计 token: 44,020,000,000");
+  assert.equal(chinese.todayTokensTitle, "今日 12,345,678");
+  assert.equal(chinese.lifetimeTokensTitle, "累计 44,020,000,000");
+  assert.equal(chinese.tooltip, "今日 12,345,678 · 累计 44,020,000,000");
   const japanese = toolkit.formatProfileUsageParts(usage, "ja");
   assert.match(japanese.todayTokens, /^今日 /);
   assert.match(japanese.lifetimeTokens, /^累計 /);
@@ -72,12 +72,13 @@ test("token modules use concise locale-aware labels and explicit unavailable mar
   assert.equal(toolkit.formatProfileUsageParts({ todayTokens: null, lifetimeTokens: null }, "en").todayTokens, "Today —");
   const local = toolkit.formatProfileUsageParts({ todayTokens: 1234, todaySource: "device", todayEstimated: true }, "en");
   assert.equal(local.todayTokens, "Today 1.2K");
-  assert.match(local.todayTokensTitle, /this device/);
-  assert.equal(local.todayTokensTitle, "Tokens processed on this device today (at least): 1,234");
+  assert.match(local.todayTokensTitle, /This device today/);
+  assert.equal(local.todayTokensTitle, "This device today ≥1,234");
   assert.equal(
     toolkit.formatProfileUsageParts({ todayTokens: 1234, todaySource: "device", todayEstimated: true }, "zh-CN").todayTokensTitle,
-    "今天在这台设备处理的 token（至少）: 1,234",
+    "本机今日 ≥1,234",
   );
+  assert.equal(toolkit.formatProfileUsageParts({}, "en").tooltip, "");
 });
 
 test("profile usage refreshes slowly after success and retries sooner after failure", () => {

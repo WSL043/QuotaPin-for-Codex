@@ -264,6 +264,7 @@ const installScript = String.raw`(() => {
   let placementPrimaryGroup = null;
   let placementRailSurface = null;
   let observedPlacementComposer = null;
+  let observedPlacementComposerRoot = null;
   let activePlacementZone = "account-row";
   let activePlacementRail = "account-row";
   let lastPlacementContext = null;
@@ -296,6 +297,16 @@ const installScript = String.raw`(() => {
   const placementResizeObserver = typeof ResizeObserver === "function"
     ? new ResizeObserver(() => {
         if (isActiveRenderer()) schedule();
+      })
+    : null;
+  const placementMutationObserver = typeof MutationObserver === "function"
+    ? new MutationObserver((records) => {
+        // Composer chrome can add/remove its context indicator without changing
+        // the outer composer size. Recompute the semantic slot when that host
+        // subtree changes so a cached gap cannot cover a newly painted control.
+        if (isActiveRenderer()
+          && (activePlacementZone === "composer-center" || activePlacementRail === "composer-bottom")
+          && placementMutationsTouchComposerChrome(records)) schedule();
       })
     : null;
   const moduleStyleSnapshots = new WeakMap();
@@ -419,10 +430,42 @@ const installScript = String.raw`(() => {
 
   function observePlacementComposer(composer) {
     const next = composer instanceof Element ? composer : null;
-    if (next === observedPlacementComposer) return;
+    const nextRoot = next?.parentElement ?? next;
+    if (next === observedPlacementComposer && nextRoot === observedPlacementComposerRoot) return;
     placementResizeObserver?.disconnect();
+    placementMutationObserver?.disconnect();
     observedPlacementComposer = next;
+    observedPlacementComposerRoot = nextRoot;
     if (observedPlacementComposer) placementResizeObserver?.observe(observedPlacementComposer);
+    if (observedPlacementComposerRoot) placementMutationObserver?.observe(observedPlacementComposerRoot, {
+      childList: true,
+      subtree: true,
+      attributes: true,
+      attributeFilter: ["aria-hidden", "aria-label", "class", "data-state", "hidden", "style"],
+    });
+  }
+
+  function placementMutationsTouchComposerChrome(records) {
+    const composer = observedPlacementComposer;
+    if (!(composer instanceof Element) || !composer.isConnected) return true;
+    const bounds = composer.getBoundingClientRect();
+    const chromeSelector = 'button,[role="button"],[role="status"],[role="progressbar"],select,[aria-haspopup],[aria-valuenow],[aria-label]:not(textarea):not([contenteditable="true"]),[tabindex]:not([tabindex="-1"])';
+    const inToolbar = (node) => {
+      if (!(node instanceof Element) || node.closest('#quotapin-profile-editor,#quotapin-placement-layer')) return false;
+      const rect = node.getBoundingClientRect();
+      return rect.width > 0 && rect.height > 0 && rect.height <= 72
+        && rect.right > bounds.left - 24 && rect.left < bounds.right + 24
+        && rect.bottom > bounds.top + bounds.height * .5 && rect.top < bounds.bottom + 10;
+    };
+    return (Array.isArray(records) ? records : []).some((record) => {
+      if (record.type === "attributes") return inToolbar(record.target);
+      const changed = [...record.addedNodes, ...record.removedNodes].filter((node) => node instanceof Element);
+      if (changed.some((node) => inToolbar(node) || [...node.querySelectorAll?.(chromeSelector) ?? []].some(inToolbar))) return true;
+      // A removed control no longer has useful geometry. Its semantic identity
+      // still tells us that the previously reserved gap must be released.
+      if (record.removedNodes.length > 0 && changed.some((node) => node.matches?.(chromeSelector) || node.querySelector?.(chromeSelector))) return true;
+      return false;
+    });
   }
 
   function placementGeometryFor(row) {
@@ -434,10 +477,16 @@ const installScript = String.raw`(() => {
     observePlacementComposer(composerNode);
     const composer = composerNode?.getBoundingClientRect() ?? null;
     const sidebar = findAccountSurface(row)?.getBoundingClientRect() ?? row?.getBoundingClientRect() ?? null;
-    const composerOccupied = composerNode
-      ? [...composerNode.querySelectorAll('button,[role="button"],select')]
-          .filter((node) => isPaintedElement(node))
+    const composerOccupied = composerNode && composer
+      ? [...document.querySelectorAll('button,[role="button"],[role="status"],[role="progressbar"],select,[aria-haspopup],[aria-valuenow],[aria-label]:not(textarea):not([contenteditable="true"]),[tabindex]:not([tabindex="-1"])')]
+          .filter((node) => !node.closest('#quotapin-profile-editor,#quotapin-placement-layer') && isPaintedElement(node))
           .map((node) => node.getBoundingClientRect())
+          .filter((rect) => rect.right > composer.left
+            && rect.left < composer.right
+            && rect.bottom > composer.top + composer.height * .55
+            && rect.top < composer.bottom + 2
+            && rect.height <= 56
+            && rect.width <= Math.min(260, composer.width * .48))
       : [];
     const titleOccupied = [...document.querySelectorAll('button,[role="button"]')]
       .filter((node) => !node.closest('#quotapin-profile-editor,#quotapin-placement-layer') && isPaintedElement(node))
@@ -957,11 +1006,18 @@ const installScript = String.raw`(() => {
         tooltip: view?.tooltip ?? "",
       };
     }
+    const hasDeadline = (value) => value !== null && value !== undefined && value !== "" && Number.isFinite(Number(value));
+    const liveRunway = (windowState) => {
+      return hasDeadline(windowState.runwayEndsAt)
+        ? String(windowState.runwayPrefix ?? "") + formatRemainingTime(windowState.runwayEndsAt, now, locale)
+        : String(windowState.runway ?? "");
+    };
     const liveWindows = windows.map((windowState) => ({
       ...windowState,
       countdown: formatRemainingTime(windowState.resetsAt, now, locale),
       relative: formatLocalizedRemainingTime(windowState.resetsAt, now, locale),
       seconds: formatPreciseRemainingTime(windowState.resetsAt, now),
+      runway: liveRunway(windowState),
     }));
     const parts = Object.fromEntries(["label", "value", "pace", "runway", "countdown", "relative", "seconds", "date", "reset"].map((part) => [
       part,
@@ -986,9 +1042,14 @@ const installScript = String.raw`(() => {
       countdown: formatRemainingTime(windowState.resetsAt, now, locale),
       relative: formatLocalizedRemainingTime(windowState.resetsAt, now, locale),
       seconds: formatPreciseRemainingTime(windowState.resetsAt, now),
+      runway: liveRunway(windowState),
     }));
+    const hoverSeparator = typeof view?.renderHoverSeparator === "string" ? view.renderHoverSeparator : "\n";
     const tooltip = hoverTemplate
-      ? liveTooltipWindows.map((windowState) => replace(hoverTemplate, windowState)).join("\n")
+      ? liveTooltipWindows.map((windowState) => [
+          replace(hoverTemplate, windowState),
+          ...(view?.renderForecastTooltip === true ? [String(windowState.forecastTooltip ?? "")] : []),
+        ].filter(Boolean).join("\n")).join(hoverSeparator)
       : "";
     return { parts, text, tooltip };
   }
@@ -1127,7 +1188,7 @@ const installScript = String.raw`(() => {
   function armLiveTimeTimer(view = state.view) {
     clearLiveTimeTimer();
     if (!isActiveRenderer() || document.hidden) return;
-    const unit = liveRefreshUnit(view);
+    const unit = liveRefreshUnit(view, view?.runtimeWindows, Date.now());
     if (!unit) return;
     const delay = nextBoundaryDelay(view?.runtimeWindows, Date.now(), unit, 12);
     if (!Number.isFinite(delay)) return;
@@ -1162,6 +1223,7 @@ const installScript = String.raw`(() => {
     const moduleMode = view.displayMode !== "template";
     const nextCopy = moduleMode
       ? {
+          runway: liveCopy.parts?.runway ?? "…",
           countdown: liveCopy.parts?.countdown ?? "--",
           relative: liveCopy.parts?.relative ?? "--",
           seconds: liveCopy.parts?.seconds ?? "--:--:--",
@@ -1172,8 +1234,11 @@ const installScript = String.raw`(() => {
     let layoutChanged = false;
     for (const [module, text] of Object.entries(nextCopy)) {
       if (!(modules[module] instanceof HTMLElement) || modules[module].textContent === text) continue;
+      const previousLength = modules[module].textContent?.length ?? 0;
       modules[module].textContent = text;
-      layoutChanged = true;
+      // Tabular digits keep equal-length countdowns geometrically stable. A
+      // full collision pass is needed only when the visible unit shape changes.
+      if (previousLength !== text.length) layoutChanged = true;
     }
     if (layoutChanged && !placementContext.primaryRemote) {
       reconcileModuleLayout(row, badge, renderLayout);
@@ -2670,7 +2735,7 @@ const installScript = String.raw`(() => {
       { value: "account-row", label: "Account footer", css: { left: "12px", bottom: "11px", width: "52px", height: "22px" } },
       { value: "title-center", label: "Title center", css: { left: "58%", top: "7px", width: "70px", height: "22px", transform: "translateX(-50%)" } },
       { value: "workspace-top-center", label: "Workspace top", css: { left: "58%", top: "37px", width: "78px", height: "22px", transform: "translateX(-50%)" } },
-      { value: "composer-center", label: "Composer center", css: { left: "58%", bottom: "13px", width: "76px", height: "22px", transform: "translateX(-50%)" } },
+      { value: "composer-center", label: "Composer toolbar", css: { left: "58%", bottom: "13px", width: "76px", height: "22px", transform: "translateX(-50%)" } },
     ];
     for (const option of zoneVisuals) {
       const button = document.createElement("button");
@@ -2802,7 +2867,7 @@ const installScript = String.raw`(() => {
     const secondsPreview = makeTextPreview("seconds", "04:08:00");
     const datePreview = makeTextPreview("date", "Aug 8");
     const resetPreview = makeTextPreview("reset", "Mon 12:30");
-    const pacePreview = makeTextPreview("pace", "1.8%/h");
+    const pacePreview = makeTextPreview("pace", "2.4%/h");
     const runwayPreview = makeTextPreview("runway", "≈2d 4h");
     const initialUsageCopy = profileUsageCopy();
     const todayTokensPreview = makeTextPreview("todayTokens", initialUsageCopy.todayTokens);
@@ -3000,12 +3065,12 @@ const installScript = String.raw`(() => {
 
     const quickCompositionHint = document.createElement("div");
     quickCompositionHint.dataset.quickHelp = "true";
-    quickCompositionHint.textContent = t("Click to show or hide. Drag the live row below to arrange.");
+    quickCompositionHint.textContent = t("Click to show or hide. Close the panel, then drag modules at their display position.");
     Object.assign(quickCompositionHint.style, {
       color: "var(--quotapin-panel-faint)", fontSize: "9px", lineHeight: "1.4", textAlign: "center",
     });
     quickCompositionBody.append(badgeControls, quickCompositionHint);
-    quickGrid.append(quickModule("Placement", placementBody), quickModule("Visible modules", quickCompositionBody));
+    quickGrid.append(quickModule("Visible modules", quickCompositionBody), quickModule("Placement", placementBody));
 
     function makeModePanel(mode, scroll = true) {
       const section = document.createElement("div");
@@ -3784,7 +3849,10 @@ const installScript = String.raw`(() => {
     layoutCapacity.hidden = true;
     layoutCapacity.textContent = t("This sidebar is too narrow for every selected module. Widen it or hide a module.");
     Object.assign(layoutCapacity.style, {
-      color: "var(--quotapin-panel-warning)", fontSize: "9px", lineHeight: "1.35", paddingInline: "2px",
+      position: "absolute", insetInline: "12px", bottom: "46px", zIndex: "4", pointerEvents: "none",
+      color: "var(--quotapin-panel-warning)", background: "var(--quotapin-panel-surface)",
+      boxShadow: "0 8px 24px rgba(0,0,0,.22)", borderRadius: "7px",
+      fontSize: "9px", lineHeight: "1.35", padding: "6px 8px",
     });
     quickCompositionBody.append(layoutCapacity);
 
@@ -4693,7 +4761,9 @@ const installScript = String.raw`(() => {
   function removePlacementLayer(disconnectHost = false) {
     if (disconnectHost) {
       placementResizeObserver?.disconnect();
+      placementMutationObserver?.disconnect();
       observedPlacementComposer = null;
+      observedPlacementComposerRoot = null;
     }
     placementPrimarySurface = null;
     placementPrimaryGroup = null;
@@ -4735,6 +4805,7 @@ const installScript = String.raw`(() => {
       cursor: "pointer",
       boxSizing: "border-box",
     });
+    placementPrimarySurface.style.setProperty("-webkit-app-region", "no-drag");
     placementPrimaryGroup = document.createElement("div");
     placementPrimaryGroup.dataset.quotapinPlacementGroup = "true";
     placementPrimaryGroup.setAttribute("role", "status");
@@ -4749,6 +4820,7 @@ const installScript = String.raw`(() => {
       cursor: "default",
       boxSizing: "border-box",
     });
+    placementPrimaryGroup.style.setProperty("-webkit-app-region", "no-drag");
     placementPrimarySurface.append(placementPrimaryGroup);
     placementRailSurface = document.createElement("div");
     placementRailSurface.dataset.quotapinPlacementSurface = "rail";
@@ -4818,6 +4890,7 @@ const installScript = String.raw`(() => {
       clone.style.maxWidth = "none";
       clone.style.marginInline = "0";
       clone.style.pointerEvents = "auto";
+      clone.style.setProperty("-webkit-app-region", "no-drag");
       if (module !== "dot") clone.style.width = "auto";
       if (placementPrimaryGroup.dataset.quotapinEditing === "true") {
         clone.style.cursor = "grab";
@@ -5540,6 +5613,7 @@ const installScript = String.raw`(() => {
       safely(() => observer.disconnect());
       safely(() => accountResizeObserver?.disconnect());
       safely(() => placementResizeObserver?.disconnect());
+      safely(() => placementMutationObserver?.disconnect());
       if (accountResizeFrame) safely(() => cancelAnimationFrame(accountResizeFrame));
       if (accountResizeSettleTimer) safely(() => clearTimeout(accountResizeSettleTimer));
       accountResizeFrame = 0;
@@ -5550,6 +5624,7 @@ const installScript = String.raw`(() => {
       integrityBadge = null;
       observedAccountRow = null;
       observedPlacementComposer = null;
+      observedPlacementComposerRoot = null;
       observedAccountWidth = 0;
       responsiveFreeLayout = null;
       lastLayoutBinding = null;

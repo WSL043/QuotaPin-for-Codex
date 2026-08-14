@@ -260,7 +260,7 @@ begin
   ExtractTemporaryFile('stop.ps1');
   StopScript := ExpandConstant('{tmp}\stop.ps1');
   if not Exec(ExpandConstant('{sys}\WindowsPowerShell\v1.0\powershell.exe'),
-    '-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "' + StopScript + '"',
+    '-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "' + StopScript + '" -InstallerHandoff',
     '', SW_HIDE, ewWaitUntilTerminated, ResultCode) then
   begin
     Result := 'QuotaPin could not start its update cleanup. Nothing was installed.';

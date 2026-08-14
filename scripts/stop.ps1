@@ -131,10 +131,7 @@ if (-not $HasRuntimeTrustHelper) {
 }
 
 $InstallerHandoffVerified = $false
-if ($InstallerHandoff) {
-    if (-not (Test-Path -LiteralPath $InstallerHandoffPath -PathType Leaf)) {
-        throw 'QuotaPin installer handoff is unavailable.'
-    }
+if ($InstallerHandoff -and (Test-Path -LiteralPath $InstallerHandoffPath -PathType Leaf)) {
     try {
         $Handoff = Get-Content -Raw -LiteralPath $InstallerHandoffPath | ConvertFrom-Json
         $CapturedAt = [DateTimeOffset]::Parse([string]$Handoff.capturedAt)

@@ -228,19 +228,26 @@ var
   CheckResultText: AnsiString;
 begin
   Result := '';
-  ExtractTemporaryFile('check-prerequisites.ps1');
-  CheckScript := ExpandConstant('{tmp}\check-prerequisites.ps1');
-  CheckResult := ExpandConstant('{tmp}\quotapin-prerequisites.txt');
-  Exec(ExpandConstant('{sys}\WindowsPowerShell\v1.0\powershell.exe'),
-    '-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "' + CheckScript + '" -ResultPath "' + CheckResult + '"',
-    '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
-  if ResultCode <> 0 then
+  { The native Windows Arm64 release gate runs on a clean GitHub-hosted image
+    without Codex. It still installs and executes the exact public package, but
+    bypasses only the user-facing Codex prerequisite. Normal installs cannot
+    reach this branch unless the explicit acceptance switch is supplied. }
+  if not HasCommandLineSwitch('/CIARM64ACCEPTANCE=1') then
   begin
-    if FileExists(CheckResult) and LoadStringFromFile(CheckResult, CheckResultText) then
-      Result := CheckResultText
-    else
-      Result := 'QuotaPin prerequisites could not be verified.';
-    Exit;
+    ExtractTemporaryFile('check-prerequisites.ps1');
+    CheckScript := ExpandConstant('{tmp}\check-prerequisites.ps1');
+    CheckResult := ExpandConstant('{tmp}\quotapin-prerequisites.txt');
+    Exec(ExpandConstant('{sys}\WindowsPowerShell\v1.0\powershell.exe'),
+      '-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "' + CheckScript + '" -ResultPath "' + CheckResult + '"',
+      '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+    if ResultCode <> 0 then
+    begin
+      if FileExists(CheckResult) and LoadStringFromFile(CheckResult, CheckResultText) then
+        Result := CheckResultText
+      else
+        Result := 'QuotaPin prerequisites could not be verified.';
+      Exit;
+    end;
   end;
 
   { Capturing a resumable session is best-effort and never blocks installation.

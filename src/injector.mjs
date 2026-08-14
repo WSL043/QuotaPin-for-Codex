@@ -20,10 +20,9 @@ import { createTimeStateToolkit } from "./renderer/time-state.mjs";
 import { createCodeConfigStateToolkit } from "./renderer/code-config-state.mjs";
 import { createProfileUsageStateToolkit } from "./renderer/profile-usage-state.mjs";
 import { createDeliveryStateToolkit } from "./renderer/delivery-state.mjs";
-import { createPlacementToolkit } from "./core/placement.mjs";
 import { BUILD_COMMIT } from "./core/build-origin.mjs";
 
-const VERSION = "2.0.0-beta.2";
+const VERSION = "1.3.0";
 const SOURCE_REPOSITORY = "https://github.com/WSL043/QuotaPin-for-Codex";
 const MAIN_TARGET_URL = "app://-/index.html";
 const portIndex = process.argv.indexOf("--port");
@@ -75,8 +74,7 @@ const rendererToolkitScript = `globalThis.__quotaPinRendererToolkits = {
   time: ${createTimeStateToolkit.toString()},
   codeConfig: ${createCodeConfigStateToolkit.toString()},
   profileUsage: ${createProfileUsageStateToolkit.toString()},
-  delivery: ${createDeliveryStateToolkit.toString()},
-  placement: ${createPlacementToolkit.toString()}
+  delivery: ${createDeliveryStateToolkit.toString()}
 };\n`;
 
 const rendererInstanceId = randomUUID();
@@ -116,17 +114,8 @@ const installScript = String.raw`(() => {
     nextRefreshDelay, shouldRefreshProfileUsage
   } = rendererToolkits.profileUsage();
   const { markDeliveryAccepted, evaluateDeliveryFreshness } = rendererToolkits.delivery();
-  const {
-    primaryZones: placementZones,
-    railZones: placementRailZones,
-    defaultPlacement,
-    cleanPlacement,
-    computePlacementGeometry,
-    resolvePrimaryZone,
-    resolveRailZone
-  } = rendererToolkits.placement();
   delete globalThis.__quotaPinRendererToolkits;
-  const version = "2.0.0-beta.2";
+  const version = "1.3.0";
   const instanceId = "__QUOTAPIN_RENDERER_INSTANCE_ID__";
   const sourceRepository = "https://github.com/WSL043/QuotaPin-for-Codex";
   const previous = window.__quotaPinController;
@@ -134,7 +123,7 @@ const installScript = String.raw`(() => {
   try { previous?.cleanup?.(); } catch {}
 
   const badgeId = "quotapin-inline-badge";
-  let state = { status: "loading", view: { text: "--%", parts: { value: "--%", pace: "…", runway: "…", todayTokens: "—", lifetimeTokens: "—", label: "", countdown: "--", relative: "--", seconds: "--:--:--", date: "--", reset: "--" }, runtimeWindows: [], tooltipWindows: [], renderTemplate: "{remaining}%", renderHoverTemplate: "", renderSeparator: " · ", tooltip: "QuotaPin is loading", severity: "unavailable", profileId: "glance", availableWindowCount: 0, showValue: true, showDot: false, showBar: false, barScope: "quota", remainingPercent: null, showLabel: false, showCountdown: false, showRelative: false, showSeconds: false, showDate: false, showReset: false, showPace: false, showRunway: false, showTodayTokens: false, showLifetimeTokens: false, displayMode: "modules", valueColor: "muted", dotColor: "muted", identityColor: "inherit", valueColorMode: "muted", dotColorMode: "muted", identityColorMode: "inherit", effect: "none", effectTarget: "dot", effectAt: "critical", overdriveEgg: false, overdriveAlways: false, overdriveEffect: "menuFire", accountRowMode: "legacy", layout: { moduleOrder: defaultModuleOrder, layoutMode: "auto", snapThreshold: 16, snapTargets: ["edges", "center", "modules"], moduleAnchors: defaultModuleAnchors, identity: "show", avatarShape: "native", fontSize: 14, barScope: "quota", placement: defaultPlacement } }, preferences: null };
+  let state = { status: "loading", view: { text: "--%", parts: { value: "--%", pace: "…", runway: "…", todayTokens: "—", lifetimeTokens: "—", label: "", countdown: "--", relative: "--", seconds: "--:--:--", date: "--", reset: "--" }, runtimeWindows: [], tooltipWindows: [], renderTemplate: "{remaining}%", renderHoverTemplate: "", renderSeparator: " · ", tooltip: "QuotaPin is loading", severity: "unavailable", profileId: "glance", availableWindowCount: 0, showValue: true, showDot: false, showBar: false, barScope: "quota", remainingPercent: null, showLabel: false, showCountdown: false, showRelative: false, showSeconds: false, showDate: false, showReset: false, showPace: false, showRunway: false, showTodayTokens: false, showLifetimeTokens: false, displayMode: "modules", valueColor: "muted", dotColor: "muted", identityColor: "inherit", valueColorMode: "muted", dotColorMode: "muted", identityColorMode: "inherit", effect: "none", effectTarget: "dot", effectAt: "critical", overdriveEgg: false, overdriveAlways: false, overdriveEffect: "menuFire", accountRowMode: "legacy", layout: { moduleOrder: defaultModuleOrder, layoutMode: "auto", snapThreshold: 16, snapTargets: ["edges", "center", "modules"], moduleAnchors: defaultModuleAnchors, identity: "show", avatarShape: "native", fontSize: 14, barScope: "quota" } }, preferences: null };
   const deliveryRuntime = { highestSequence: 0, accepted: 0, rejected: 0, presentationSkips: 0, lastReason: null, lastAcceptedAt: 0, stale: false, staleTransitions: 0, recoveries: 0, trace: [] };
   const deliverySummary = (nextState, sequence, accepted, cause) => {
     const view = nextState?.view ?? {};
@@ -217,12 +206,9 @@ const installScript = String.raw`(() => {
   let panelBadge = null;
   let panelBinding = null;
   let panelRebindQueued = false;
-  const panelRuntimeMetrics = { opens: 0, closes: 0, rebinds: 0, lastRebindReason: null };
   let panelReturnFocus = null;
-  let panelAnchorElement = null;
   let editorMode = "quick";
-  let editorLayoutCleanup = null;
-  let setLayoutEditing = () => {};
+  let editorRowCleanup = null;
   let layoutDragActive = false;
   let activeLayoutDrag = null;
   let holdTimer = 0;
@@ -259,15 +245,6 @@ const installScript = String.raw`(() => {
   let accountResizeFrame = 0;
   let accountResizeSettleTimer = 0;
   let accountResizePending = false;
-  let placementLayer = null;
-  let placementPrimarySurface = null;
-  let placementPrimaryGroup = null;
-  let placementRailSurface = null;
-  let observedPlacementComposer = null;
-  let observedPlacementComposerRoot = null;
-  let activePlacementZone = "account-row";
-  let activePlacementRail = "account-row";
-  let lastPlacementContext = null;
   let responsiveFreeLayout = null;
   let lastLayoutBinding = null;
   let lastLayoutSignature = "";
@@ -293,21 +270,6 @@ const installScript = String.raw`(() => {
   const effectMonitorMetrics = { targetedInvalidations: 0, watchdogWakeups: 0 };
   const accountResizeObserver = typeof ResizeObserver === "function"
     ? new ResizeObserver(handleAccountResize)
-    : null;
-  const placementResizeObserver = typeof ResizeObserver === "function"
-    ? new ResizeObserver(() => {
-        if (isActiveRenderer()) schedule();
-      })
-    : null;
-  const placementMutationObserver = typeof MutationObserver === "function"
-    ? new MutationObserver((records) => {
-        // Composer chrome can add/remove its context indicator without changing
-        // the outer composer size. Recompute the semantic slot when that host
-        // subtree changes so a cached gap cannot cover a newly painted control.
-        if (isActiveRenderer()
-          && (activePlacementZone === "composer-center" || activePlacementRail === "composer-bottom")
-          && placementMutationsTouchComposerChrome(records)) schedule();
-      })
     : null;
   const moduleStyleSnapshots = new WeakMap();
   const rowStyleSnapshots = new WeakMap();
@@ -380,159 +342,6 @@ const installScript = String.raw`(() => {
     }
     candidates.sort((left, right) => left.area - right.area);
     return candidates[0]?.node ?? row;
-  }
-
-  function findComposerSurface() {
-    const viewportWidth = document.documentElement.clientWidth || window.innerWidth;
-    const viewportHeight = document.documentElement.clientHeight || window.innerHeight;
-    const editables = [...document.querySelectorAll('textarea,[contenteditable="true"]')]
-      .map((node) => ({ node, rect: node.getBoundingClientRect() }))
-      .filter(({ node, rect }) => isPaintedElement(node, rect)
-        && rect.width >= 100
-        && rect.height >= 16
-        && rect.top >= viewportHeight * .48
-        && rect.bottom <= viewportHeight + 2);
-    const candidates = new Map();
-    for (const editable of editables) {
-      for (let node = editable.node.parentElement, depth = 0; node && depth < 7; node = node.parentElement, depth += 1) {
-        if (node.closest('#quotapin-profile-editor,#quotapin-placement-layer')) break;
-        const rect = node.getBoundingClientRect();
-        if (!isPaintedElement(node, rect)
-          || rect.width < Math.max(320, editable.rect.width)
-          || rect.width > viewportWidth - 12
-          || rect.height < 64
-          || rect.height > 260
-          || rect.bottom < viewportHeight - 190
-          || rect.bottom > viewportHeight + 2) continue;
-        const style = getComputedStyle(node);
-        const background = String(style.backgroundColor ?? "").toLowerCase().replace(/\s+/g, "");
-        const paintedBackground = background
-          && background !== "transparent"
-          && background !== "rgba(0,0,0,0)";
-        const paintedChrome = paintedBackground || style.boxShadow !== "none"
-          || ((Number.parseFloat(style.borderTopWidth) || 0) > 0 && style.borderTopStyle !== "none");
-        const centerDistance = Math.abs((rect.left + rect.right) / 2 - viewportWidth / 2);
-        // The editable and toolbar sit several levels inside Codex's rounded
-        // composer. Geometry for an external rail must follow that painted
-        // surface, not whichever transparent inner wrapper happens to score
-        // nearest the textarea.
-        const score = (paintedChrome ? 1_000 : 0)
-          + 500 - depth * 18 - centerDistance * .18 - Math.abs(rect.bottom - (viewportHeight - 12)) * .08;
-        const previous = candidates.get(node);
-        if (!previous || score > previous.score) candidates.set(node, { node, rect, score, paintedChrome });
-      }
-    }
-    const ranked = [...candidates.values()].sort((left, right) => right.score - left.score);
-    if (!ranked.length) return null;
-    if (ranked[1] && ranked[0].score - ranked[1].score < 1 && ranked[0].node !== ranked[1].node) return null;
-    return ranked[0].node;
-  }
-
-  function observePlacementComposer(composer) {
-    const next = composer instanceof Element ? composer : null;
-    const nextRoot = next?.parentElement ?? next;
-    if (next === observedPlacementComposer && nextRoot === observedPlacementComposerRoot) return;
-    placementResizeObserver?.disconnect();
-    placementMutationObserver?.disconnect();
-    observedPlacementComposer = next;
-    observedPlacementComposerRoot = nextRoot;
-    if (observedPlacementComposer) placementResizeObserver?.observe(observedPlacementComposer);
-    if (observedPlacementComposerRoot) placementMutationObserver?.observe(observedPlacementComposerRoot, {
-      childList: true,
-      subtree: true,
-      attributes: true,
-      attributeFilter: ["aria-hidden", "aria-label", "class", "data-state", "hidden", "style"],
-    });
-  }
-
-  function placementMutationsTouchComposerChrome(records) {
-    const composer = observedPlacementComposer;
-    if (!(composer instanceof Element) || !composer.isConnected) return true;
-    const bounds = composer.getBoundingClientRect();
-    const chromeSelector = 'button,[role="button"],[role="status"],[role="progressbar"],select,[aria-haspopup],[aria-valuenow],[aria-label]:not(textarea):not([contenteditable="true"]),[tabindex]:not([tabindex="-1"])';
-    const inToolbar = (node) => {
-      if (!(node instanceof Element) || node.closest('#quotapin-profile-editor,#quotapin-placement-layer')) return false;
-      const rect = node.getBoundingClientRect();
-      return rect.width > 0 && rect.height > 0 && rect.height <= 72
-        && rect.right > bounds.left - 24 && rect.left < bounds.right + 24
-        && rect.bottom > bounds.top + bounds.height * .5 && rect.top < bounds.bottom + 10;
-    };
-    return (Array.isArray(records) ? records : []).some((record) => {
-      if (record.type === "attributes") return inToolbar(record.target);
-      const changed = [...record.addedNodes, ...record.removedNodes].filter((node) => node instanceof Element);
-      if (changed.some((node) => inToolbar(node) || [...node.querySelectorAll?.(chromeSelector) ?? []].some(inToolbar))) return true;
-      // A removed control no longer has useful geometry. Its semantic identity
-      // still tells us that the previously reserved gap must be released.
-      if (record.removedNodes.length > 0 && changed.some((node) => node.matches?.(chromeSelector) || node.querySelector?.(chromeSelector))) return true;
-      return false;
-    });
-  }
-
-  function placementGeometryFor(row) {
-    const viewport = {
-      width: document.documentElement.clientWidth || window.innerWidth,
-      height: document.documentElement.clientHeight || window.innerHeight,
-    };
-    const composerNode = findComposerSurface();
-    observePlacementComposer(composerNode);
-    const composer = composerNode?.getBoundingClientRect() ?? null;
-    const sidebar = findAccountSurface(row)?.getBoundingClientRect() ?? row?.getBoundingClientRect() ?? null;
-    const composerOccupied = composerNode && composer
-      ? [...document.querySelectorAll('button,[role="button"],[role="status"],[role="progressbar"],select,[aria-haspopup],[aria-valuenow],[aria-label]:not(textarea):not([contenteditable="true"]),[tabindex]:not([tabindex="-1"])')]
-          .filter((node) => !node.closest('#quotapin-profile-editor,#quotapin-placement-layer') && isPaintedElement(node))
-          .map((node) => node.getBoundingClientRect())
-          .filter((rect) => rect.right > composer.left
-            && rect.left < composer.right
-            && rect.bottom > composer.top + composer.height * .55
-            && rect.top < composer.bottom + 2
-            && rect.height <= 56
-            && rect.width <= Math.min(260, composer.width * .48))
-      : [];
-    const titleOccupied = [...document.querySelectorAll('button,[role="button"]')]
-      .filter((node) => !node.closest('#quotapin-profile-editor,#quotapin-placement-layer') && isPaintedElement(node))
-      .map((node) => node.getBoundingClientRect())
-      .filter((rect) => rect.top < 56 && rect.bottom > 0);
-    const workspaceTopOccupied = [...document.querySelectorAll('button,[role="button"],select,input')]
-      .filter((node) => !node.closest('#quotapin-profile-editor,#quotapin-placement-layer') && isPaintedElement(node))
-      .map((node) => node.getBoundingClientRect())
-      .filter((rect) => rect.top < 96 && rect.bottom > 32);
-    return {
-      composerNode,
-      geometry: computePlacementGeometry({ viewport, sidebar, composer, composerOccupied, titleOccupied, workspaceTopOccupied }),
-    };
-  }
-
-  function resolvePlacementContext(row, placementValue) {
-    const placement = cleanPlacement(placementValue);
-    const { composerNode, geometry } = placementGeometryFor(row);
-    const primary = resolvePrimaryZone(placement, geometry) ?? "account-row";
-    const rail = resolveRailZone(placement, geometry);
-    return {
-      placement,
-      geometry,
-      composerNode,
-      primary,
-      rail,
-      primaryRemote: primary !== "account-row",
-      railRemote: primary !== "account-row" || rail !== "account-row",
-    };
-  }
-
-  function samePlacement(left, right) {
-    return left?.primary === right?.primary
-      && left?.fallback === right?.fallback
-      && left?.rail === right?.rail;
-  }
-
-  function cachedPlacementContext(row, placementValue) {
-    const placement = cleanPlacement(placementValue);
-    const cached = lastPlacementContext;
-    if (!cached
-      || cached.row !== row
-      || !row?.isConnected
-      || !samePlacement(cached.placement, placement)
-      || (cached.composerNode && !cached.composerNode.isConnected)) return null;
-    return cached;
   }
 
   function findAccountHelpControl(row, surface = findAccountSurface(row)) {
@@ -635,17 +444,11 @@ const installScript = String.raw`(() => {
     const captured = captureResponsiveFreeLayout(row);
     if (captured) responsiveFreeLayout = captured;
     const view = viewWithOptimisticLayout(state.view ?? {});
-    const placementContext = resolvePlacementContext(row, view.layout?.placement);
-    const renderLayout = {
-      ...(view.layout ?? {}),
-      __resolvedPrimary: placementContext.primary,
-      __resolvedRail: placementContext.rail,
-    };
-    const solved = paintPositionedModuleLayout(row, badge, renderLayout, { resizing: true, primaryRemote: placementContext.primaryRemote });
+    const solved = paintPositionedModuleLayout(row, badge, view.layout, { resizing: true });
     if (!solved) return false;
     lastLayoutBinding = captureAccountBinding(row, badge);
     lastLayoutPlan = committedLayoutPlan(row, badge, solved);
-    lastLayoutSignature = layoutInputSignature(row, badge, renderLayout);
+    lastLayoutSignature = layoutInputSignature(row, badge, view.layout);
     layoutRuntimeMetrics.reconciliations += 1;
     return true;
   }
@@ -715,10 +518,8 @@ const installScript = String.raw`(() => {
     activeLayoutDrag = null;
   }
 
-  function queuePanelRebind(reason = "host-change") {
+  function queuePanelRebind() {
     if (!panel || panelRebindQueued) return;
-    panelRuntimeMetrics.rebinds += 1;
-    panelRuntimeMetrics.lastRebindReason = reason;
     const stalePanel = panel;
     panelRebindQueued = true;
     queueMicrotask(() => {
@@ -784,7 +585,6 @@ const installScript = String.raw`(() => {
         avatarShape: profile.avatarShape,
         fontSize: profile.fontSize,
         barScope: profile.barScope === "row" ? "row" : "quota",
-        placement: cleanPlacement(profile.placement),
       },
     };
     return deliveryRuntime.stale ? staleQuotaView(optimisticView) : optimisticView;
@@ -800,10 +600,10 @@ const installScript = String.raw`(() => {
       parts: {
         ...(baseView.parts ?? {}),
         value: "--%",
-        todayTokens: "—",
-        lifetimeTokens: "—",
         pace: "…",
         runway: "…",
+        todayTokens: "—",
+        lifetimeTokens: "—",
         label: "—",
         countdown: "--",
         relative: "--",
@@ -903,11 +703,9 @@ const installScript = String.raw`(() => {
   }
 
   function closePanel(relockSecrets = true, restoreFocus = true, resumeProfileRefresh = true) {
-    if (panel) panelRuntimeMetrics.closes += 1;
     const returnFocus = panelReturnFocus;
-    try { editorLayoutCleanup?.(); } catch {}
-    editorLayoutCleanup = null;
-    setLayoutEditing = () => {};
+    try { editorRowCleanup?.(); } catch {}
+    editorRowCleanup = null;
     try { panel?.remove(); } catch {}
     panel = null;
     clearProfileUsageTimer();
@@ -915,7 +713,6 @@ const installScript = String.raw`(() => {
     panelBinding = null;
     panelRebindQueued = false;
     panelReturnFocus = null;
-    panelAnchorElement = null;
     settingsStatusNode = null;
     paintUpdateState = null;
     paintQuickPreview = null;
@@ -1007,11 +804,9 @@ const installScript = String.raw`(() => {
       };
     }
     const hasDeadline = (value) => value !== null && value !== undefined && value !== "" && Number.isFinite(Number(value));
-    const liveRunway = (windowState) => {
-      return hasDeadline(windowState.runwayEndsAt)
-        ? String(windowState.runwayPrefix ?? "") + formatRemainingTime(windowState.runwayEndsAt, now, locale)
-        : String(windowState.runway ?? "");
-    };
+    const liveRunway = (windowState) => hasDeadline(windowState.runwayEndsAt)
+      ? String(windowState.runwayPrefix ?? "") + formatRemainingTime(windowState.runwayEndsAt, now, locale)
+      : String(windowState.runway ?? "");
     const liveWindows = windows.map((windowState) => ({
       ...windowState,
       countdown: formatRemainingTime(windowState.resetsAt, now, locale),
@@ -1210,13 +1005,6 @@ const installScript = String.raw`(() => {
       return;
     }
     const view = viewWithOptimisticLayout(state.view ?? {});
-    const placementContext = cachedPlacementContext(row, view.layout?.placement)
-      ?? resolvePlacementContext(row, view.layout?.placement);
-    const renderLayout = {
-      ...(view.layout ?? {}),
-      __resolvedPrimary: placementContext.primary,
-      __resolvedRail: placementContext.rail,
-    };
     const liveCopy = liveQuotaCopy(view);
     const usageCopy = profileUsageCopy();
     const modules = findAccountModules(row, badge);
@@ -1234,14 +1022,11 @@ const installScript = String.raw`(() => {
     let layoutChanged = false;
     for (const [module, text] of Object.entries(nextCopy)) {
       if (!(modules[module] instanceof HTMLElement) || modules[module].textContent === text) continue;
-      const previousLength = modules[module].textContent?.length ?? 0;
       modules[module].textContent = text;
-      // Tabular digits keep equal-length countdowns geometrically stable. A
-      // full collision pass is needed only when the visible unit shape changes.
-      if (previousLength !== text.length) layoutChanged = true;
+      layoutChanged = true;
     }
-    if (layoutChanged && !placementContext.primaryRemote) {
-      reconcileModuleLayout(row, badge, renderLayout);
+    if (layoutChanged) {
+      reconcileModuleLayout(row, badge, view.layout);
       layoutRuntimeMetrics.liveTimeLayoutPasses += 1;
     }
     const hover = completeHoverCopy(liveCopy, usageCopy);
@@ -1251,10 +1036,6 @@ const installScript = String.raw`(() => {
     if (bar instanceof HTMLElement) bar.title = hover;
     const accessibleValue = view.showValue === false ? view.severity : liveCopy.text;
     badge.setAttribute("aria-label", t("Codex remaining quota") + (accessibleValue ? ": " + accessibleValue : ""));
-    if (placementContext.primaryRemote || placementContext.railRemote) {
-      const valueNode = modules.value;
-      syncPlacementPresentation(row, badge, { ...view, layout: renderLayout }, placementContext, valueNode?.style.color ?? "currentColor");
-    }
     paintQuickPreview?.();
     layoutRuntimeMetrics.liveTimeUpdates += 1;
     armLiveTimeTimer(view);
@@ -1283,17 +1064,6 @@ const installScript = String.raw`(() => {
     return {
       left: rect.left + Math.max(4, paddingLeft),
       right: rect.right - Math.max(4, paddingRight),
-      rowRect: rect,
-    };
-  }
-
-  function remoteLayoutBounds(surface = placementPrimarySurface) {
-    if (!(surface instanceof HTMLElement)) return null;
-    const rect = surface.getBoundingClientRect();
-    if (!(rect.width > 0 && rect.height > 0)) return null;
-    return {
-      left: rect.left + 4,
-      right: rect.right - 4,
       rowRect: rect,
     };
   }
@@ -1353,7 +1123,6 @@ const installScript = String.raw`(() => {
         cleanLayoutMode(layout.layoutMode), layout.identity ?? "show", layout.avatarShape ?? "native",
         stableLayoutMetric(layout.fontSize), layout.barScope === "row" ? "row" : "quota", cleanModuleOrder(layout.moduleOrder),
         layoutModules.map((module) => stableLayoutMetric(anchors[module])),
-        cleanPlacement(layout.placement), layout.__resolvedPrimary ?? "account-row", layout.__resolvedRail ?? "account-row",
       ],
       typography: [badge.style.fontSize, badge.style.lineHeight, rowStyle.fontFamily, rowStyle.fontWeight, rowStyle.letterSpacing],
       identity: [modules.name?.textContent ?? "", Boolean(modules.avatar)],
@@ -1390,7 +1159,7 @@ const installScript = String.raw`(() => {
     });
   }
 
-  function reconcileModuleLayout(row, badge, layout = {}, options = {}) {
+  function reconcileModuleLayout(row, badge, layout = {}) {
     const nextBinding = captureAccountBinding(row, badge);
     const nextSignature = layoutInputSignature(row, badge, layout);
     if (sameAccountBinding(lastLayoutBinding, nextBinding)
@@ -1400,8 +1169,8 @@ const installScript = String.raw`(() => {
       positionQuotaBar(row, badge, layout.barScope);
       return findIdentityParts(row, badge);
     }
-    const identityParts = applyLayout(row, badge, layout, options);
-    const solved = paintPositionedModuleLayout(row, badge, layout, options);
+    const identityParts = applyLayout(row, badge, layout);
+    const solved = paintPositionedModuleLayout(row, badge, layout);
     lastLayoutBinding = captureAccountBinding(row, badge);
     lastLayoutPlan = committedLayoutPlan(row, badge, solved);
     // Store the post-layout geometry. A hidden identity becoming visible, or a
@@ -1492,7 +1261,7 @@ const installScript = String.raw`(() => {
 
   function paintPositionedModuleLayout(row, badge, layout = {}, options = {}) {
     const modules = findAccountModules(row, badge);
-    const visibleSet = new Set(visibleAccountModules(modules).filter((module) => options.primaryRemote !== true || ["avatar", "name"].includes(module)));
+    const visibleSet = new Set(visibleAccountModules(modules));
     const requestedAnchors = cleanModuleAnchors(layout.moduleAnchors);
     const smartLayout = cleanLayoutMode(layout.layoutMode) === "auto" && options.dragging !== true;
     const anchors = smartLayout ? dockModuleAnchors(requestedAnchors) : requestedAnchors;
@@ -1526,8 +1295,8 @@ const installScript = String.raw`(() => {
       seconds: { minWidth: 38, shrinkPriority: 12 },
       date: { minWidth: 28, shrinkPriority: 13 },
       reset: { minWidth: 34, shrinkPriority: 14 },
-      pace: { minWidth: 42, shrinkPriority: 15 },
-      runway: { minWidth: 42, shrinkPriority: 16 },
+      pace: { minWidth: 32, shrinkPriority: 15 },
+      runway: { minWidth: 34, shrinkPriority: 16 },
       todayTokens: { minWidth: 42, shrinkPriority: 17 },
       lifetimeTokens: { minWidth: 42, shrinkPriority: 18 },
       value: { minWidth: 26, shrinkPriority: 20 },
@@ -1597,82 +1366,9 @@ const installScript = String.raw`(() => {
     return { ...solved, anchors, bounds };
   }
 
-  function paintRemoteModuleLayout(layout = {}, options = {}) {
-    const group = placementPrimaryGroup;
-    const surface = placementPrimarySurface;
-    if (!(group instanceof HTMLElement) || !(surface instanceof HTMLElement)) return null;
-    const nodes = new Map([...group.querySelectorAll('[data-quotapin-remote-module]')]
-      .filter((node) => node instanceof HTMLElement)
-      .map((node) => [node.dataset.quotapinRemoteModule, node]));
-    const bounds = options.frozenBounds ?? remoteLayoutBounds(surface);
-    if (!bounds || !nodes.size) return null;
-    const requestedAnchors = cleanModuleAnchors(layout.moduleAnchors);
-    const magnetic = cleanLayoutMode(layout.layoutMode) === "auto" && options.dragging !== true;
-    const anchors = magnetic ? dockModuleAnchors(requestedAnchors) : requestedAnchors;
-    const rank = new Map(cleanModuleOrder(layout.moduleOrder).map((module, index) => [module, index]));
-    const ordered = cleanModuleOrder(layout.moduleOrder).filter((module) => nodes.has(module));
-    const visible = options.dragging === true
-      ? ordered
-      : ordered.sort((left, right) => anchors[left] - anchors[right] || rank.get(left) - rank.get(right));
-    const shrink = {
-      label: { minWidth: 14, shrinkPriority: 10 }, countdown: { minWidth: 28, shrinkPriority: 11 },
-      seconds: { minWidth: 38, shrinkPriority: 12 }, date: { minWidth: 28, shrinkPriority: 13 },
-      reset: { minWidth: 34, shrinkPriority: 14 }, pace: { minWidth: 42, shrinkPriority: 15 },
-      runway: { minWidth: 42, shrinkPriority: 16 }, todayTokens: { minWidth: 42, shrinkPriority: 17 },
-      lifetimeTokens: { minWidth: 42, shrinkPriority: 18 }, value: { minWidth: 26, shrinkPriority: 20 },
-    };
-    const measurements = new Map();
-    const items = visible.map((module) => {
-      const node = nodes.get(module);
-      const rect = node.getBoundingClientRect();
-      const frozen = options.frozenMeasurements?.[module];
-      const naturalWidth = frozen
-        ? Math.max(1, Number(frozen.width) || 1)
-        : textLayoutModules.has(module)
-          ? Math.min(naturalInlineWidth(node), Math.max(1, bounds.right - bounds.left))
-          : Math.max(1, rect.width, Number(node.scrollWidth) || 0);
-      const naturalHeight = frozen ? Math.max(1, Number(frozen.height) || 1) : Math.max(1, rect.height);
-      measurements.set(module, { width: naturalWidth, height: naturalHeight });
-      const desiredAnchor = module === options.pinnedId && Number.isFinite(Number(options.pinnedAnchor))
-        ? Number(options.pinnedAnchor)
-        : anchors[module];
-      return {
-        id: module,
-        width: naturalWidth,
-        minWidth: shrink[module]?.minWidth ?? naturalWidth,
-        shrinkPriority: shrink[module]?.shrinkPriority ?? 100,
-        desiredCenter: bounds.left + desiredAnchor * (bounds.right - bounds.left),
-      };
-    });
-    const solved = solveFreeLayout(items, bounds, { gap: 6, pinnedId: options.pinnedId, preserveOrder: true });
-    surface.dataset.quotapinCrowded = String(solved.compressedModules.length > 0);
-    surface.dataset.quotapinCrowdedModules = solved.compressedModules.join(",");
-    const capacityNotice = panel?.querySelector('[data-layout-capacity="true"]');
-    if (capacityNotice instanceof HTMLElement) capacityNotice.hidden = solved.compressedModules.length === 0;
-    for (const module of visible) {
-      const node = nodes.get(module);
-      const position = solved.positions[module];
-      const measured = measurements.get(module);
-      if (!position || !measured) continue;
-      node.style.position = "absolute";
-      node.style.left = position.left - bounds.rowRect.left + "px";
-      node.style.top = Math.max(0, (bounds.rowRect.height - measured.height) / 2) + "px";
-      node.style.width = position.width + "px";
-      node.style.maxWidth = Math.max(1, bounds.right - bounds.left) + "px";
-      node.style.transform = "none";
-      node.style.overflow = positionedModuleOverflow(module);
-      node.style.textOverflow = positionedModuleOverflow(module) === "hidden" && module !== "dot" ? "ellipsis" : "clip";
-      node.style.whiteSpace = "nowrap";
-      node.style.transition = options.dragging === true && module !== options.pinnedId
-        ? "left 84ms cubic-bezier(.22,.82,.24,1.08)"
-        : "none";
-    }
-    return { ...solved, anchors, bounds, measurements };
-  }
-
   function enableLiveRowEditing(badge, profile) {
-    try { editorLayoutCleanup?.(); } catch {}
-    editorLayoutCleanup = null;
+    try { editorRowCleanup?.(); } catch {}
+    editorRowCleanup = null;
     const row = findAccountRow();
     if (!(row instanceof Element) || !(badge instanceof Element)) return;
     const modules = findAccountModules(row, badge);
@@ -1896,7 +1592,7 @@ const installScript = String.raw`(() => {
         node.addEventListener("pointercancel", onPositionedPointerCancel);
         node.addEventListener("lostpointercapture", onPositionedLostPointerCapture);
       }
-      editorLayoutCleanup = () => {
+      editorRowCleanup = () => {
         endLayoutDrag();
         delete row.dataset.quotapinLayoutDragging;
         delete row.dataset.quotapinMagnetTarget;
@@ -1927,226 +1623,7 @@ const installScript = String.raw`(() => {
     }
   }
 
-  function enableRemoteSurfaceEditing(profile) {
-    try { editorLayoutCleanup?.(); } catch {}
-    editorLayoutCleanup = null;
-    const group = placementPrimaryGroup;
-    const surface = placementPrimarySurface;
-    if (!(group instanceof HTMLElement) || !(surface instanceof HTMLElement) || !group.isConnected) return;
-    const nodes = [...group.querySelectorAll('[data-quotapin-remote-module]')]
-      .filter((node) => node instanceof HTMLElement);
-    if (!nodes.length) return;
-    const layoutMode = cleanLayoutMode(profile.layoutMode);
-    const magnetic = layoutMode === "auto";
-    let anchors = cleanModuleAnchors(profile.moduleAnchors);
-    let order = cleanModuleOrder(profile.moduleOrder);
-    paintRemoteModuleLayout({ ...profile, moduleAnchors: anchors, moduleOrder: order });
-    const original = new Map(nodes.map((node) => [node, {
-      cursor: node.style.cursor,
-      touchAction: node.style.touchAction,
-      zIndex: node.style.zIndex,
-      outline: node.style.outline,
-      outlineOffset: node.style.outlineOffset,
-      title: node.getAttribute("title"),
-    }]));
-    group.dataset.quotapinEditing = "true";
-    panel.dataset.remoteEditing = "true";
-    for (const node of nodes) {
-      node.style.cursor = "grab";
-      node.style.touchAction = "none";
-      node.style.outline = "1px solid rgba(110,231,183,.28)";
-      node.style.outlineOffset = "2px";
-      node.setAttribute("aria-grabbed", "false");
-      node.title = t(magnetic ? "Drag modules with alignment guides" : "Drag modules to place them freely");
-    }
-
-    let drag = null;
-    const finish = (event, cancelled = false) => {
-      if (!drag || event.pointerId !== drag.pointerId) return;
-      const completed = drag;
-      drag = null;
-      endLayoutDrag();
-      try { completed.node.releasePointerCapture(event.pointerId); } catch {}
-      completed.node.style.cursor = "grab";
-      completed.node.style.zIndex = original.get(completed.node)?.zIndex ?? "";
-      completed.node.setAttribute("aria-grabbed", "false");
-      delete group.dataset.quotapinLayoutDragging;
-      delete group.dataset.quotapinMagnetTarget;
-      if (cancelled) {
-        anchors = cleanModuleAnchors(completed.previousLayout.moduleAnchors);
-        order = cleanModuleOrder(completed.previousLayout.moduleOrder);
-        paintRemoteModuleLayout({ ...profile, moduleAnchors: anchors, moduleOrder: order });
-      } else if (completed.moved) {
-        const settledAnchors = cleanModuleAnchors(completed.resolvedAnchors ?? anchors);
-        if (magnetic) {
-          anchors = cleanModuleAnchors(completed.baseAnchors);
-          anchors[completed.module] = settledAnchors[completed.module];
-        } else anchors = settledAnchors;
-        profile.moduleAnchors = anchors;
-        profile.moduleOrder = cleanModuleOrder(order);
-        sendAction({
-          type: "updateProfile",
-          id: profile.id,
-          patch: { layoutMode, moduleAnchors: profile.moduleAnchors, moduleOrder: profile.moduleOrder },
-        }, {
-          onAck: (_ack, draft) => {
-            const saved = draft?.profiles?.find((candidate) => candidate.id === profile.id);
-            if (saved) Object.assign(profile, saved);
-            schedule(() => setLayoutEditing(isLayoutEditingMode()));
-          },
-        });
-      }
-      suppressBadgeClickUntil = Date.now() + 600;
-      schedule();
-    };
-    const onPointerDown = (event) => {
-      if (event.button !== 0 || panel?.dataset.remoteEditing !== "true") return;
-      const node = event.currentTarget;
-      const module = node.dataset.quotapinRemoteModule;
-      const rect = node.getBoundingClientRect();
-      const frozenBounds = remoteLayoutBounds(surface);
-      if (!frozenBounds) return;
-      const frozenRects = Object.fromEntries(nodes.map((candidate) => {
-        const box = candidate.getBoundingClientRect();
-        return [candidate.dataset.quotapinRemoteModule, {
-          left: box.left,
-          right: box.right,
-          width: Math.max(1, box.width),
-          height: Math.max(1, box.height),
-        }];
-      }));
-      const frozenMeasurements = Object.fromEntries(Object.entries(frozenRects).map(([id, box]) => [id, { width: box.width, height: box.height }]));
-      beginLayoutDrag(group, node, event.pointerId);
-      group.dataset.quotapinLayoutDragging = "true";
-      delete group.dataset.quotapinMagnetTarget;
-      drag = {
-        node,
-        module,
-        pointerId: event.pointerId,
-        startClientX: event.clientX,
-        startClientY: event.clientY,
-        pointerToCenter: rect.left + rect.width / 2 - event.clientX,
-        frozenBounds,
-        frozenRects,
-        resolvedRects: { ...frozenRects },
-        frozenMeasurements,
-        baseAnchors: magnetic
-          ? cleanModuleAnchors(profile.moduleAnchors)
-          : anchorsFromRects(frozenRects, frozenBounds, anchors),
-        previousLayout: {
-          moduleOrder: cleanModuleOrder(profile.moduleOrder),
-          moduleAnchors: cleanModuleAnchors(profile.moduleAnchors),
-        },
-        moved: false,
-      };
-      node.style.cursor = "grabbing";
-      node.style.zIndex = "3";
-      node.setAttribute("aria-grabbed", "true");
-      try { node.setPointerCapture(event.pointerId); } catch {}
-      event.preventDefault();
-      event.stopPropagation();
-    };
-    const onPointerMove = (event) => {
-      if (!drag || event.pointerId !== drag.pointerId) return;
-      const dx = event.clientX - drag.startClientX;
-      const dy = event.clientY - drag.startClientY;
-      if (!drag.moved && Math.hypot(dx, dy) < 5) return;
-      drag.moved = true;
-      const requestedCenter = event.clientX + drag.pointerToCenter;
-      const neighbours = stableMagneticNeighbours(drag.frozenRects, drag.resolvedRects, drag.module, 1);
-      const magneticResult = magnetic
-        ? snapMagneticCenter(requestedCenter, drag.frozenMeasurements[drag.module]?.width, drag.frozenBounds, neighbours, {
-          gap: 6,
-          threshold: Number(profile.snapThreshold),
-          targets: profile.snapTargets,
-        })
-        : { center: requestedCenter, target: null };
-      const desiredCenter = magneticResult.center;
-      const target = String(magneticResult.target ?? "");
-      if (target) group.dataset.quotapinMagnetTarget = target;
-      else delete group.dataset.quotapinMagnetTarget;
-      if (target === "left") order = moveModule(order, drag.module, 0);
-      else if (target === "right") order = moveModule(order, drag.module, layoutModules.length);
-      else if (target.startsWith("before:") || target.startsWith("after:")) {
-        const [side, neighbour] = target.split(":", 2);
-        const withoutDragged = cleanModuleOrder(order).filter((candidate) => candidate !== drag.module);
-        const neighbourIndex = withoutDragged.indexOf(neighbour);
-        if (neighbourIndex >= 0) order = moveModule(order, drag.module, neighbourIndex + (side === "after" ? 1 : 0));
-      } else order = orderForPointer(order, drag.module, desiredCenter, drag.frozenRects);
-      const anchor = Math.max(0, Math.min(1, (desiredCenter - drag.frozenBounds.left) / Math.max(1, drag.frozenBounds.right - drag.frozenBounds.left)));
-      anchors = { ...drag.baseAnchors, [drag.module]: Math.round(anchor * 10_000) / 10_000 };
-      const solved = paintRemoteModuleLayout({ ...profile, moduleAnchors: anchors, moduleOrder: order }, {
-        dragging: true,
-        pinnedId: drag.module,
-        pinnedAnchor: anchors[drag.module],
-        frozenBounds: drag.frozenBounds,
-        frozenMeasurements: drag.frozenMeasurements,
-      });
-      if (solved?.order?.length) {
-        drag.resolvedAnchors = anchorsFromRects(solved.positions, solved.bounds, anchors);
-        drag.resolvedRects = Object.fromEntries(Object.entries(solved.positions).map(([id, position]) => [id, {
-          left: position.left,
-          right: position.left + position.width,
-          width: position.width,
-          height: drag.frozenMeasurements[id]?.height ?? 1,
-        }]));
-      }
-      event.preventDefault();
-      event.stopPropagation();
-    };
-    const onPointerUp = (event) => finish(event, false);
-    const onPointerCancel = (event) => finish(event, true);
-    const onLostPointerCapture = (event) => finish(event, true);
-    for (const node of nodes) {
-      node.addEventListener("pointerdown", onPointerDown);
-      node.addEventListener("pointermove", onPointerMove);
-      node.addEventListener("pointerup", onPointerUp);
-      node.addEventListener("pointercancel", onPointerCancel);
-      node.addEventListener("lostpointercapture", onLostPointerCapture);
-    }
-    editorLayoutCleanup = () => {
-      endLayoutDrag();
-      delete group.dataset.quotapinEditing;
-      delete group.dataset.quotapinLayoutDragging;
-      delete group.dataset.quotapinMagnetTarget;
-      if (panel) delete panel.dataset.remoteEditing;
-      for (const node of nodes) {
-        const saved = original.get(node);
-        node.removeEventListener("pointerdown", onPointerDown);
-        node.removeEventListener("pointermove", onPointerMove);
-        node.removeEventListener("pointerup", onPointerUp);
-        node.removeEventListener("pointercancel", onPointerCancel);
-        node.removeEventListener("lostpointercapture", onLostPointerCapture);
-        node.style.cursor = saved.cursor;
-        node.style.touchAction = saved.touchAction;
-        node.style.zIndex = saved.zIndex;
-        node.style.outline = saved.outline;
-        node.style.outlineOffset = saved.outlineOffset;
-        if (saved.title == null) node.removeAttribute("title");
-        else node.setAttribute("title", saved.title);
-        node.removeAttribute("aria-grabbed");
-      }
-      schedule();
-    };
-  }
-
-  function panelAnchorFor(badge, preferred = null) {
-    const painted = (node) => {
-      if (!(node instanceof HTMLElement) || !node.isConnected) return false;
-      const rect = node.getBoundingClientRect();
-      return rect.width > 0 && rect.height > 0;
-    };
-    if (painted(preferred)) return preferred;
-    if (activePlacementZone !== "account-row" && painted(placementPrimarySurface)) return placementPrimarySurface;
-    const row = badge?.closest('button[aria-haspopup="menu"]') ?? findAccountRow();
-    if (!(row instanceof HTMLElement)) return painted(badge) ? badge : null;
-    const surface = accountRowMode() === "beta" ? findAccountSurface(row) : row;
-    return painted(surface) ? surface : row;
-  }
-
-  function openEditor(badge, preserveUnlock = false, preferredAnchor = null) {
-    panelRuntimeMetrics.opens += 1;
-    const nextPanelAnchor = panelAnchorFor(badge, preferredAnchor ?? panelAnchorElement);
+  function openEditor(badge, preserveUnlock = false) {
     const keepUnlocked = preserveUnlock && secretControlsUnlocked;
     const preservedReturnFocus = panelReturnFocus instanceof HTMLElement && panelReturnFocus.isConnected ? panelReturnFocus : null;
     const activeFocus = document.activeElement instanceof HTMLElement
@@ -2160,7 +1637,6 @@ const installScript = String.raw`(() => {
       ?? badge.closest('button[aria-haspopup="menu"]');
     closePanel(!keepUnlocked, false);
     panelReturnFocus = returnFocus;
-    panelAnchorElement = nextPanelAnchor;
     secretControlsUnlocked = keepUnlocked;
     const stagedPreferences = getSettingsDraft(settingsState);
     const renderablePreferences = getRenderableSettings(settingsState);
@@ -2183,11 +1659,7 @@ const installScript = String.raw`(() => {
     panel.setAttribute("aria-modal", "false");
     panel.setAttribute("aria-labelledby", "quotapin-panel-title");
     panel.tabIndex = -1;
-    const initialPanelGeometry = panelGeometry(
-      window.innerWidth,
-      window.innerHeight,
-      panelAnchorElement?.getBoundingClientRect(),
-    );
+    const initialPanelGeometry = panelGeometry(window.innerWidth, window.innerHeight);
     Object.assign(panel.style, {
       position: "fixed",
       left: initialPanelGeometry.left + "px",
@@ -2249,11 +1721,7 @@ const installScript = String.raw`(() => {
     for (const [name, value] of Object.entries(panelTokens)) panel.style.setProperty(name, value);
     syncPanelGeometry = () => {
       if (!panel) return;
-      const geometry = panelGeometry(
-        window.innerWidth,
-        window.innerHeight,
-        panelAnchorElement?.isConnected ? panelAnchorElement.getBoundingClientRect() : null,
-      );
+      const geometry = panelGeometry(window.innerWidth, window.innerHeight);
       panel.style.left = geometry.left + "px";
       panel.style.bottom = geometry.bottom + "px";
       panel.style.width = geometry.width + "px";
@@ -2639,8 +2107,6 @@ const installScript = String.raw`(() => {
     let quickShowLifetimeTokens = profile.showLifetimeTokens === true;
     let quickShowPace = profile.showPace === true;
     let quickShowRunway = profile.showRunway === true;
-    let quickPlacement = cleanPlacement(profile.placement);
-    let paintPlacementControls = () => {};
     const availableWindowCount = Number(state.view?.availableWindowCount) || 0;
     const elementRows = document.createElement("div");
     elementRows.dataset.moduleGroup = "composition";
@@ -2669,7 +2135,6 @@ const installScript = String.raw`(() => {
       quickShowLifetimeTokens = saved.showLifetimeTokens === true;
       quickShowPace = saved.showPace === true;
       quickShowRunway = saved.showRunway === true;
-      quickPlacement = cleanPlacement(saved.placement);
       avatarVisible = !["hideAvatar", "quotaOnly"].includes(saved.identity);
       nameVisible = !["hideName", "quotaOnly"].includes(saved.identity);
       for (const [module, visible] of Object.entries({
@@ -2678,7 +2143,6 @@ const installScript = String.raw`(() => {
       })) moduleChips[module]?.setActive(Boolean(visible));
       quotaBarChip?.setActive(quickShowBar && quickBarScope === "quota");
       rowBarChip?.setActive(quickShowBar && quickBarScope === "row");
-      paintPlacementControls();
     };
     const sendModuleVisibility = (key, next, finish) => {
       sendAction({ type: "updateProfile", id: profile.id, patch: { displayMode: "modules", [key]: next } }, {
@@ -2705,125 +2169,6 @@ const installScript = String.raw`(() => {
         },
       });
     };
-    const sendPlacement = (patch) => {
-      const requested = cleanPlacement({ ...quickPlacement, ...patch });
-      quickPlacement = requested;
-      paintPlacementControls();
-      sendAction({ type: "updateProfile", id: profile.id, patch: { placement: requested } }, {
-        onAck: (ack) => {
-          const renderable = getRenderableSettings(settingsState);
-          if (ack?.ok) syncQuickControls(renderable);
-          if (!ack?.ok || !panel) return;
-          schedule(() => setLayoutEditing(isLayoutEditingMode()));
-        },
-      });
-    };
-
-    const placementMap = document.createElement("div");
-    placementMap.dataset.placementMap = "true";
-    Object.assign(placementMap.style, {
-      position: "relative", height: "102px", overflow: "hidden", borderRadius: "10px",
-      background: "var(--quotapin-panel-surface)", boxShadow: "inset 0 0 0 1px var(--quotapin-panel-line)",
-    });
-    const mapSidebar = document.createElement("span");
-    const mapComposer = document.createElement("span");
-    Object.assign(mapSidebar.style, { position: "absolute", left: "7px", top: "7px", bottom: "7px", width: "62px", borderRadius: "7px", background: "var(--quotapin-panel-fill)" });
-    Object.assign(mapComposer.style, { position: "absolute", left: "94px", right: "28px", bottom: "9px", height: "31px", borderRadius: "9px", background: "var(--quotapin-panel-fill)" });
-    placementMap.append(mapSidebar, mapComposer);
-    const placementButtons = new Map();
-    const zoneVisuals = [
-      { value: "account-row", label: "Account footer", css: { left: "12px", bottom: "11px", width: "52px", height: "22px" } },
-      { value: "title-center", label: "Title center", css: { left: "58%", top: "7px", width: "70px", height: "22px", transform: "translateX(-50%)" } },
-      { value: "workspace-top-center", label: "Workspace top", css: { left: "58%", top: "37px", width: "78px", height: "22px", transform: "translateX(-50%)" } },
-      { value: "composer-center", label: "Composer toolbar", css: { left: "58%", bottom: "13px", width: "76px", height: "22px", transform: "translateX(-50%)" } },
-    ];
-    for (const option of zoneVisuals) {
-      const button = document.createElement("button");
-      button.type = "button";
-      button.dataset.placementZone = option.value;
-      button.setAttribute("aria-label", t(option.label));
-      button.title = t(option.label);
-      button.textContent = "42%";
-      Object.assign(button.style, option.css, {
-        position: "absolute", padding: "0 5px", border: "0", borderRadius: "6px", font: "inherit", fontSize: "9px",
-        fontWeight: "650", fontVariantNumeric: "tabular-nums", cursor: "pointer", transition: "opacity 120ms ease, background-color 120ms ease, color 120ms ease, transform 120ms ease",
-      });
-      button.addEventListener("click", () => {
-        if (button.disabled) return;
-        sendPlacement({ primary: option.value, fallback: "account-row" });
-      });
-      placementButtons.set(option.value, button);
-      placementMap.append(button);
-    }
-    const placementStatus = document.createElement("div");
-    placementStatus.dataset.placementStatus = "true";
-    Object.assign(placementStatus.style, { minHeight: "14px", color: "var(--quotapin-panel-faint)", fontSize: "9px", lineHeight: "1.35" });
-    placementMap.setAttribute("role", "group");
-    placementMap.setAttribute("aria-label", t("Placement"));
-    const railButtons = new Map();
-    for (const option of [
-      { value: "account-row", label: "Account rail", css: { left: "12px", bottom: "3px", width: "52px" } },
-      { value: "composer-bottom", label: "Below composer", css: { left: "94px", right: "28px", bottom: "3px" } },
-    ]) {
-      const button = document.createElement("button");
-      button.type = "button";
-      button.dataset.placementRail = option.value;
-      button.setAttribute("role", "radio");
-      button.setAttribute("aria-label", t(option.label));
-      button.title = t(option.label);
-      const line = document.createElement("span");
-      line.dataset.placementRailLine = "true";
-      Object.assign(line.style, { display: "block", width: "100%", height: "2px", borderRadius: "999px", background: "currentColor" });
-      button.append(line);
-      Object.assign(button.style, {
-        position: "absolute", minWidth: "0", height: "8px", padding: "3px 0", border: "0", borderRadius: "4px", cursor: "pointer",
-        display: "flex", alignItems: "center", justifyContent: "center", font: "inherit",
-        transition: "opacity 120ms ease, background-color 120ms ease, color 120ms ease",
-      });
-      Object.assign(button.style, option.css);
-      button.addEventListener("click", () => {
-        if (button.disabled) return;
-        sendPlacement({ rail: option.value });
-      });
-      railButtons.set(option.value, button);
-      placementMap.append(button);
-    }
-    paintPlacementControls = () => {
-      const currentRow = findAccountRow();
-      const context = currentRow ? resolvePlacementContext(currentRow, quickPlacement) : { geometry: { zones: {}, rails: {} }, primary: "account-row", rail: "account-row" };
-      for (const [zone, button] of placementButtons) {
-        const available = zone === "account-row" || context.geometry?.zones?.[zone]?.available === true;
-        const selected = quickPlacement.primary === zone;
-        const active = context.primary === zone;
-        button.disabled = !available;
-        button.setAttribute("aria-pressed", String(selected));
-        button.dataset.activePlacement = String(active);
-        button.style.background = selected ? "var(--quotapin-panel-accent-fill)" : "var(--quotapin-panel-fill-strong)";
-        button.style.color = selected ? "var(--quotapin-panel-accent)" : "var(--quotapin-panel-faint)";
-        button.style.opacity = available ? (selected ? "1" : ".62") : ".18";
-        button.style.boxShadow = active ? "0 3px 10px rgba(0,0,0,.14)" : "none";
-      }
-      for (const [rail, button] of railButtons) {
-        const available = rail === "account-row" || context.geometry?.rails?.[rail]?.available === true;
-        const selected = quickPlacement.rail === rail;
-        button.disabled = !available;
-        button.setAttribute("aria-pressed", String(selected));
-        button.setAttribute("aria-checked", String(selected));
-        button.style.background = selected ? "var(--quotapin-panel-accent-fill)" : "var(--quotapin-panel-fill)";
-        button.style.color = selected ? "var(--quotapin-panel-accent)" : "var(--quotapin-panel-faint)";
-        button.style.opacity = available ? (selected ? "1" : ".66") : ".24";
-      }
-      const requestedUnavailable = quickPlacement.primary !== context.primary;
-      const primaryLabel = t(zoneVisuals.find((item) => item.value === context.primary)?.label ?? "Account footer");
-      const railLabel = t(context.rail === "composer-bottom" ? "Below composer" : "Account rail");
-      placementStatus.textContent = requestedUnavailable
-        ? t("Unavailable in this window") + " · " + t("Using account footer")
-        : primaryLabel + " · " + t("Quota rail") + ": " + railLabel;
-    };
-    const placementBody = document.createElement("div");
-    Object.assign(placementBody.style, { display: "grid", gap: "6px" });
-    placementBody.append(placementMap, placementStatus);
-    paintPlacementControls();
     const liveParts = state.view?.parts ?? {};
     const visualSpan = (text, color) => {
       const span = document.createElement("span");
@@ -3032,32 +2377,23 @@ const installScript = String.raw`(() => {
       // a drop. Status dot and quota bar share one row because they express the
       // same severity state even though the production bar spans the row below.
       const groups = [
-        ["identity", "Identity", ["avatar", "name"]],
-        ["quota", "Quota", ["value", "label"]],
-        ["forecast", "Forecast", ["pace", "runway"]],
-        ["status", "Signals", ["dot"]],
-        ["usage", "Usage", ["todayTokens", "lifetimeTokens"]],
-        ["time", "Time", ["countdown", "relative", "seconds", "date", "reset"]],
+        ["identity", ["avatar", "name"]],
+        ["quota", ["value", "label"]],
+        ["forecast", ["pace", "runway"]],
+        ["status", ["dot"]],
+        ["usage", ["todayTokens", "lifetimeTokens"]],
+        ["time", ["countdown", "relative", "seconds", "date", "reset"]],
       ];
-      for (const [id, labelText, modules] of groups) {
+      for (const [id, modules] of groups) {
         const group = document.createElement("div");
         group.dataset.moduleGroup = id;
-        Object.assign(group.style, { display: "grid", gridTemplateColumns: "52px minmax(0,1fr)", alignItems: "center", gap: "6px", minHeight: "30px" });
-        const label = document.createElement("span");
-        label.textContent = t(labelText);
-        Object.assign(label.style, { color: "var(--quotapin-panel-faint)", fontSize: "9px", lineHeight: "1.2", overflow: "hidden", textOverflow: "ellipsis" });
-        const controls = document.createElement("div");
-        controls.dataset.moduleControls = id;
-        Object.assign(controls.style, { display: "flex", flexWrap: "wrap", alignItems: "center", justifyContent: "flex-start", gap: "5px", minWidth: "0" });
+        Object.assign(group.style, { display: "flex", flexWrap: "wrap", alignItems: "center", justifyContent: "center", gap: "5px", minHeight: "30px" });
         for (const module of modules) {
           if (module === "label" && availableWindowCount <= 1) continue;
-          controls.append(moduleChips[module]);
+          group.append(moduleChips[module]);
         }
-        if (id === "status") controls.append(quotaBarChip, rowBarChip);
-        if (controls.childElementCount) {
-          group.append(label, controls);
-          elementRows.append(group);
-        }
+        if (id === "status") group.append(quotaBarChip, rowBarChip);
+        if (group.childElementCount) elementRows.append(group);
       }
     }
     mountModuleChips();
@@ -3065,12 +2401,12 @@ const installScript = String.raw`(() => {
 
     const quickCompositionHint = document.createElement("div");
     quickCompositionHint.dataset.quickHelp = "true";
-    quickCompositionHint.textContent = t("Click to show or hide. Close the panel, then drag modules at their display position.");
+    quickCompositionHint.textContent = t("Click to show or hide. Drag the live row below to arrange.");
     Object.assign(quickCompositionHint.style, {
       color: "var(--quotapin-panel-faint)", fontSize: "9px", lineHeight: "1.4", textAlign: "center",
     });
     quickCompositionBody.append(badgeControls, quickCompositionHint);
-    quickGrid.append(quickModule("Visible modules", quickCompositionBody), quickModule("Placement", placementBody));
+    quickGrid.append(quickModule("Visible modules", quickCompositionBody));
 
     function makeModePanel(mode, scroll = true) {
       const section = document.createElement("div");
@@ -3138,6 +2474,7 @@ const installScript = String.raw`(() => {
       arcadeWrap.style.overflowY = "auto";
       arcadeWrap.style.overflowX = "hidden";
     };
+    let setLayoutEditing = () => {};
     const nameInput = styleControl(document.createElement("input"));
     nameInput.dataset.configKey = "name";
     nameInput.value = profile.name;
@@ -3332,7 +2669,7 @@ const installScript = String.raw`(() => {
     jsonCaption.textContent = t("Configuration JSON");
     Object.assign(jsonCaption.style, { color: "var(--quotapin-panel-muted)", fontSize: "10px", fontWeight: "600", letterSpacing: ".035em" });
     const configReference = document.createElement("a");
-    configReference.href = sourceRepository + "/blob/main/docs/configuration.md#configuration-json-schema-19";
+    configReference.href = sourceRepository + "/blob/main/docs/configuration.md#configuration-json-schema-17";
     configReference.target = "_blank";
     configReference.rel = "noreferrer";
     configReference.textContent = t("Configuration reference");
@@ -3849,10 +3186,7 @@ const installScript = String.raw`(() => {
     layoutCapacity.hidden = true;
     layoutCapacity.textContent = t("This sidebar is too narrow for every selected module. Widen it or hide a module.");
     Object.assign(layoutCapacity.style, {
-      position: "absolute", insetInline: "12px", bottom: "46px", zIndex: "4", pointerEvents: "none",
-      color: "var(--quotapin-panel-warning)", background: "var(--quotapin-panel-surface)",
-      boxShadow: "0 8px 24px rgba(0,0,0,.22)", borderRadius: "7px",
-      fontSize: "9px", lineHeight: "1.35", padding: "6px 8px",
+      color: "var(--quotapin-panel-warning)", fontSize: "9px", lineHeight: "1.35", paddingInline: "2px",
     });
     quickCompositionBody.append(layoutCapacity);
 
@@ -3874,8 +3208,8 @@ const installScript = String.raw`(() => {
       });
     };
     for (const [module, control] of [
-      ["avatar", avatarChip], ["name", nameChip], ["dot", dotChip], ["value", valueChip], ["pace", paceChip], ["runway", runwayChip],
-      ["todayTokens", todayTokensChip], ["lifetimeTokens", lifetimeTokensChip], ["label", labelChip], ["countdown", countdownChip], ["relative", relativeChip], ["seconds", secondsChip], ["date", dateChip], ["reset", resetChip],
+      ["avatar", avatarChip], ["name", nameChip], ["dot", dotChip], ["value", valueChip],
+      ["label", labelChip], ["countdown", countdownChip], ["relative", relativeChip], ["seconds", secondsChip], ["date", dateChip], ["reset", resetChip],
     ]) {
       control.dataset.layoutModule = module;
       control.addEventListener("keydown", (event) => {
@@ -3892,17 +3226,11 @@ const installScript = String.raw`(() => {
     }
 
     setLayoutEditing = (active) => {
-      const currentRow = findAccountRow();
-      const resolved = currentRow ? resolvePlacementContext(currentRow, profile.placement).primary : "account-row";
-      try { editorLayoutCleanup?.(); } catch {}
-      editorLayoutCleanup = null;
-      const editing = Boolean(active);
-      const editAccountRow = editing && resolved === "account-row";
-      const editRemoteSurface = editing && resolved !== "account-row";
-      panel.dataset.rowEditing = String(editAccountRow);
-      panel.dataset.remoteEditing = String(editRemoteSurface);
-      if (editAccountRow) enableLiveRowEditing(badge, profile);
-      else if (editRemoteSurface) enableRemoteSurfaceEditing(profile);
+      panel.dataset.rowEditing = String(Boolean(active));
+      try { editorRowCleanup?.(); } catch {}
+      editorRowCleanup = null;
+      if (!active) return;
+      enableLiveRowEditing(badge, profile);
     };
 
     arcadeWrap.id = "quotapin-mode-arcade";
@@ -3923,52 +3251,35 @@ const installScript = String.raw`(() => {
   function removeBadge(options = {}) {
     closePanel(true, options.restoreFocus !== false, options.resumeProfileRefresh !== false);
     const badge = document.getElementById(badgeId);
-    const row = observedAccountRow ?? badge?.closest('button[aria-haspopup="menu"]');
+    const row = badge?.parentElement;
     clearEasterEgg(badge);
     if (row instanceof Element) {
       restoreIdentity(row);
       restoreModuleLayout(row, badge);
     }
     restoreAccountChrome();
-    removePlacementLayer(true);
     badge?.remove();
     lastLayoutBinding = null;
     lastLayoutSignature = "";
     lastLayoutPlan = null;
   }
 
-  function eventBadgeContext(event) {
+  function eventBadge(event) {
     if (!isActiveRenderer()) return null;
     const target = event.target;
     if (!(target instanceof Element)) return null;
     const badge = document.getElementById(badgeId);
     const accountRow = findAccountRow();
     if (!badge || !accountRow) return null;
-    const remoteSurfaceActive = activePlacementZone !== "account-row"
-      && placementPrimarySurface instanceof HTMLElement
-      && placementPrimarySurface.isConnected
-      && placementPrimarySurface.style.display !== "none";
-    if (remoteSurfaceActive) {
-      return placementPrimarySurface.contains(target)
-        ? { badge, remote: true, captureTarget: placementPrimarySurface, anchorTarget: placementPrimarySurface }
-        : null;
-    }
     const surface = accountRowMode() === "beta" ? findAccountSurface(accountRow) : accountRow;
-    return surface?.contains(target) ? { badge, remote: false, captureTarget: badge, anchorTarget: surface } : null;
-  }
-
-  function eventBadge(event) {
-    return eventBadgeContext(event)?.badge ?? null;
+    return surface?.contains(target) ? badge : null;
   }
 
   function onBadgePointerDown(event) {
     if (replayingCodexGesture) return;
-    const context = eventBadgeContext(event);
-    const badge = context?.badge;
+    const badge = eventBadge(event);
     if (!badge || event.button !== 0) return;
-    if (event.target instanceof Element
-      && ((panel?.dataset.rowEditing === "true" && event.target.closest("[data-quotapin-module]"))
-        || (panel?.dataset.remoteEditing === "true" && event.target.closest("[data-quotapin-remote-module]")))) return;
+    if (panel?.dataset.rowEditing === "true" && event.target instanceof Element && event.target.closest("[data-quotapin-module]")) return;
     event.preventDefault();
     event.stopImmediatePropagation();
     clearTimeout(holdTimer);
@@ -3981,12 +3292,9 @@ const installScript = String.raw`(() => {
       y: event.clientY,
       startedAt: performance.now(),
       closesPanel,
-      remote: context.remote,
-      captureTarget: context.captureTarget,
-      anchorTarget: context.anchorTarget,
     });
     badge.dataset.quotapinGesture = closesPanel ? "panel-closing" : "holding";
-    try { context.captureTarget?.setPointerCapture(event.pointerId); } catch {}
+    try { badge.setPointerCapture(event.pointerId); } catch {}
     if (closesPanel) {
       closePanel();
       return;
@@ -3996,7 +3304,7 @@ const installScript = String.raw`(() => {
       activeGesture = reduceGestureState(activeGesture, { type: "hold" }, { holdMs: 480, slop: 10 });
       longPressHandled = true;
       try {
-        openEditor(activeGesture.badge, false, activeGesture.anchorTarget);
+        openEditor(activeGesture.badge);
         activeGesture.badge.dataset.quotapinGesture = "long-open";
         delete activeGesture.badge.dataset.quotapinGestureError;
       } catch (error) {
@@ -4025,7 +3333,7 @@ const installScript = String.raw`(() => {
     const gesture = reduceGestureState(activeGesture, { type: "release", at: performance.now() }, { holdMs: 480, slop: 10 });
     activeGesture = null;
     suppressBadgeClickUntil = Date.now() + 800;
-    try { gesture.captureTarget?.releasePointerCapture(event.pointerId); } catch {}
+    try { gesture.badge.releasePointerCapture(event.pointerId); } catch {}
     if (gesture.closesPanel) {
       gesture.badge.dataset.quotapinGesture = "panel-close-release";
       return;
@@ -4036,7 +3344,7 @@ const installScript = String.raw`(() => {
     if (!longPressHandled && gesture.outcome === "hold") {
       longPressHandled = true;
       try {
-        openEditor(gesture.badge, false, gesture.anchorTarget);
+        openEditor(gesture.badge);
         gesture.badge.dataset.quotapinGesture = "long-open-release";
         delete gesture.badge.dataset.quotapinGestureError;
       } catch (error) {
@@ -4048,10 +3356,6 @@ const installScript = String.raw`(() => {
       if (gesture.outcome === "cancelled") gesture.badge.dataset.quotapinGesture = "cancelled";
       else if (gesture.badge.dataset.quotapinGesture !== "long-error-release") gesture.badge.dataset.quotapinGesture = "long-release";
       ownedTimeout(() => { longPressHandled = false; }, 700);
-      return;
-    }
-    if (gesture.remote) {
-      gesture.badge.dataset.quotapinGesture = "remote-short-release";
       return;
     }
     const hostButton = gesture.badge.closest('button[aria-haspopup="menu"]');
@@ -4193,7 +3497,7 @@ const installScript = String.raw`(() => {
     node.style.display = "";
   }
 
-  function applyLayout(row, badge, layout = {}, options = {}) {
+  function applyLayout(row, badge, layout = {}) {
     if (badge.parentElement !== row) row.appendChild(badge);
     restoreIdentity(row);
     const parts = findIdentityParts(row, badge);
@@ -4262,7 +3566,7 @@ const installScript = String.raw`(() => {
         parts.name.style.top = "0";
       }
     }
-    badge.style.display = options.primaryRemote === true ? "none" : "contents";
+    badge.style.display = "contents";
     for (const module of ["dot", "value", "pace", "runway", "todayTokens", "lifetimeTokens", "label", "countdown", "relative", "seconds", "date", "reset"]) {
       const node = modules[module];
       node.style.flex = "0 0 auto";
@@ -4758,231 +4062,6 @@ const installScript = String.raw`(() => {
     return next;
   }
 
-  function removePlacementLayer(disconnectHost = false) {
-    if (disconnectHost) {
-      placementResizeObserver?.disconnect();
-      placementMutationObserver?.disconnect();
-      observedPlacementComposer = null;
-      observedPlacementComposerRoot = null;
-    }
-    placementPrimarySurface = null;
-    placementPrimaryGroup = null;
-    placementRailSurface = null;
-    placementLayer?.remove();
-    placementLayer = null;
-    activePlacementZone = "account-row";
-    activePlacementRail = "account-row";
-    lastPlacementContext = null;
-  }
-
-  function ensurePlacementLayer() {
-    if (placementLayer?.isConnected
-      && placementPrimarySurface?.isConnected
-      && placementPrimaryGroup?.isConnected
-      && placementRailSurface?.isConnected) {
-      return placementLayer;
-    }
-    placementLayer?.remove();
-    placementLayer = document.createElement("div");
-    placementLayer.id = "quotapin-placement-layer";
-    placementLayer.setAttribute("aria-hidden", "false");
-    Object.assign(placementLayer.style, {
-      position: "fixed",
-      inset: "0",
-      zIndex: "2147483000",
-      pointerEvents: "none",
-      overflow: "hidden",
-      contain: "layout style paint",
-    });
-    placementPrimarySurface = document.createElement("div");
-    placementPrimarySurface.dataset.quotapinPlacementSurface = "primary";
-    Object.assign(placementPrimarySurface.style, {
-      position: "fixed",
-      display: "block",
-      overflow: "hidden",
-      whiteSpace: "nowrap",
-      pointerEvents: "none",
-      cursor: "pointer",
-      boxSizing: "border-box",
-    });
-    placementPrimarySurface.style.setProperty("-webkit-app-region", "no-drag");
-    placementPrimaryGroup = document.createElement("div");
-    placementPrimaryGroup.dataset.quotapinPlacementGroup = "true";
-    placementPrimaryGroup.setAttribute("role", "status");
-    placementPrimaryGroup.setAttribute("aria-live", "off");
-    Object.assign(placementPrimaryGroup.style, {
-      position: "absolute",
-      inset: "0",
-      display: "block",
-      overflow: "visible",
-      whiteSpace: "nowrap",
-      pointerEvents: "auto",
-      cursor: "default",
-      boxSizing: "border-box",
-    });
-    placementPrimaryGroup.style.setProperty("-webkit-app-region", "no-drag");
-    placementPrimarySurface.append(placementPrimaryGroup);
-    placementRailSurface = document.createElement("div");
-    placementRailSurface.dataset.quotapinPlacementSurface = "rail";
-    placementRailSurface.setAttribute("aria-hidden", "true");
-    const fill = document.createElement("span");
-    fill.dataset.quotapinPlacementRailFill = "true";
-    Object.assign(placementRailSurface.style, {
-      position: "fixed",
-      height: "2px",
-      overflow: "hidden",
-      borderRadius: "999px",
-      pointerEvents: "none",
-      transformOrigin: "left center",
-    });
-    Object.assign(fill.style, {
-      display: "block",
-      width: "100%",
-      height: "100%",
-      borderRadius: "inherit",
-      transformOrigin: "left center",
-      transition: "transform 240ms cubic-bezier(.2,.8,.2,1)",
-    });
-    placementRailSurface.append(fill);
-    placementLayer.append(placementPrimarySurface, placementRailSurface);
-    document.body.appendChild(placementLayer);
-    return placementLayer;
-  }
-
-  function paintFixedRect(node, rect) {
-    if (!(node instanceof HTMLElement) || !rect) return false;
-    node.style.left = Math.round(rect.left * 2) / 2 + "px";
-    node.style.top = Math.round(rect.top * 2) / 2 + "px";
-    node.style.width = Math.max(1, Math.round(rect.width * 2) / 2) + "px";
-    node.style.height = Math.max(1, Math.round(rect.height * 2) / 2) + "px";
-    return true;
-  }
-
-  function syncRemoteQuotaModules(row, badge, view, context) {
-    if (!(placementPrimarySurface instanceof HTMLElement) || !(placementPrimaryGroup instanceof HTMLElement)) return;
-    const rect = context.geometry?.zones?.[context.primary]?.rect;
-    if (!context.primaryRemote || !paintFixedRect(placementPrimarySurface, rect)) {
-      placementPrimarySurface.style.display = "none";
-      placementPrimarySurface.style.pointerEvents = "none";
-      placementPrimaryGroup.replaceChildren();
-      return;
-    }
-    const sourceModules = findAccountModules(row, badge);
-    const remoteModules = cleanModuleOrder(view.layout?.moduleOrder)
-      .filter((module) => !["avatar", "name"].includes(module));
-    const existing = new Map([...placementPrimaryGroup.querySelectorAll('[data-quotapin-remote-module]')]
-      .map((node) => [node.dataset.quotapinRemoteModule, node]));
-    const desired = [];
-    for (const module of remoteModules) {
-      const source = sourceModules[module];
-      if (!(source instanceof HTMLElement) || source.style.display === "none") continue;
-      const clone = existing.get(module) ?? document.createElement("span");
-      existing.delete(module);
-      clone.dataset.quotapinRemoteModule = module;
-      if (clone.textContent !== source.textContent) clone.textContent = source.textContent;
-      if (clone.title !== source.title) clone.title = source.title;
-      clone.style.cssText = source.style.cssText;
-      clone.style.position = "absolute";
-      clone.style.left = "0";
-      clone.style.top = "0";
-      clone.style.transform = "none";
-      clone.style.transition = "none";
-      clone.style.maxWidth = "none";
-      clone.style.marginInline = "0";
-      clone.style.pointerEvents = "auto";
-      clone.style.setProperty("-webkit-app-region", "no-drag");
-      if (module !== "dot") clone.style.width = "auto";
-      if (placementPrimaryGroup.dataset.quotapinEditing === "true") {
-        clone.style.cursor = "grab";
-        clone.style.touchAction = "none";
-        clone.style.outline = "1px solid rgba(110,231,183,.28)";
-        clone.style.outlineOffset = "2px";
-        clone.title = t("Drag modules to arrange this surface");
-      }
-      desired.push(clone);
-    }
-    for (const stale of existing.values()) stale.remove();
-    desired.forEach((node, index) => {
-      const current = placementPrimaryGroup.children[index];
-      if (current !== node) placementPrimaryGroup.insertBefore(node, current ?? null);
-    });
-    placementPrimarySurface.dataset.placementZone = context.primary;
-    placementPrimarySurface.style.display = desired.length ? "flex" : "none";
-    placementPrimarySurface.style.pointerEvents = desired.length ? "auto" : "none";
-    placementPrimarySurface.style.fontFamily = getComputedStyle(row).fontFamily;
-    placementPrimarySurface.style.fontSize = badge.style.fontSize;
-    placementPrimarySurface.style.fontWeight = badge.style.fontWeight;
-    placementPrimarySurface.style.lineHeight = badge.style.lineHeight;
-    placementPrimaryGroup.title = badge.title;
-    placementPrimaryGroup.setAttribute("aria-label", badge.getAttribute("aria-label") ?? t("Codex remaining quota"));
-    placementPrimarySurface.setAttribute("aria-label", badge.getAttribute("aria-label") ?? t("Codex remaining quota"));
-    paintRemoteModuleLayout(view.layout ?? {});
-  }
-
-  function syncRemoteQuotaRail(row, badge, view, context, valueColor) {
-    if (!(placementRailSurface instanceof HTMLElement)) return;
-    if (view.showBar !== true || !context.railRemote) {
-      placementRailSurface.style.display = "none";
-      return;
-    }
-    const sourceBar = badge.querySelector('[data-part="bar"]');
-    const sourceFill = badge.querySelector('[data-part="bar-fill"]');
-    const accountRect = (accountRowMode() === "beta" ? findAccountSurface(row) : row)?.getBoundingClientRect();
-    const railRect = context.rail === "composer-bottom"
-      ? context.geometry?.rails?.["composer-bottom"]?.rect
-      : accountRect
-        ? { left: accountRect.left, top: accountRect.bottom - 2, width: accountRect.width, height: 2 }
-        : null;
-    if (!paintFixedRect(placementRailSurface, railRect)) {
-      placementRailSurface.style.display = "none";
-      return;
-    }
-    const fill = placementRailSurface.querySelector('[data-quotapin-placement-rail-fill="true"]');
-    const percent = Math.max(0, Math.min(100, Number(view.remainingPercent) || 0));
-    placementRailSurface.dataset.placementRail = context.rail;
-    placementRailSurface.style.display = "block";
-    placementRailSurface.style.background = sourceBar instanceof HTMLElement
-      ? sourceBar.style.background
-      : "rgba(127,127,127,.18)";
-    placementRailSurface.style.borderRadius = sourceBar instanceof HTMLElement ? sourceBar.style.borderRadius : "999px";
-    placementRailSurface.title = sourceBar?.title ?? badge.title;
-    if (fill instanceof HTMLElement) {
-      fill.style.background = sourceFill instanceof HTMLElement ? sourceFill.style.background : valueColor;
-      fill.style.transform = "scaleX(" + percent / 100 + ")";
-    }
-  }
-
-  function syncPlacementPresentation(row, badge, view, context, valueColor) {
-    const editingSurfaceChanged = activePlacementZone !== context.primary;
-    activePlacementZone = context.primary;
-    activePlacementRail = context.rail;
-    const refreshEditingSurface = () => {
-      if (!editingSurfaceChanged || !panel || !isLayoutEditingMode()) return;
-      queueMicrotask(() => {
-        if (panel && isActiveRenderer()) setLayoutEditing(isLayoutEditingMode());
-      });
-    };
-    if (!context.primaryRemote && !context.railRemote) {
-      if (editingSurfaceChanged && panel) panelAnchorElement = panelAnchorFor(badge);
-      removePlacementLayer();
-      observePlacementComposer(context.composerNode);
-      if (panel) syncPanelGeometry();
-      refreshEditingSurface();
-      return;
-    }
-    ensurePlacementLayer();
-    observePlacementComposer(context.composerNode);
-    syncRemoteQuotaModules(row, badge, view, context);
-    syncRemoteQuotaRail(row, badge, view, context, valueColor);
-    if (editingSurfaceChanged && panel) {
-      panelAnchorElement = context.primaryRemote
-        ? panelAnchorFor(badge, placementPrimarySurface)
-        : panelAnchorFor(badge);
-    }
-    if (panel) syncPanelGeometry();
-    refreshEditingSurface();
-  }
-
   function render() {
     if (disposed || window.__quotaPinController !== controller) return;
     clearLiveTimeTimer();
@@ -4995,8 +4074,8 @@ const installScript = String.raw`(() => {
       // React can replace the account subtree while Chromium still believes the
       // detached node owns pointer capture. Tear down that stale transaction so
       // the new host can be discovered instead of freezing all later renders.
-      try { editorLayoutCleanup?.(); } catch {}
-      editorLayoutCleanup = null;
+      try { editorRowCleanup?.(); } catch {}
+      editorRowCleanup = null;
       endLayoutDrag();
     }
     const row = findAccountRow();
@@ -5087,18 +4166,6 @@ const installScript = String.raw`(() => {
     if (badge.parentElement !== row) row.appendChild(badge);
     badge.dataset.quotapinInstance = instanceId;
     const view = viewWithOptimisticLayout(state.view ?? {});
-    const placementContext = resolvePlacementContext(row, view.layout?.placement);
-    lastPlacementContext = { ...placementContext, row };
-    if (activePlacementZone !== placementContext.primary || activePlacementRail !== placementContext.rail) {
-      lastLayoutBinding = null;
-      lastLayoutSignature = "";
-      lastLayoutPlan = null;
-    }
-    const renderLayout = {
-      ...(view.layout ?? {}),
-      __resolvedPrimary: placementContext.primary,
-      __resolvedRail: placementContext.rail,
-    };
     const liveCopy = liveQuotaCopy(view);
     const modules = findAccountModules(row, badge);
     const bar = badge.querySelector('[data-part="bar"]');
@@ -5114,10 +4181,10 @@ const installScript = String.raw`(() => {
     const visibility = {
       dot: view.showDot !== false,
       value: view.showValue !== false,
-      todayTokens: moduleMode && view.showTodayTokens === true,
-      lifetimeTokens: moduleMode && view.showLifetimeTokens === true,
       pace: moduleMode && view.showPace === true,
       runway: moduleMode && view.showRunway === true,
+      todayTokens: moduleMode && view.showTodayTokens === true,
+      lifetimeTokens: moduleMode && view.showLifetimeTokens === true,
       label: moduleMode && view.showLabel === true,
       countdown: moduleMode && view.showCountdown === true,
       relative: moduleMode && view.showRelative === true,
@@ -5136,7 +4203,7 @@ const installScript = String.raw`(() => {
     const fontSize = Math.max(9, Math.min(18, Number(view.layout?.fontSize) || 14));
     badge.style.fontSize = fontSize + "px";
     badge.style.lineHeight = Math.max(16, Math.round(fontSize * 1.35)) + "px";
-    const identityParts = reconcileModuleLayout(row, badge, renderLayout, { primaryRemote: placementContext.primaryRemote });
+    const identityParts = reconcileModuleLayout(row, badge, view.layout);
     const muted = "var(--text-tertiary, rgba(255,255,255,.58))";
     const nativeTextColor = getComputedStyle(identityParts.name ?? row).color;
     const hostSurface = surfaceFromTextColor(nativeTextColor);
@@ -5147,7 +4214,7 @@ const installScript = String.raw`(() => {
     if (modules.dot) modules.dot.style.background = dotColor;
     if (bar instanceof HTMLElement && barFill instanceof HTMLElement) {
       const percent = Math.max(0, Math.min(100, Number(view.remainingPercent) || 0));
-      bar.style.display = view.showBar === true && !placementContext.railRemote ? "block" : "none";
+      bar.style.display = view.showBar === true ? "block" : "none";
       barFill.style.width = percent + "%";
       barFill.style.background = valueColor;
       bar.title = completeHoverCopy(liveCopy, usageCopy);
@@ -5171,17 +4238,10 @@ const installScript = String.raw`(() => {
     for (const module of ["value", "pace", "runway", "todayTokens", "lifetimeTokens", "label", "countdown", "relative", "seconds", "date", "reset"]) if (modules[module]) modules[module].style.animation = ["value", "both"].includes(view.effectTarget) ? animationFor("value") : "none";
     if (modules.dot) modules.dot.style.animation = ["dot", "both"].includes(view.effectTarget) ? animationFor("dot") : "none";
     updateOverdriveEasterEgg(badge, view);
-    syncPlacementPresentation(row, badge, { ...view, layout: renderLayout }, placementContext, valueColor);
     paintQuickPreview?.();
     const currentBinding = captureAccountBinding(row, badge);
     const windowCountChanged = panel && panel.dataset.availableWindowCount !== String(Number(view.availableWindowCount) || 0);
-    const panelHostReplaced = panel && (panelBadge !== badge
-      || panelBinding?.row !== row
-      || panelBinding?.badge !== badge
-      || !panelBinding?.row?.isConnected
-      || panelBinding?.nodes?.some((node) => node && !node.isConnected));
-    if (panel && (panelHostReplaced || windowCountChanged)) queuePanelRebind(panelHostReplaced ? "host-replaced" : "window-count");
-    else if (panel && currentBinding) panelBinding = currentBinding;
+    if (panel && (panelBadge !== badge || !sameAccountBinding(panelBinding, currentBinding) || windowCountChanged)) queuePanelRebind();
     while (afterRenderCallbacks.length) {
       try { afterRenderCallbacks.shift()?.(); } catch {}
     }
@@ -5195,8 +4255,6 @@ const installScript = String.raw`(() => {
     const row = badge.parentElement;
     if (!(row instanceof HTMLElement)) return false;
     const view = viewWithOptimisticLayout(state.view ?? {});
-    const placementContext = cachedPlacementContext(row, view.layout?.placement)
-      ?? resolvePlacementContext(row, view.layout?.placement);
     const liveCopy = liveQuotaCopy(view);
     const usageCopy = profileUsageCopy();
     const moduleMode = view.displayMode !== "template";
@@ -5206,10 +4264,10 @@ const installScript = String.raw`(() => {
     const expectedVisibility = {
       dot: view.showDot !== false,
       value: view.showValue !== false,
-      todayTokens: moduleMode && view.showTodayTokens === true,
-      lifetimeTokens: moduleMode && view.showLifetimeTokens === true,
       pace: moduleMode && view.showPace === true,
       runway: moduleMode && view.showRunway === true,
+      todayTokens: moduleMode && view.showTodayTokens === true,
+      lifetimeTokens: moduleMode && view.showLifetimeTokens === true,
       label: moduleMode && view.showLabel === true,
       countdown: moduleMode && view.showCountdown === true,
       relative: moduleMode && view.showRelative === true,
@@ -5225,18 +4283,7 @@ const installScript = String.raw`(() => {
       if (module !== "dot" && expectedVisibility[module] && node.textContent !== String(expectedCopy[module] ?? "")) return true;
     }
     const bar = badge.querySelector('[data-part="bar"]');
-    const inlineBarExpected = view.showBar === true && !placementContext.railRemote;
-    if (!(bar instanceof HTMLElement) || ((bar.style.display !== "none") !== inlineBarExpected)) return true;
-    if (placementContext.primaryRemote) {
-      if (!(placementPrimarySurface instanceof HTMLElement)
-        || !placementPrimarySurface.isConnected
-        || placementPrimarySurface.dataset.placementZone !== placementContext.primary) return true;
-    }
-    if (view.showBar === true && placementContext.railRemote) {
-      if (!(placementRailSurface instanceof HTMLElement)
-        || !placementRailSurface.isConnected
-        || placementRailSurface.dataset.placementRail !== placementContext.rail) return true;
-    }
+    if (!(bar instanceof HTMLElement) || ((bar.style.display !== "none") !== (view.showBar === true))) return true;
     return !committedLayoutMatches(lastLayoutPlan, row, badge);
   }
 
@@ -5490,9 +4537,6 @@ const installScript = String.raw`(() => {
         bound: Boolean(lastLayoutBinding?.row?.isConnected && lastLayoutBinding?.badge?.isConnected),
       };
     },
-    inspectPanelRuntime() {
-      return { ...panelRuntimeMetrics, connected: Boolean(panel?.isConnected) };
-    },
     inspectDeliveryRuntime() {
       return {
         highestSequence: deliveryRuntime.highestSequence,
@@ -5612,8 +4656,6 @@ const installScript = String.raw`(() => {
       };
       safely(() => observer.disconnect());
       safely(() => accountResizeObserver?.disconnect());
-      safely(() => placementResizeObserver?.disconnect());
-      safely(() => placementMutationObserver?.disconnect());
       if (accountResizeFrame) safely(() => cancelAnimationFrame(accountResizeFrame));
       if (accountResizeSettleTimer) safely(() => clearTimeout(accountResizeSettleTimer));
       accountResizeFrame = 0;
@@ -5623,8 +4665,6 @@ const installScript = String.raw`(() => {
       moduleIntegrityObserver = null;
       integrityBadge = null;
       observedAccountRow = null;
-      observedPlacementComposer = null;
-      observedPlacementComposerRoot = null;
       observedAccountWidth = 0;
       responsiveFreeLayout = null;
       lastLayoutBinding = null;

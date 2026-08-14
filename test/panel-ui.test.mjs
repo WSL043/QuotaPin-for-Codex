@@ -16,7 +16,6 @@ import { createTimeStateToolkit } from "../src/renderer/time-state.mjs";
 import { createCodeConfigStateToolkit } from "../src/renderer/code-config-state.mjs";
 import { createProfileUsageStateToolkit } from "../src/renderer/profile-usage-state.mjs";
 import { createDeliveryStateToolkit } from "../src/renderer/delivery-state.mjs";
-import { createPlacementToolkit } from "../src/core/placement.mjs";
 import { DEFAULT_CONFIG, sanitizeConfig } from "../src/core/config.mjs";
 import { formatQuota } from "../src/core/format.mjs";
 import { normalizeRateLimits } from "../src/core/model.mjs";
@@ -45,8 +44,7 @@ const renderer = `globalThis.__quotaPinRendererToolkits = {
   time: ${createTimeStateToolkit.toString()},
   codeConfig: ${createCodeConfigStateToolkit.toString()},
   profileUsage: ${createProfileUsageStateToolkit.toString()},
-  delivery: ${createDeliveryStateToolkit.toString()},
-  placement: ${createPlacementToolkit.toString()}
+  delivery: ${createDeliveryStateToolkit.toString()}
 };\n${loadRendererSource()}`;
 const fixtureNow = Date.now();
 const fixturePreferences = sanitizeConfig(DEFAULT_CONFIG);
@@ -83,11 +81,11 @@ const fixtureScript = `(() => {
   }
   function syncView() {
     const profile = activeProfile();
-    for (const key of ["displayMode", "showValue", "showDot", "showBar", "showLabel", "showCountdown", "showRelative", "showSeconds", "showDate", "showReset", "showTodayTokens", "showLifetimeTokens", "showPace", "showRunway", "effect", "effectTarget", "effectAt"]) view[key] = profile[key];
+    for (const key of ["displayMode", "showValue", "showDot", "showBar", "showLabel", "showCountdown", "showRelative", "showSeconds", "showDate", "showReset", "showTodayTokens", "showLifetimeTokens", "effect", "effectTarget", "effectAt"]) view[key] = profile[key];
     view.profileId = profile.id;
     view.profileName = profile.name;
     view.accountRowMode = preferences.accountRowMode;
-    view.layout = { moduleOrder: [...profile.moduleOrder], layoutMode: profile.layoutMode, snapThreshold: profile.snapThreshold, snapTargets: [...profile.snapTargets], moduleAnchors: { ...profile.moduleAnchors }, identity: profile.identity, avatarShape: profile.avatarShape, fontSize: profile.fontSize, placement: { ...profile.placement } };
+    view.layout = { moduleOrder: [...profile.moduleOrder], layoutMode: profile.layoutMode, snapThreshold: profile.snapThreshold, snapTargets: [...profile.snapTargets], moduleAnchors: { ...profile.moduleAnchors }, identity: profile.identity, avatarShape: profile.avatarShape, fontSize: profile.fontSize };
   }
   function publish(extra = {}) {
     window.__quotaPinController.update({ status: "ready", view, preferences, update, ...extra });
@@ -118,23 +116,9 @@ const fixtureScript = `(() => {
   };
   window.__fixtureSetParts = (parts, valueColor = "#ff3366", dotColor = "#ff3366") => {
     view.parts = { ...view.parts, ...parts };
-    if (Array.isArray(view.runtimeWindows) && view.runtimeWindows.length === 1) {
-      Object.assign(view.runtimeWindows[0], parts);
-    }
     view.text = view.parts.value;
     view.valueColor = valueColor;
     view.dotColor = dotColor;
-    publish();
-  };
-  window.__fixtureSetForecast = (seconds) => {
-    const profile = activeProfile();
-    profile.showRunway = true;
-    view.showRunway = true;
-    const runwayEndsAt = Date.now() / 1000 + Number(seconds);
-    view.parts.runway = '≈' + Math.floor(Number(seconds) / 60) + 'm';
-    if (Array.isArray(view.runtimeWindows) && view.runtimeWindows.length === 1) {
-      Object.assign(view.runtimeWindows[0], { runway: view.parts.runway, runwayPrefix: '≈', runwayEndsAt });
-    }
     publish();
   };
   window.__fixtureSetLocalUsage = (todayTokens) => publish({
@@ -152,12 +136,7 @@ html,body{height:100%;margin:0;background:#050505;color:#eee;font:14px system-ui
 #account{position:absolute;left:8px;bottom:8px;width:212px;height:40px;display:flex;align-items:center;gap:8px;padding:0 8px;border:0;border-radius:8px;background:#111;color:#ddd;text-align:left}
 #account img{width:18px;height:18px;border-radius:50%;object-fit:cover}.name{min-width:0;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 #native-help{position:absolute;right:8px;bottom:12px;width:32px;height:32px;border:0;background:transparent;color:#888}
-#composer{position:fixed;left:380px;right:140px;bottom:14px;height:92px;border-radius:16px;background:#111}
-#composer .editor-inner{position:absolute;left:0;right:0;top:0;bottom:8px;background:transparent}
-#composer textarea{position:absolute;left:18px;right:18px;top:14px;width:calc(100% - 36px);height:30px;resize:none;background:transparent;color:#ddd;border:0}
-#composer .tool{position:absolute;bottom:12px;width:26px;height:26px;border:0;border-radius:50%;background:#222;color:#aaa}.tool.left{left:14px}.tool.right{right:14px}#native-context{position:absolute;right:188px;bottom:10px;width:30px;height:30px;border-radius:50%;background:#292929}
-#detached-model{position:fixed;right:184px;bottom:26px;width:130px;height:26px;border:0;border-radius:8px;background:#222;color:#aaa}
-</style></head><body><aside id="sidebar"><div id="account-footer"><button id="account" aria-haspopup="menu"><img src="/avatar.png" alt=""><span class="name">Aster</span></button><button id="native-help" aria-label="Help">?</button></div></aside><main><div id="composer"><div class="editor-inner"><textarea aria-label="Message"></textarea></div><button class="tool left" data-native-composer-control>+</button><div id="native-context" role="progressbar" aria-label="Context status" aria-valuenow="43" data-native-composer-control></div><button class="tool right" data-native-composer-control>↗</button></div><button id="detached-model" data-native-composer-control aria-haspopup="menu">Model</button></main><script src="/renderer.js"></script><script src="/fixture.js"></script></body></html>`;
+</style></head><body><aside id="sidebar"><div id="account-footer"><button id="account" aria-haspopup="menu"><img src="/avatar.png" alt=""><span class="name">Aster</span></button><button id="native-help" aria-label="Help">?</button></div></aside><script src="/renderer.js"></script><script src="/fixture.js"></script></body></html>`;
 const avatar = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=", "base64");
 
 class CdpClient {
@@ -560,286 +539,6 @@ test("Customize separates global and view settings and disables inactive alert d
   assert.deepEqual(result.headings, ["Account row", "Current view"]);
 });
 
-test("Quick placement uses semantic Codex slots, keeps identity native, and moves the rail independently", { skip: !canRun }, async () => {
-  await client.call("Emulation.setDeviceMetricsOverride", { width: 1100, height: 720, deviceScaleFactor: 1, mobile: false });
-  await navigate("en");
-  await openPanel();
-  await client.evaluate(`window.__placementPanel = document.querySelector('#quotapin-profile-editor')`);
-  const quickOrder = await client.evaluate(`(() => {
-    const modules = document.querySelector('[data-quick-preview="avatar"]')?.closest('section');
-    const placement = document.querySelector('[data-placement-map="true"]')?.closest('section');
-    return Boolean(modules && placement && (modules.compareDocumentPosition(placement) & Node.DOCUMENT_POSITION_FOLLOWING));
-  })()`);
-  assert.equal(quickOrder, true, "Quick must choose visible modules before their destination");
-  const availability = await client.evaluate(`(() => Object.fromEntries([...document.querySelectorAll('[data-placement-zone]')].map((node)=>[node.dataset.placementZone,!node.disabled])))()`);
-  assert.deepEqual(availability, {
-    "account-row": true,
-    "title-center": true,
-    "workspace-top-center": true,
-    "composer-center": true,
-  });
-
-  await client.evaluate(`document.querySelector('[data-placement-zone="workspace-top-center"]').click()`);
-  await waitFor(() => client.evaluate(`document.querySelector('[data-quotapin-placement-surface="primary"]')?.dataset.placementZone === 'workspace-top-center'`));
-  const lowerTop = await client.evaluate(`(() => {
-    const sidebar=document.querySelector('#sidebar').getBoundingClientRect();
-    const surface=document.querySelector('[data-quotapin-placement-surface="primary"]').getBoundingClientRect();
-    return {top:surface.top,center:surface.left+surface.width/2,workspaceCenter:(sidebar.right+document.documentElement.clientWidth)/2};
-  })()`);
-  assert.ok(lowerTop.top >= 40, JSON.stringify(lowerTop));
-  assert.ok(Math.abs(lowerTop.center - lowerTop.workspaceCenter) <= 1, JSON.stringify(lowerTop));
-
-  await client.evaluate(`document.querySelector('[data-placement-zone="title-center"]').click()`);
-  await waitFor(() => client.evaluate(`document.querySelector('[data-quotapin-placement-surface="primary"]')?.dataset.placementZone === 'title-center'`));
-  const placementPanelStable = await client.evaluate(`({same:window.__placementPanel === document.querySelector('#quotapin-profile-editor'),runtime:window.__quotaPinController.inspectPanelRuntime()})`);
-  assert.equal(placementPanelStable.same, true, "changing a placement must not rebuild the panel: " + JSON.stringify(placementPanelStable.runtime));
-  const remote = await client.evaluate(`(() => {
-    const row=document.querySelector('#account');
-    const badge=document.querySelector('#quotapin-inline-badge');
-    const surface=document.querySelector('[data-quotapin-placement-surface="primary"]');
-    const rect=surface.getBoundingClientRect();
-    return {
-      badgeOwnedByRow:badge.parentElement===row,
-      badgeDisplay:getComputedStyle(badge).display,
-      avatarVisible:getComputedStyle(row.querySelector('img')).display!=='none',
-      nameVisible:getComputedStyle(row.querySelector('.name')).display!=='none',
-      surfaceTop:rect.top,
-      surfaceCenter:rect.left+rect.width/2,
-      viewportCenter:document.documentElement.clientWidth/2,
-      modules:[...surface.querySelectorAll('[data-quotapin-remote-module]')].map((node)=>node.dataset.quotapinRemoteModule),
-      noDrag:surface.style.getPropertyValue('-webkit-app-region'),
-      saved:window.__quotaPinController.preferences.profiles[0].placement,
-    };
-  })()`);
-  assert.equal(remote.badgeOwnedByRow, true);
-  assert.equal(remote.badgeDisplay, "none");
-  assert.equal(remote.avatarVisible, true);
-  assert.equal(remote.nameVisible, true);
-  assert.ok(remote.surfaceTop < 40, JSON.stringify(remote));
-  assert.ok(Math.abs(remote.surfaceCenter - remote.viewportCenter) <= 1, JSON.stringify(remote));
-  assert.ok(remote.modules.includes("value"), JSON.stringify(remote));
-  assert.equal(remote.noDrag, "no-drag", "the title placement must opt out of Electron window dragging");
-  assert.deepEqual(remote.saved, { primary: "title-center", fallback: "account-row", rail: "account-row" });
-
-  await client.evaluate(`document.querySelector('[data-placement-zone="composer-center"]').click()`);
-  await waitFor(() => client.evaluate(`document.querySelector('[data-quotapin-placement-surface="primary"]')?.dataset.placementZone === 'composer-center'`));
-  const composerSlot = await client.evaluate(`(() => {
-    const surface=document.querySelector('[data-quotapin-placement-surface="primary"]').getBoundingClientRect();
-    const controls=[...document.querySelectorAll('[data-native-composer-control]')].map((node)=>node.getBoundingClientRect());
-    const tooClose=controls.some((rect)=>!(surface.right + 9 <= rect.left || rect.right + 9 <= surface.left || surface.bottom <= rect.top || rect.bottom <= surface.top));
-    const centers=controls.map((rect)=>(rect.top+rect.bottom)/2).sort((a,b)=>a-b);
-    const middle=Math.floor(centers.length/2);
-    const controlCenter=centers.length%2?centers[middle]:(centers[middle-1]+centers[middle])/2;
-    const context=document.querySelector('#native-context').getBoundingClientRect();
-    return {tooClose,surfaceCenter:(surface.top+surface.bottom)/2,controlCenter,surfaceRight:surface.right,contextLeft:context.left};
-  })()`);
-  assert.equal(composerSlot.tooClose, false, JSON.stringify(composerSlot));
-  assert.ok(Math.abs(composerSlot.surfaceCenter - composerSlot.controlCenter) <= 1, JSON.stringify(composerSlot));
-  assert.ok(composerSlot.surfaceRight + 9 <= composerSlot.contextLeft, JSON.stringify(composerSlot));
-
-  const quietBefore = await client.evaluate(`window.__quotaPinController.inspectLayoutRuntime()`);
-  await new Promise((resolve) => setTimeout(resolve, 250));
-  const quietAfter = await client.evaluate(`window.__quotaPinController.inspectLayoutRuntime()`);
-  assert.equal(quietAfter.integrityRepairs, quietBefore.integrityRepairs, "a remote placement must not repair its hidden source row in a loop");
-  assert.equal(quietAfter.reconciliations, quietBefore.reconciliations, "a remote placement must stay still between real host changes");
-
-  await client.evaluate(`document.querySelector('[data-toggle="Show full-width quota bar"]').click()`);
-  await waitFor(() => client.evaluate(`window.__quotaPinController.preferences.profiles[0].showBar === true`));
-  await client.evaluate(`document.querySelector('[data-placement-rail="composer-bottom"]').click()`);
-  await waitFor(() => client.evaluate(`document.querySelector('[data-quotapin-placement-surface="rail"]')?.dataset.placementRail === 'composer-bottom'`));
-  assert.equal(await client.evaluate(`window.__placementPanel === document.querySelector('#quotapin-profile-editor')`), true, "changing the rail must not rebuild the panel");
-  const rail = await client.evaluate(`(() => {
-    const composer=document.querySelector('#composer').getBoundingClientRect();
-    const node=document.querySelector('[data-quotapin-placement-surface="rail"]');
-    const rect=node.getBoundingClientRect();
-    return { display:getComputedStyle(node).display, left:rect.left, right:rect.right, top:rect.top, composerLeft:composer.left, composerRight:composer.right, composerBottom:composer.bottom };
-  })()`);
-  assert.equal(rail.display, "block");
-  assert.ok(rail.left > rail.composerLeft && rail.right < rail.composerRight, JSON.stringify(rail));
-  assert.ok(Math.abs(rail.top - (rail.composerBottom + 2)) <= 1, JSON.stringify(rail));
-
-  await client.evaluate(`window.__quotaPinController.closeEditor(); true`);
-  await waitFor(() => client.evaluate(`!document.querySelector('#quotapin-profile-editor')`));
-  await client.evaluate(`(() => {
-    const row=document.querySelector('#account');
-    row.dispatchEvent(new PointerEvent('pointerdown',{bubbles:true,cancelable:true,button:0,buttons:1,pointerId:91,pointerType:'mouse',isPrimary:true,clientX:24,clientY:700}));
-    row.dispatchEvent(new PointerEvent('pointerup',{bubbles:true,cancelable:true,button:0,buttons:0,pointerId:91,pointerType:'mouse',isPrimary:true,clientX:24,clientY:700}));
-  })()`);
-  await waitFor(() => client.evaluate(`window.__fixtureNativeMenuDown === 1`));
-});
-
-test("a remote quota surface keeps stable nodes and carries editing plus hold interaction", { skip: !canRun }, async () => {
-  await client.call("Emulation.setDeviceMetricsOverride", { width: 1100, height: 720, deviceScaleFactor: 1, mobile: false });
-  await navigate("en");
-  await openPanel();
-  await client.evaluate(`document.querySelector('[data-toggle="Show status dot"]').click()`);
-  await waitFor(() => client.evaluate(`window.__quotaPinController.preferences.profiles[0].showDot === true`));
-  await client.evaluate(`document.querySelector('[data-placement-zone="title-center"]').click()`);
-  await waitFor(() => client.evaluate(`document.querySelector('[data-quotapin-placement-group="true"]')?.dataset.quotapinEditing === 'true'`));
-
-  const before = await client.evaluate(`(() => {
-    const group=document.querySelector('[data-quotapin-placement-group="true"]');
-    window.__stableRemoteValue=group.querySelector('[data-quotapin-remote-module="value"]');
-    return [...group.querySelectorAll('[data-quotapin-remote-module]')].map((node)=>node.dataset.quotapinRemoteModule);
-  })()`);
-  assert.deepEqual(before, ["value", "dot"]);
-  await client.evaluate(`window.__fixtureSetParts({value:'41%'})`);
-  await new Promise((resolve) => setTimeout(resolve, 250));
-  const refreshed = await client.evaluate(`(() => ({
-    remote:document.querySelector('[data-quotapin-remote-module="value"]')?.textContent,
-    source:document.querySelector('#quotapin-inline-badge [data-quotapin-module="value"]')?.textContent,
-    same:window.__stableRemoteValue === document.querySelector('[data-quotapin-remote-module="value"]'),
-    runtime:window.__quotaPinController.inspectLayoutRuntime(),
-  }))()`);
-  assert.equal(refreshed.remote, "41%", JSON.stringify(refreshed));
-  assert.equal(await client.evaluate(`window.__stableRemoteValue === document.querySelector('[data-quotapin-remote-module="value"]')`), true, "a quota refresh must update, not replace, the remote module node");
-
-  await client.evaluate(`(() => {
-    const value=document.querySelector('[data-quotapin-remote-module="value"]');
-    const dot=document.querySelector('[data-quotapin-remote-module="dot"]');
-    const from=value.getBoundingClientRect();
-    const to=dot.getBoundingClientRect();
-    const common={bubbles:true,cancelable:true,button:0,pointerId:121,pointerType:'mouse',isPrimary:true};
-    value.dispatchEvent(new PointerEvent('pointerdown',{...common,buttons:1,clientX:from.left+from.width/2,clientY:from.top+from.height/2}));
-    value.dispatchEvent(new PointerEvent('pointermove',{...common,buttons:1,clientX:to.right+18,clientY:to.top+to.height/2}));
-    value.dispatchEvent(new PointerEvent('pointerup',{...common,buttons:0,clientX:to.right+18,clientY:to.top+to.height/2}));
-  })()`);
-  await waitFor(() => client.evaluate(`(() => {const order=window.__quotaPinController.preferences.profiles[0].moduleOrder;return order.indexOf('dot') < order.indexOf('value');})()`));
-  const reordered = await client.evaluate(`[...document.querySelectorAll('[data-quotapin-placement-group="true"] [data-quotapin-remote-module]')].map((node)=>node.dataset.quotapinRemoteModule)`);
-  assert.deepEqual(reordered, ["dot", "value"]);
-
-  await client.evaluate(`window.__quotaPinController.closeEditor(); true`);
-  await waitFor(() => client.evaluate(`!document.querySelector('#quotapin-profile-editor')`));
-  const remoteHitArea = await client.evaluate(`(() => {
-    const surface=document.querySelector('[data-quotapin-placement-surface="primary"]');
-    const group=document.querySelector('[data-quotapin-placement-group="true"]');
-    const surfaceRect=surface.getBoundingClientRect();
-    const groupRect=group.getBoundingClientRect();
-    return {
-      surfacePointerEvents:getComputedStyle(surface).pointerEvents,
-      surfaceWidth:surfaceRect.width,
-      groupWidth:groupRect.width,
-      hitOwner:document.elementFromPoint(surfaceRect.left+3,surfaceRect.top+surfaceRect.height/2)?.closest('[data-quotapin-placement-surface="primary"]') === surface,
-    };
-  })()`);
-  assert.equal(remoteHitArea.surfacePointerEvents, "auto", JSON.stringify(remoteHitArea));
-  assert.equal(remoteHitArea.groupWidth, remoteHitArea.surfaceWidth, JSON.stringify(remoteHitArea));
-  assert.equal(remoteHitArea.hitOwner, true, JSON.stringify(remoteHitArea));
-  await client.evaluate(`(() => {
-    const surface=document.querySelector('[data-quotapin-placement-surface="primary"]');
-    const rect=surface.getBoundingClientRect();
-    surface.dispatchEvent(new PointerEvent('pointerdown',{bubbles:true,cancelable:true,button:0,buttons:1,pointerId:122,pointerType:'mouse',isPrimary:true,clientX:rect.left+3,clientY:rect.top+rect.height/2}));
-  })()`);
-  await new Promise((resolve) => setTimeout(resolve, 520));
-  await client.evaluate(`(() => {
-    const surface=document.querySelector('[data-quotapin-placement-surface="primary"]');
-    const rect=surface.getBoundingClientRect();
-    surface.dispatchEvent(new PointerEvent('pointerup',{bubbles:true,cancelable:true,button:0,buttons:0,pointerId:122,pointerType:'mouse',isPrimary:true,clientX:rect.left+3,clientY:rect.top+rect.height/2}));
-  })()`);
-  await waitFor(() => client.evaluate(`Boolean(document.querySelector('#quotapin-profile-editor'))`));
-  assert.equal(await client.evaluate(`window.__fixtureNativeMenuDown`), 0, "holding the moved quota opens QuotaPin without replaying a Codex short click");
-
-  await client.evaluate(`window.__quotaPinController.closeEditor(); true`);
-  await waitFor(() => client.evaluate(`!document.querySelector('#quotapin-profile-editor')`));
-  await client.evaluate(`(() => {
-    const row=document.querySelector('#account');
-    const rect=row.getBoundingClientRect();
-    row.dispatchEvent(new PointerEvent('pointerdown',{bubbles:true,cancelable:true,button:0,buttons:1,pointerId:123,pointerType:'mouse',isPrimary:true,clientX:rect.left+12,clientY:rect.top+rect.height/2}));
-  })()`);
-  await new Promise((resolve) => setTimeout(resolve, 520));
-  assert.equal(await client.evaluate(`Boolean(document.querySelector('#quotapin-profile-editor'))`), false, "the old account row must not keep a hidden QuotaPin hold target after moving the quota");
-  await client.evaluate(`(() => {
-    const row=document.querySelector('#account');
-    const rect=row.getBoundingClientRect();
-    row.dispatchEvent(new PointerEvent('pointerup',{bubbles:true,cancelable:true,button:0,buttons:0,pointerId:123,pointerType:'mouse',isPrimary:true,clientX:rect.left+12,clientY:rect.top+rect.height/2}));
-  })()`);
-});
-
-test("every remote placement carries the same module frames, drag contract, and anchored panel", { skip: !canRun }, async () => {
-  await client.call("Emulation.setDeviceMetricsOverride", { width: 1100, height: 720, deviceScaleFactor: 1, mobile: false });
-  await navigate("en");
-  await openPanel();
-  await client.evaluate(`document.querySelector('[data-toggle="Show status dot"]').click()`);
-  await waitFor(() => client.evaluate(`window.__quotaPinController.preferences.profiles[0].showDot === true`));
-
-  for (const zone of ["title-center", "workspace-top-center", "composer-center"]) {
-    await client.evaluate(`document.querySelector('[data-placement-zone=${JSON.stringify(zone)}]').click()`);
-    await waitFor(() => client.evaluate(`document.querySelector('[data-quotapin-placement-surface="primary"]')?.dataset.placementZone === ${JSON.stringify(zone)} && document.querySelector('[data-quotapin-placement-group="true"]')?.dataset.quotapinEditing === 'true'`));
-    await client.evaluate(`window.__quotaPinController.closeEditor(); true`);
-    await waitFor(() => client.evaluate(`!document.querySelector('#quotapin-profile-editor')`));
-    await client.evaluate(`(() => {
-      const group=document.querySelector('[data-quotapin-placement-group="true"]');
-      const rect=group.getBoundingClientRect();
-      group.dispatchEvent(new PointerEvent('pointerdown',{bubbles:true,cancelable:true,button:0,buttons:1,pointerId:230,pointerType:'mouse',isPrimary:true,clientX:rect.left+rect.width/2,clientY:rect.top+rect.height/2}));
-    })()`);
-    await new Promise((resolve) => setTimeout(resolve, 520));
-    await client.evaluate(`(() => {
-      const group=document.querySelector('[data-quotapin-placement-group="true"]');
-      const rect=group.getBoundingClientRect();
-      group.dispatchEvent(new PointerEvent('pointerup',{bubbles:true,cancelable:true,button:0,buttons:0,pointerId:230,pointerType:'mouse',isPrimary:true,clientX:rect.left+rect.width/2,clientY:rect.top+rect.height/2}));
-    })()`);
-    await waitFor(() => client.evaluate(`document.querySelector('#quotapin-profile-editor')?.dataset.remoteEditing === 'true'`));
-    const before = await client.evaluate(`(() => {
-      const group=document.querySelector('[data-quotapin-placement-group="true"]');
-      const surface=document.querySelector('[data-quotapin-placement-surface="primary"]');
-      const panel=document.querySelector('#quotapin-profile-editor');
-      const groupRect=surface.getBoundingClientRect();
-      const panelRect=panel.getBoundingClientRect();
-      const modules=[...group.querySelectorAll('[data-quotapin-remote-module]')];
-      return {
-        order:modules.map((node)=>node.dataset.quotapinRemoteModule),
-        framed:modules.every((node)=>getComputedStyle(node).outlineStyle === 'solid' && Number.parseFloat(getComputedStyle(node).outlineWidth) >= 1),
-        separated:panelRect.bottom <= groupRect.top - 8 || panelRect.top >= groupRect.bottom + 8,
-        noDrag:surface.style.getPropertyValue('-webkit-app-region'),
-      };
-    })()`);
-    assert.equal(before.framed, true, `${zone} did not expose the same module editing frames`);
-    assert.equal(before.separated, true, `${zone} panel covered its long-press surface`);
-    assert.equal(before.noDrag, "no-drag", `${zone} remained owned by Electron window dragging`);
-    const valueBeforeDot = before.order.indexOf("value") < before.order.indexOf("dot");
-    const liveDrag = await client.evaluate(`(() => {
-      const value=document.querySelector('[data-quotapin-remote-module="value"]');
-      const dot=document.querySelector('[data-quotapin-remote-module="dot"]');
-      const surface=document.querySelector('[data-quotapin-placement-surface="primary"]');
-      const from=value.getBoundingClientRect();
-      const target=dot.getBoundingClientRect();
-      const surfaceRect=surface.getBoundingClientRect();
-      const x=${JSON.stringify(valueBeforeDot)} ? target.right + 18 : target.left - 18;
-      const common={bubbles:true,cancelable:true,button:0,pointerId:231,pointerType:'mouse',isPrimary:true};
-      value.dispatchEvent(new PointerEvent('pointerdown',{...common,buttons:1,clientX:from.left+from.width/2,clientY:from.top+from.height/2}));
-      value.dispatchEvent(new PointerEvent('pointermove',{...common,buttons:1,clientX:x,clientY:target.top+target.height/2}));
-      window.__remoteDragTarget={x,y:target.top+target.height/2};
-      return {
-        targetX:x,
-        expectedCenter:Math.max(surfaceRect.left+4+from.width/2,Math.min(surfaceRect.right-4-from.width/2,x)),
-      };
-    })()`);
-    await new Promise((resolve) => setTimeout(resolve, 120));
-    const liveGeometry = await client.evaluate(`(() => {
-      const value=document.querySelector('[data-quotapin-remote-module="value"]');
-      const dot=document.querySelector('[data-quotapin-remote-module="dot"]');
-      const moved=value.getBoundingClientRect();
-      const displaced=dot.getBoundingClientRect();
-      return {
-        movedCenter:moved.left+moved.width/2,
-        overlaps:!(moved.right <= displaced.left || displaced.right <= moved.left),
-      };
-    })()`);
-    assert.ok(Math.abs(liveGeometry.movedCenter - liveDrag.expectedCenter) <= 3, `${zone} did not follow the bounded pointer before release: ${JSON.stringify({ ...liveDrag, ...liveGeometry })}`);
-    assert.equal(liveGeometry.overlaps, false, `${zone} did not finish pushing its neighbour before release`);
-    await client.evaluate(`(() => {
-      const value=document.querySelector('[data-quotapin-remote-module="value"]');
-      const target=window.__remoteDragTarget;
-      value.dispatchEvent(new PointerEvent('pointerup',{bubbles:true,cancelable:true,button:0,buttons:0,pointerId:231,pointerType:'mouse',isPrimary:true,clientX:target.x,clientY:target.y}));
-      delete window.__remoteDragTarget;
-    })()`);
-    await waitFor(() => client.evaluate(`(() => {
-      const order=[...document.querySelectorAll('[data-quotapin-placement-group="true"] [data-quotapin-remote-module]')].map((node)=>node.dataset.quotapinRemoteModule);
-      return (order.indexOf('value') < order.indexOf('dot')) === ${JSON.stringify(!valueBeforeDot)};
-    })()`));
-  }
-});
-
 test("Legacy and Beta switch one reversible account-row and gesture contract", { skip: !canRun }, async () => {
   await client.call("Emulation.setDeviceMetricsOverride", { width: 800, height: 600, deviceScaleFactor: 1, mobile: false });
   await navigate("en");
@@ -1018,27 +717,8 @@ test("the seconds module ticks through the narrow time path instead of full rend
   assert.notEqual(result.after.text, result.before.text, JSON.stringify(result));
   assert.equal(result.after.runtime.renders, result.before.runtime.renders, JSON.stringify(result));
   assert.ok(result.after.runtime.liveTimeUpdates > result.before.runtime.liveTimeUpdates, JSON.stringify(result));
-  assert.equal(result.after.runtime.liveTimeLayoutPasses, result.before.runtime.liveTimeLayoutPasses, JSON.stringify(result));
+  assert.ok(result.after.runtime.liveTimeLayoutPasses > result.before.runtime.liveTimeLayoutPasses, JSON.stringify(result));
   assert.equal(result.after.runtime.integrityRepairs, result.before.runtime.integrityRepairs, JSON.stringify(result));
-});
-
-test("the runway module counts down and changes units through the same narrow time path", { skip: !canRun }, async () => {
-  await navigate("en");
-  const result = await client.evaluate(`(async () => {
-    window.__fixtureSetForecast(3599);
-    await new Promise((resolve) => setTimeout(resolve, 180));
-    const controller = window.__quotaPinController;
-    const runway = document.querySelector('[data-part="runway"]');
-    const before = { runtime: controller.inspectLayoutRuntime(), text: runway.textContent };
-    await new Promise((resolve) => setTimeout(resolve, 1250));
-    const after = { runtime: controller.inspectLayoutRuntime(), text: runway.textContent };
-    return { before, after };
-  })()`);
-  assert.match(result.before.text, /^≈59m \d+s$/, JSON.stringify(result));
-  assert.notEqual(result.after.text, result.before.text, JSON.stringify(result));
-  assert.equal(result.after.runtime.renders, result.before.runtime.renders, JSON.stringify(result));
-  assert.ok(result.after.runtime.liveTimeUpdates > result.before.runtime.liveTimeUpdates, JSON.stringify(result));
-  assert.equal(result.after.runtime.liveTimeLayoutPasses, result.before.runtime.liveTimeLayoutPasses, JSON.stringify(result));
 });
 
 test("the hidden idea route appears only after discovery and opens the public feature form", { skip: !canRun }, async () => {
@@ -1345,7 +1025,7 @@ test("repeated usage refreshes measure current glyphs instead of recycling a sta
   assert.notEqual(result.before.text, result.changed.text);
   assert.match(result.before.title, /This device today 9,900,000/);
   assert.match(result.changed.title, /This device today 10,000,000/);
-  assert.doesNotMatch(result.changed.badgeTitle, /Total|Lifetime|—/);
+  assert.match(result.changed.badgeTitle, /This device today 10,000,000/);
   assert.ok(result.repeated.every((sample) => Math.abs(sample.left - result.changed.left) < 0.25));
   assert.ok(result.repeated.every((sample) => Math.abs(sample.right - result.changed.right) < 0.25));
 });
@@ -2102,7 +1782,7 @@ test("dragging keeps the Composition card fixed and displaced modules on the cur
       panelOrderChangesDuringDrag,
       panelOrdersAfterDrop,
       settledRows,
-      barGroup: bar.closest('[data-module-group]')?.dataset.moduleGroup ?? '',
+      barGroup: bar.parentElement?.dataset.moduleGroup ?? '',
       barInsideInlineGroup: group.contains(bar),
     };
   })()`);

@@ -41,22 +41,20 @@ QuotaPin keeps the useful part visible in the account row, so checking quota bec
 
 - **Glanceable by default.** A fresh install adds only the remaining percentage.
 - **Native-feeling interaction.** Short-click the row for the normal Codex menu; hold it for QuotaPin.
-- **Configurable when you want it.** Add reset time, countdowns, status colors, token totals, and custom layouts.
+- **Configurable when you want it.** Add reset time, countdowns, burn pace, estimated runway, status colors, token totals, and custom layouts.
 - **Local-first.** No product telemetry, no account database, and no patching of the official Codex package.
 - **Fail closed.** If QuotaPin cannot identify one unambiguous account row, it renders nothing rather than guessing.
 
 ## Platform status
 
-Latest stable: **v1.2.1**.
-
-2.x beta line: **v2.0.0-beta.2**. It develops multi-surface placement and account-wide quota forecasting, and never replaces the stable Latest channel until it passes beta acceptance.
+Latest stable: **v1.3.0**.
 
 | Platform | Status |
 |---|---|
 | Windows 11 x64 | ✅ Stable / verified on a signed-in machine |
-| Windows 10 x64 (2004+) | ✅ Supported baseline · real-device reports welcome |
-| Windows 11 ARM64 | 🧪 x64 emulation · CI acceptance pending |
-| Windows 10 ARM64 | ❌ Not supported · Windows 10 cannot emulate the x64 Codex package |
+| Windows 10 x64 (2004+) | ⚠️ Supported baseline; real-device reports still welcome |
+| Windows 11 ARM64 | ✅ x64 package verified under native ARM64 CI emulation |
+| Windows 10 ARM64 | ❌ Not supported; Windows 10 cannot emulate x64 apps on ARM64 |
 | macOS 13+ · Apple silicon / Intel | 🧪 Public package / CI validated; signed-in real-Mac acceptance still pending |
 
 ## Install
@@ -120,22 +118,20 @@ The default keeps the original Codex avatar and account name and adds only the r
 You can independently show, hide, and reorder:
 
 - remaining percentage;
-- responsive account-wide burn pace plus a compact stable runway; the complete uncertainty range stays in the hover;
+- recent account-wide burn pace and estimated runway;
 - status dot and a quota line that can follow the quota modules or span the account row;
 - time left and second-by-second countdown;
 - reset date and reset time;
 - today's token total from this device;
 - settled account lifetime token total.
 
-Compact time (`4d 8h`) works in every UI language. A separate worded module follows the selected language (`4 days 8 hours`, `4天8小时`, or `4日8時間`). Hover details expose exact values and make device-local scope explicit where it matters.
+Pace and runway are opt-in estimates derived only from changes in the official remaining percentage; QuotaPin waits for enough history before showing them. Compact time (`4d 8h`) works in every UI language. A separate worded module follows the selected language (`4 days 8 hours`, `4天8小时`, or `4日8時間`). Hover details expose exact values and make device-local scope explicit where it matters.
 
 Save useful combinations as named views and switch between them without rebuilding the row.
 
 ## Open QuotaPin without replacing the Codex menu
 
 Short-click the account row and Codex behaves normally. Hold the same row to open QuotaPin. Press it again—or click outside—to close the open panel. The native help button, avatar, account name, and normal account menu stay in place.
-
-In the 2.x placement beta, the interaction moves with the visible quota surface: hold anywhere in that surface and the editor opens beside it. The title center, workspace top, composer toolbar, and account row share the same drag, collision, and alignment behavior. The experimental composer side slots were removed rather than leaving inconsistent hit areas.
 
 <p align="center">
   <img src="assets/screenshots/drag-layout.gif" width="405" alt="Dragging a QuotaPin module to the left, right, and center while neighboring modules make room">

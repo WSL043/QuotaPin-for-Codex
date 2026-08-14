@@ -12,8 +12,6 @@ import { createColorStateToolkit } from "../../src/renderer/color-state.mjs";
 import { createTimeStateToolkit } from "../../src/renderer/time-state.mjs";
 import { createCodeConfigStateToolkit } from "../../src/renderer/code-config-state.mjs";
 import { createProfileUsageStateToolkit } from "../../src/renderer/profile-usage-state.mjs";
-import { createDeliveryStateToolkit } from "../../src/renderer/delivery-state.mjs";
-import { createPlacementToolkit } from "../../src/core/placement.mjs";
 import { DEFAULT_CONFIG, applyConfigAction, sanitizeConfig } from "../../src/core/config.mjs";
 import { formatQuota } from "../../src/core/format.mjs";
 import { normalizeRateLimits } from "../../src/core/model.mjs";
@@ -30,9 +28,7 @@ const renderer = `globalThis.__quotaPinRendererToolkits = {
   color: ${createColorStateToolkit.toString()},
   time: ${createTimeStateToolkit.toString()},
   codeConfig: ${createCodeConfigStateToolkit.toString()},
-  profileUsage: ${createProfileUsageStateToolkit.toString()},
-  delivery: ${createDeliveryStateToolkit.toString()},
-  placement: ${createPlacementToolkit.toString()}
+  profileUsage: ${createProfileUsageStateToolkit.toString()}
 };\n${loadRendererSource()}`;
 
 const clone = (value) => JSON.parse(JSON.stringify(value));
@@ -376,14 +372,14 @@ html,body{margin:0;width:100%;height:100%;overflow:hidden;background:${page.bg};
   const fixtureUpdate=${serializeForInlineScript({
     status: updateState,
     currentVersion: "1.1.0",
-    latestVersion: updateState === "available" || updateState === "installing" ? "1.2.1" : "1.1.2",
+    latestVersion: updateState === "available" || updateState === "installing" ? "1.3.0" : "1.2.1",
     releases: updateState === "available" || updateState === "installing"
-      ? [{ version: "1.2.1", direction: "update" }, { version: "1.1.2", direction: "repair" }]
+      ? [{ version: "1.3.0", direction: "update" }, { version: "1.2.1", direction: "repair" }]
       : [{ version: "1.1.0", direction: "repair" }],
     message: updateState === "error" ? "QuotaPin could not check for updates." : "",
     checkError: updateState === "error",
     lastCheckedAt: updateState === "error" || updateState === "available" || updateState === "current" ? now - 5 * 60_000 : 0,
-    selectedVersion: updateState === "installing" ? "1.2.1" : null,
+    selectedVersion: updateState === "installing" ? "1.3.0" : null,
     phase: updateState === "installing" ? updatePhase : null,
   })};
   const publishFixture=(settingsAck=null)=>window.__quotaPinController.update({status:"ready",view:fixtureView,preferences:fixtureConfig,update:fixtureUpdate,settingsAck});

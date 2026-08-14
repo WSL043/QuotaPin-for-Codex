@@ -10,8 +10,8 @@ import { createColorStateToolkit } from "../src/renderer/color-state.mjs";
 
 const moduleOrder = ["avatar", "name", "value", "pace", "runway", "label", "dot", "countdown", "relative", "seconds", "date", "reset", "todayTokens", "lifetimeTokens"];
 const moduleWidths = { avatar: 18, name: 55, dot: 7, value: 34, pace: 46, runway: 54, todayTokens: 48, lifetimeTokens: 48, label: 22, countdown: 44, relative: 58, seconds: 66, date: 42, reset: 58 };
-const moduleMinimumWidths = { avatar: 18, name: 24, dot: 7, value: 26, pace: 36, runway: 38, todayTokens: 42, lifetimeTokens: 42, label: 14, countdown: 28, relative: 36, seconds: 38, date: 28, reset: 34 };
-const moduleShrinkPriorities = { name: 0, label: 10, countdown: 11, relative: 12, seconds: 13, date: 14, pace: 15, runway: 16, reset: 17, todayTokens: 18, lifetimeTokens: 19, value: 20, avatar: 100, dot: 100 };
+const moduleMinimumWidths = { avatar: 18, name: 24, dot: 7, value: 26, pace: 32, runway: 34, todayTokens: 42, lifetimeTokens: 42, label: 14, countdown: 28, relative: 36, seconds: 38, date: 28, reset: 34 };
+const moduleShrinkPriorities = { name: 0, label: 10, countdown: 11, relative: 12, seconds: 13, date: 14, reset: 14, pace: 15, runway: 16, todayTokens: 17, lifetimeTokens: 18, value: 20, avatar: 100, dot: 100 };
 const optionalContract = JSON.parse(Buffer.from("eyJzZWN0aW9uIjoiZXhwZXJpbWVudHMiLCJlbmFibGVkIjoib3ZlcmRyaXZlRWdnIiwicGVyc2lzdGVudCI6Im92ZXJkcml2ZUFsd2F5cyIsImVmZmVjdCI6Im92ZXJkcml2ZUVmZmVjdCIsInZhcmlhbnQiOiJtZW51RmlyZSIsImZhbGxiYWNrIjoicmFuZG9tIn0=", "base64").toString("utf8"));
 
 function orderForMagneticTarget(toolkit, order, module, snap, rects = {}) {
@@ -240,18 +240,6 @@ test("panel geometry stays inside the viewport at desktop and compact heights", 
     assert.ok(geometry.left + geometry.width <= width);
     assert.ok(geometry.bottom + geometry.height <= height);
   }
-});
-
-test("panel geometry follows a semantic surface without covering its long-press anchor", () => {
-  const toolkit = createLayoutStateToolkit();
-  const upper = toolkit.panelGeometry(1280, 760, { left: 560, right: 720, top: 6, bottom: 34 });
-  assert.deepEqual(upper, { left: 452, bottom: 236, width: 376, height: 480 });
-
-  const lower = toolkit.panelGeometry(1280, 760, { left: 980, right: 1120, top: 704, bottom: 736 });
-  assert.deepEqual(lower, { left: 862, bottom: 66, width: 376, height: 480 });
-
-  const clamped = toolkit.panelGeometry(320, 320, { left: 300, right: 319, top: 130, bottom: 160 });
-  assert.deepEqual(clamped, { left: 8, bottom: 8, width: 304, height: 256 });
 });
 
 test("free layout keeps every module inside an extremely narrow account row", () => {
@@ -783,7 +771,7 @@ test("i18n state keeps renderer labels and option contracts in one toolkit", () 
   assert.equal(toolkit.translate("zh-CN", "QuotaPin settings modes"), "QuotaPin 设置模式");
   assert.equal(toolkit.translate("ja", "Code draft not applied"), "コードの下書きは未適用です");
   assert.equal(toolkit.translate("zh-CN", "Current view"), "当前搭配");
-  assert.equal(toolkit.translate("ja", "Click to show or hide. Close the panel, then drag modules at their display position."), "クリックで表示を切り替えます。パネルを閉じると、実際の表示位置で項目をドラッグして並べ替えられます。");
+  assert.equal(toolkit.translate("ja", "Click to show or hide. Drag the live row below to arrange."), "クリックで表示を切り替え、下の実際のアカウント欄をドラッグして並べ替えます。");
   assert.equal(toolkit.translate("zh-CN", "Choose an attention effect first."), "请先选择提醒效果。");
   assert.equal(toolkit.translate("ja", "Updates"), "アップデート");
   assert.equal(toolkit.updateIntent("0.3.0-alpha.25", "0.3.0-alpha.26"), "update");

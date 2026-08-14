@@ -75,7 +75,7 @@ test("the update surface uses complete versions, explicit intents, and inline co
 
 test("the account row exposes fourteen independently ordered modules", () => {
   assert.deepEqual(createLayoutStateToolkit().modules, ["avatar", "name", "value", "pace", "runway", "label", "dot", "countdown", "relative", "seconds", "date", "reset", "todayTokens", "lifetimeTokens"]);
-  assert.match(renderer, /badge\.style\.display = options\.primaryRemote === true \? "none" : "contents"/);
+  assert.match(renderer, /badge\.style\.display = "contents"/);
   assert.match(renderer, /\["dot", "value", "pace", "runway", "todayTokens", "lifetimeTokens", "label", "countdown", "relative", "seconds", "date", "reset"\]\.map/);
   assert.match(renderer, /solveFreeLayout/);
   assert.match(renderer, /moduleAnchors/);
@@ -232,13 +232,13 @@ test("Quick, Customize, and Code keep one coherent settings chain without duplic
   assert.match(renderer, /accountGroup\.section\.dataset\.settingsScope = "global"/);
   assert.match(renderer, /detailGroup\.section\.dataset\.settingsScope = "profile"/);
   assert.match(renderer, /syncAlertDependencies/);
-  assert.match(renderer, /configuration-json-schema-19/);
+  assert.match(renderer, /configuration-json-schema-17/);
   assert.doesNotMatch(renderer, /configuration-json-schema-15/);
 });
 
 test("every settings mode keeps one stable bounded panel height", () => {
   assert.match(renderer, /syncPanelGeometry = \(\) =>/);
-  assert.match(renderer, /panelGeometry\([\s\S]{0,180}panelAnchorElement\?\.getBoundingClientRect\(\)/);
+  assert.match(renderer, /panelGeometry\(window\.innerWidth, window\.innerHeight\)/);
   assert.match(renderer, /panel\.style\.height = geometry\.height \+ "px"/);
   assert.match(renderer, /panel\.style\.maxHeight = geometry\.height \+ "px"/);
   assert.doesNotMatch(renderer, /const compact = mode === "quick" \|\| mode === "arcade"/);

@@ -100,10 +100,7 @@ export function normalizeReleases(payload, currentVersion, minimumSafeVersion = 
   const acceptsPrerelease = releaseChannel === "preview" && current.pre.length > 0;
   const releases = [];
   for (const item of payload) {
-    // Preview builds are installed by explicit version only. They never enter
-    // the in-product update feed, even when the current Agent is itself a
-    // preview, so test cohorts cannot silently expand through update checks.
-    if (!item || item.draft === true || (item.prerelease === true && !acceptsPrerelease) || item.immutable !== true) continue;
+    if (!item || item.draft === true || item.immutable !== true || (item.prerelease === true && !acceptsPrerelease)) continue;
     const tag = String(item.tag_name ?? "");
     if (!tag.startsWith("v")) continue;
     const parsed = parseVersion(tag.slice(1));

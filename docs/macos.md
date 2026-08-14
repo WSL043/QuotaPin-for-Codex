@@ -1,6 +1,6 @@
 # QuotaPin for macOS
 
-QuotaPin 1.2.1 includes the public macOS 13+ delivery path. It installs a thin native host plus an integrity-bound QuotaPin payload and uses the signed Node runtime already inside official Codex; nothing is injected into or copied out of the Codex application. GitHub Actions validates the offline package lifecycle on native Apple silicon and Intel runners; launch through official Codex, the account-row adapter, and Gatekeeper behavior still need evidence from a signed-in Mac before macOS can be listed as fully supported.
+QuotaPin 1.3.0 includes the public macOS 13+ delivery path. It installs a thin native host plus an integrity-bound QuotaPin payload and uses the signed Node runtime already inside official Codex; nothing is injected into or copied out of the Codex application. GitHub Actions validates the offline package lifecycle on native Apple silicon and Intel runners; launch through official Codex, the account-row adapter, and Gatekeeper behavior still need evidence from a signed-in Mac before macOS can be listed as fully supported.
 
 ## What is implemented
 

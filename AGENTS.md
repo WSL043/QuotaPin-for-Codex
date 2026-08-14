@@ -23,7 +23,7 @@ irm https://raw.githubusercontent.com/WSL043/QuotaPin-for-Codex/main/install.ps1
 The moving bootstrap selects only GitHub's immutable latest stable release. Exact-version repair and historical rollback retain the same `-Version` boundary:
 
 ```powershell
-& ([scriptblock]::Create((irm https://raw.githubusercontent.com/WSL043/QuotaPin-for-Codex/main/install.ps1))) -Version '1.2.1'
+& ([scriptblock]::Create((irm https://raw.githubusercontent.com/WSL043/QuotaPin-for-Codex/main/install.ps1))) -Version '1.3.0'
 ```
 
 Both installations are per-user and preserve `%LOCALAPPDATA%\QuotaPin\config.json`. Public GitHub Releases expose only the reviewed platform installers: beta releases are explicit prereleases and never Latest; stable releases alone feed the moving channel. Keep the official Codex icon as the normal launch path. Do not offer unpublished packaging experiments as installation choices.
@@ -40,7 +40,7 @@ npm ci
 
 Before reporting success, verify all of the following:
 
-- x64 Windows 10 version 2004 (build 19041) or later and a signed-in Codex Desktop are available. Windows 10 support is best-effort until real-device evidence is recorded; current end-to-end coverage is Windows 11. Windows ARM64 is unsupported. QuotaPin must use its version-matched Agent and prefer the signed app-managed `codex.exe`.
+- x64 Windows 10 version 2004 (build 19041) or later and a signed-in Codex Desktop are available. Windows 11 ARM64 uses the same x64 package and is accepted under native ARM64 CI emulation; Windows 10 ARM64 is unsupported because it cannot emulate x64 applications. QuotaPin must use its version-matched Agent and prefer the signed app-managed `codex.exe`.
 - `%LOCALAPPDATA%\QuotaPin\VERSION` matches the requested source or release.
 - `%LOCALAPPDATA%\QuotaPin\QuotaPin.Agent.exe --agent-version` matches the installed version.
 - the public command/source path has one script watcher and no tray process;

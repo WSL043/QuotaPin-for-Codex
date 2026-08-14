@@ -3,7 +3,10 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 
 const root = new URL("../", import.meta.url);
-const stableVersion = fs.readFileSync(new URL("STABLE_VERSION", root), "utf8").trim();
+const version = fs.readFileSync(new URL("VERSION", root), "utf8").trim();
+const stableVersion = version.includes("-")
+  ? read("README.md").match(/Latest stable:\s*v([0-9]+\.[0-9]+\.[0-9]+)/i)?.[1]
+  : version;
 
 function read(relativePath) {
   return fs.readFileSync(new URL(relativePath, root), "utf8");

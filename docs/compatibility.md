@@ -2,8 +2,8 @@
 
 | QuotaPin | Codex Desktop | Platform | Status |
 |---|---|---|---|
-| 2.0.0-beta.2 | 26.803.10989.0 x64; production DOM fixture and signed-in local setup update | Windows 11 development host | 🧪 Verified beta; v1.2.1 remains Latest |
-| 1.2.1 | 26.803.10989.0 x64; production DOM fixture and package gates | Windows 11; macOS 15/26 native arm64 and x86_64 runners | ✅ Current stable; real-Mac acceptance pending |
+| 1.3.0 | 26.803.10989.0 x64; production DOM fixture and package gates | Windows 11 x64; Windows 11 ARM64 x64 emulation; macOS 15/26 native arm64 and x86_64 runners | ✅ Current stable; real-Mac acceptance pending |
+| 1.2.1 | 26.803.10989.0 x64; production DOM fixture and package gates | Windows 11; macOS 15/26 native arm64 and x86_64 runners | Previous stable |
 | 1.2.0 | 26.803.5235.0 x64; production DOM fixture and package gates | Windows 11; macOS 15/26 native arm64 and x86_64 runners | Previous stable; guided tray attach is fixed in 1.2.1 |
 | 1.1.2 | 26.803.5235.0 x64; production DOM fixture and package gates | Windows 11; macOS 15/26 native arm64 and x86_64 runners | Superseded; Windows panel update needs a one-time external repair before 1.2.0 |
 | 1.1.1 | 26.803.5235.0 x64; production DOM fixture and package gates | Windows 11; macOS 15/26 native arm64 and x86_64 runners | Previous stable |
@@ -12,11 +12,11 @@
 | 1.0.3 | CI package lifecycle | Windows 11 runner; macOS 15/26 native arm64 and x86_64 runners | Withdrawn; release transition was incompatible |
 | 1.0.2 | 26.803.5235.0 x64 | Windows 11 10.0.26200 | Withdrawn; updater required one-asset releases |
 
-The one-line command, guided installer, and current Codex package share Windows 10 version 2004 (build 19041) as their x64 minimum. Windows 10 x64 is therefore a supported baseline, while the signed-in real-device acceptance record remains Windows 11. Windows 11 Arm64 can run the same x64 Codex and QuotaPin packages under the operating system's x64 emulation; the release gate exercises that exact install, Agent, tray, and uninstall lifecycle on a native Arm64 runner. Windows 10 Arm64 is not supported because that operating system emulates x86 applications but not x64 applications.
+The one-line command accepts x64 Windows 10 version 2004 (build 19041) and later. Windows 11 ARM64 accepts the same x64 package and must pass a native ARM64 runner lifecycle under x64 emulation before a release can publish. Windows 10 ARM64 is not supported because that platform cannot emulate x64 applications. Windows 10 x64 remains a supported baseline with real-device reports welcome.
 
 ## Published artifact evidence
 
-- **2.0.0-beta.2:** continues the semantic placement beta on the v1.2.1 stability baseline. The full local gate passed 312 tests. A setup-owned update from beta.1 preserved the running Codex root process and saved profile identities, migrated configuration from schema 18 to 19, retained one Agent and one tray, and returned to `quota-ready` with zero Agent stderr. A read-only signed-in inspection then reported the beta.2 renderer, current delivery, zero rejected deliveries, zero integrity repairs, and no stale transition. It is a prerelease and does not replace v1.2.1 as Latest.
+- **1.3.0:** adds opt-in account-wide burn pace and estimated runway modules derived only from official remaining-percentage history. Forecast v2 combines bounded recent and baseline rates, resets calibration at renewal, waits for sufficient evidence, and keeps uncertainty in hover rather than widening the inline module. Stable update discovery excludes every prerelease. Windows release publication now also requires native Windows 11 ARM64 x64-emulation install, execution, and uninstall acceptance. The setup handoff preserves the previous launch preference until the replacement installation commits.
 - **1.2.1:** the guided tray now passes the generation-bound source PID, creation time, and atomic handoff ticket required by `launch.ps1`; failed handoffs clear only their own pending ticket, while successful handoffs publish a verified successor receipt. This closes the 1.2.0 tray/launcher contract gap without changing the running Codex process during installation or update.
 - **1.2.0:** Windows update launch uses an attached PowerShell launcher and a bounded on-disk start receipt, so the Agent reports success only after the updater has actually crossed the process boundary. Setup-started handoff waits for that receipt before supervising the replacement Agent, preventing duplicate ownership. Equivalent renderer deliveries are suppressed, quota-line geometry remains stable during sidebar resize, and macOS runtime rediscovery backs off instead of spinning. The macOS package replaces the embedded runtime with a thin integrity-verifying native host that uses the signed runtime inside official Codex. Tagged package evidence is added only after the public release gate passes.
 - **1.1.2:** exact-PID Agent supervision is covered for guided Windows, quiet Windows, and macOS ownership paths with bounded recovery that never reopens Codex. Renderer heartbeats replace a missed-delivery value with an unavailable state, and App Server recovery no longer becomes permanently exhausted after repeated timeouts. The isolated Chromium product fixture verifies module-width, Legacy full-row, and Beta full-row quota-line bounds against the real account-row rectangles without changing row geometry. Command-mode hot resume republishes exact watcher ownership after update. Tagged package evidence is added only after the public release gate passes.
@@ -29,7 +29,6 @@ The one-line command, guided installer, and current Codex package share Windows 
 ## Automated evidence
 
 - The quota value and time modules come only from the windows returned by Codex.
-- Pace and runway use only recent official remaining-percentage observations for the matching account window. Calibration survives an Agent restart, resets on quota renewal, and treats corrupt local history as unavailable rather than blocking fresh observations.
 - App Server reads are single-flight; a response made stale by a newer quota notification is rejected before it can reach the renderer.
 - Complete renderer states carry monotonic delivery sequences. A 240-cycle Chromium stress case deliberately delivers an older value and ten disabled modules after each current state; every stale state is rejected, while a newer control state proves the detector can observe the same flash when it is legitimately accepted.
 - Unchanged CDP target polls and unchanged ten-second local token scans do not rebroadcast the renderer document. A replacement Agent receives a distinct renderer instance id, so same-version hot-resume replaces old code without restarting Codex.
@@ -56,11 +55,10 @@ The one-line command, guided installer, and current Codex package share Windows 
 - short press, hold, second-press close, outside-click close, and three-module drag feel;
 - first-launch handoff and degraded circuit-breaker recovery on a clean installed copy;
 - update from a tagged GitHub release, including user confirmation, progress, preserved settings, and a recoverable failure result;
-- high-DPI behavior and Windows 10 x64 real-device coverage;
-- signed-in Codex attachment on a physical Windows 11 Arm64 device after the emulated package lifecycle passes CI.
+- high-DPI behavior and Windows 10 real-device coverage.
 
 Host UI changes can invalidate an otherwise compatible release. QuotaPin fails closed when it cannot identify the account row uniquely or detects a native persistent quota indicator inside that row. The current quota value inside the opened Codex account menu does not collide with QuotaPin's inline account-row placement.
 
-Development evidence is marked as development. A tagged release is added only after the same checks are repeated against its published artifacts. Windows 10 x64 is an intended supported baseline; its current evidence is the shared build-19041 contract plus the cross-version Windows API and PowerShell gates, not a signed-in physical Windows 10 acceptance run.
+Development evidence is marked as development. A tagged release is added only after the same checks are repeated against its published artifacts. Windows 10 x64 remains a supported baseline with real-device reports still welcome.
 
-The macOS package is CI-validated and included in 1.2.1. Real signed-in Codex and Gatekeeper acceptance remains provisional; see [the macOS implementation and acceptance boundary](macos.md).
+The macOS package is CI-validated and included in 1.3.0. Real signed-in Codex and Gatekeeper acceptance remains provisional; see [the macOS implementation and acceptance boundary](macos.md).

@@ -1,6 +1,6 @@
 # Configuration
 
-QuotaPin creates `%LOCALAPPDATA%\QuotaPin\config.json` on first install and preserves it across updates. Hold the visible QuotaPin surface for 480 ms to open the editor. At the default account-row position, a short press keeps the original Codex menu; pressing the surface again or clicking outside closes the open panel.
+QuotaPin creates `%LOCALAPPDATA%\QuotaPin\config.json` on first install and preserves it across updates. Hold the Codex account row for 480 ms to open the editor. A short press keeps the original Codex menu; pressing the row again or clicking outside closes the open panel.
 
 The fresh-install default is deliberately small: Codex keeps its native avatar and account name, and QuotaPin adds only the remaining percentage. The status dot, quota bar, and every time module start off. Warning begins at 30% remaining; critical begins at 10%.
 
@@ -26,22 +26,22 @@ The active tab owns its content scrolling. Opening a long list does not create a
 | `name` | `Aster` | The existing Codex account name. |
 | `dot` | colored dot | Compact status based on the saved thresholds. |
 | `value` | `42%` | Remaining percentage. |
-| `pace` | `2.4%/h` | Responsive three-hour account-wide burn pace estimated from changes in the official remaining percentage. |
-| `runway` | `≈2d 4h` | Compact stable-baseline runway. It counts down as `d+h`, `h+m`, then `m+s`. `≥` means the official reset arrives first. |
+| `pace` | `2.4%/h` | Recent account-wide quota consumption rate derived only from official remaining-percentage history. |
+| `runway` | `≈2d 4h` | Estimated time until the remaining quota is exhausted; `≥` means the estimate reaches the official reset first. |
 | `todayTokens` | `Today 12.4M` | Tokens processed on this device during the current local calendar day, derived from Codex's local `token_count` events. |
 | `lifetimeTokens` | `Total 44B` | Account lifetime tokens from Codex's settled profile statistics. |
 | `label` | period name | The label Codex returns when more than one quota period exists. |
-| `countdown` | `4d 8h` | Universal compact time until reset. It keeps `d / h / m / s` in every language and switches from `d+h` to `h+m` to `m+s` as the deadline approaches. |
+| `countdown` | `4d 8h` | Universal compact time until reset. It keeps `d / h / m` in every language. |
 | `relative` | `4 days 8 hours` | Worded time in the selected language: `4 days 8 hours`, `4天8小时`, or `4日8時間`. |
 | `seconds` | `104:00:00` | Precise time until reset as accumulated `HH:MM:SS`; days stay in the separate compact countdown module. |
 | `date` | `Aug 9` | Localized reset calendar date. |
 | `reset` | `Sun 02:15 AM` | Localized reset weekday and time. |
 
-Quick shows each module as it looks now instead of asking you to decode setting names. Pressed means visible. The palette groups account identity, quota, forecast, signals, usage, and time; the status dot and quota bar share one signals row. In Code, avatar and name are represented by `identity`; the twelve inline quota modules use separate `show*` flags. The optional quota bar is controlled by `showBar` and follows the visible quota cluster by default; it is not part of horizontal `moduleOrder` and cannot push another module.
+Quick shows each module as it looks now instead of asking you to decode setting names. Pressed means visible. The palette groups identity, quota, forecast, status, usage, and time; the status dot and quota bar share one status row. In Code, avatar and name are represented by `identity`; the twelve inline quota modules use separate `show*` flags. The optional quota bar is controlled by `showBar` and follows the visible quota cluster by default; it is not part of horizontal `moduleOrder` and cannot push another module.
+
+Pace and runway are optional and start off. Their estimator observes only the official account quota percentage, starts a new calibration epoch after reset, and withholds output until elapsed time and percentage movement are sufficient. Recent and longer-window rates are combined so a changed work rhythm can influence the estimate without one short burst replacing the baseline. The inline runway stays compact; the built-in hover adds the direct pace/runway forecast and uncertainty range when available.
 
 The two token counters are optional and start off. Today's counter reads only numeric `token_count` fields from local Codex session logs; it never reads message bodies and refreshes from newly appended events. It therefore describes this computer, and two computers can show different Today values. Fork replays and repeated cumulative snapshots are deduplicated. The compact module stays clean; if bounded startup backfill cannot prove full-day coverage, the localized hover copy identifies the exact value as "at least" rather than presenting a lower bound as exact. Total uses Codex's account profile summary and is account-wide; that summary may settle later than the local counter. Neither value is written into the QuotaPin configuration or log, and an unavailable source stays `—` rather than becoming zero.
-
-Pace and runway are a separate account-wide estimate. QuotaPin samples only the official remaining percentage and reset identity returned by Codex. It retains the current weekly epoch for up to seven days while bounding each calculation to the latest 24 hours. Forecast v2 compares a responsive three-hour pace, the existing six-hour exponentially weighted baseline, and a slower 12-hour pace. The `pace` module shows the responsive value; `runway` stays one compact stable-baseline estimate. It needs at least three observations, 30 minutes, and one percentage point of movement before showing a forecast; until then the optional modules show `…`. The calculation deliberately excludes prompts, local token totals, model choice, cache accounting, and API pricing. Work performed on another computer is reflected when the official account percentage reaches this computer, although the estimate cannot observe periods when no QuotaPin instance is sampling. Inline runway values count down from absolute forecast deadlines between official observations. Evidence confidence and forecast stability are separate: many samples do not make changing future behavior certain.
 
 ### Avatar shape
 
@@ -77,13 +77,13 @@ Three editable views ship as starting points:
 
 Duplicate and rename a useful view instead of rebuilding it. Up to eight views are retained and at least one always remains. Date and precise-seconds combinations can be built directly in Quick or Code.
 
-## Configuration JSON (schema 19)
+## Configuration JSON (schema 17)
 
 A compact valid document looks like this:
 
 ```json
 {
-  "version": 19,
+  "version": 17,
   "locale": "en",
   "panelTheme": "dark",
   "accountRowMode": "legacy",
@@ -106,15 +106,10 @@ A compact valid document looks like this:
     "showSeconds": false,
     "showDate": false,
     "showReset": false,
-    "showPace": false,
-    "showRunway": false,
     "showTodayTokens": false,
     "showLifetimeTokens": false,
-    "placement": {
-      "primary": "account-row",
-      "fallback": "account-row",
-      "rail": "account-row"
-    },
+    "showPace": false,
+    "showRunway": false,
     "valueColor": "severity",
     "dotColor": "severity",
     "identityColor": "inherit",
@@ -165,10 +160,9 @@ A compact valid document looks like this:
 | `window` | `auto`, `all`, `shortest`, `longest`, `duration:<minutes>` | What to show when Codex reports more than one quota period. |
 | `separator` | string, max 8 chars | Joins multiple quota periods in template mode; it does not draw a separate visual module. |
 | `displayMode` | `modules`, `template` | Independent modules or one Code-defined value. |
-| `showValue`, `showDot`, `showPace`, `showRunway`, `showTodayTokens`, `showLifetimeTokens`, `showLabel`, `showCountdown`, `showRelative`, `showSeconds`, `showDate`, `showReset` | boolean | Independent inline module visibility. Forecast and token modules are optional; `countdown` is compact and universal; `relative` uses localized words. |
-| `showBar` | boolean | Optional quota line. Its color and fill use the same canonical percentage as the value module. |
-| `barScope` | `quota` \| `row` | Within the account surface, `quota` follows visible quota modules and `row` spans the usable row. Legacy stops before Codex Help; Beta uses the expanded row after Help is hidden. |
-| `placement` | semantic object | `primary` accepts `account-row`, `title-center`, `workspace-top-center`, or `composer-center`; `rail` accepts `account-row` or `composer-bottom`. `fallback` is currently fixed to `account-row`. Retired composer-side values migrate safely to the account row. |
+| `showValue`, `showDot`, `showPace`, `showRunway`, `showTodayTokens`, `showLifetimeTokens`, `showLabel`, `showCountdown`, `showRelative`, `showSeconds`, `showDate`, `showReset` | boolean | Independent inline module visibility. Forecast and token counters are optional; `countdown` is compact and universal; `relative` uses localized words. |
+| `showBar` | boolean | Optional quota line at the bottom of the account row; it uses the current percentage and value color without entering horizontal layout. |
+| `barScope` | `quota` \| `row` | `quota` follows the first and last visible quota module. `row` spans the usable account row: Legacy stops before Codex Help, while Beta uses the expanded row after Help is hidden. Both choices have a direct visual control in Quick and remain editable in Code. |
 | `moduleOrder` | one permutation of all fourteen module ids | Fallback order when two modules are saved at the same horizontal point. |
 | `layoutMode` | `auto`, `free` | Stable semantic docking or exact normalized coordinates. Quick uses `auto`; `free` is an expert Code option. |
 | `snapThreshold` | integer `0`–`48` | Magnetic distance in pixels for `auto`; `0` requires an exact target hit. |
@@ -185,14 +179,6 @@ A compact valid document looks like this:
 | `effectAt` | `always`, `warning`, `critical` | When the effect begins. |
 
 `critical` cannot be higher than `warning`. With the defaults, 10% or less is critical, 30% or less is warning, and anything above that is normal. Values outside 0–100 are corrected when the file is loaded.
-
-### Placement
-
-Quick exposes placement as one small map of the current Codex work surface. The four quota targets and two line targets are selected directly on that map; unavailable host targets are visibly disabled. Saved settings contain semantic zone names rather than screen pixels, so resizing or moving the window does not corrupt a layout. The title-bar slot and the lower workspace-top slot are separate targets. `composer-center` uses the free part of the composer toolbar, aligns to the native control centerline, and keeps a safety gutter around Codex controls. `composer-bottom` follows the painted rounded composer shell and paints immediately after its outside bottom edge, not after a transparent inner editor wrapper.
-
-Quota modules move as one stable semantic surface in the 2.x beta. Their DOM nodes are updated in place, so live quota refreshes do not reset a drag. The whole visible surface owns the hold target, including its empty padding; the old account row no longer keeps a hidden QuotaPin hold target after quota moves elsewhere. While Quick or Customize is open, every enabled position uses the same anchors, pointer-following drag, collision solver, magnetic targets, and editing frames as the account row. The editor anchors beside that real surface instead of returning to the lower-left account row. A short press there is not replayed into a distant Codex control. The native account row remains the fallback and keeps its normal short-click menu contract.
-
-Each non-account zone is derived from current host geometry and is enabled only when a unique, painted safe slot exists. If the composer is absent, the window is too narrow, or Codex changes a surface that cannot be identified unambiguously, `fallback` returns the quota group to `account-row`. The quota rail is independent and may remain under the account row or span the verified bottom edge of the composer.
 
 ### Account-row mode
 
@@ -213,17 +199,17 @@ Code templates accept:
 
 - `{remaining}` — rounded remaining percentage, without `%`;
 - `{label}` — returned-window label;
+- `{pace}` — recent account-wide quota consumption rate;
+- `{runway}` — estimated time until quota exhaustion or the official reset boundary;
 - `{countdown}` — compact time until reset;
 - `{relative}` — worded time until reset in the selected language;
 - `{seconds}` — precise time until reset as accumulated `HH:MM:SS`;
 - `{date}` — localized reset date;
 - `{reset}` — localized reset weekday and time.
-- `{pace}` — responsive official account-wide burn rate, such as `2.4%/h`;
-- `{runway}` — compact stable estimated runway, such as `≈2d 4h`.
 
 In `template` mode, `showValue` controls the combined result and `showDot` remains independent. The other time/label modules are not duplicated alongside the template.
 
-The built-in hover uses a fixed scan order: remaining quota, reset, pace/runway, then exact token totals when available. A single ordinary quota period has no source or duration heading; multiple periods keep only the minimum period label needed to tell them apart. Unavailable token rows are omitted. A custom quota `hoverTemplate` remains fully user-controlled, while available token totals stay on one compact final line.
+The built-in hover is intentionally fuller than the inline row: it lists every ordinary quota period with remaining percentage, compact time to reset, localized reset date, and localized weekday/time. When forecast evidence is ready, it adds one direct localized pace/runway line and uncertainty range. It then includes exact, grouped token counts for this device today and the account lifetime total when those sources are available; inline token modules remain compact. A custom quota `hoverTemplate` remains fully user-controlled without suppressing the token details.
 
 ## Recovery
 
@@ -260,16 +246,16 @@ The version control in the editor reads the official GitHub release list. After 
 
 Only compatible, immutable releases with an exact public package set are eligible. Historical Windows-only releases may contain one correctly named executable; cross-platform releases contain that Windows executable plus one correctly named universal macOS disk image. Any duplicate, renamed, or additional asset is rejected. The user must select a version and confirm before installation begins. Panel and tray both hand the operation to the same updater, which resumes interrupted downloads, checks GitHub's asset digest and platform package identity, preserves the current setup/command ownership, configuration, and launch preference, and then uses the same package as Quick Start. Its receipt moves through preparation, download, verification, installation, and reconnection, so a replaced Agent or tray can recover the real outcome instead of reporting success from process presence alone. It never closes or launches Codex: it may reattach only to the exact loopback runtime receipt from the current session; otherwise the new version waits for the next normal Codex launch. A version absent from the picker is not treated as compatible.
 
-The remote bootstrap without `-Version` resolves GitHub's immutable latest stable release. Supplying an exact reviewed stable or beta version permits an explicit install, repair, or compatible rollback. A beta never appears in the normal in-product update feed, even for a user already running a beta; moving between betas remains an intentional exact-version install. Reinstalling the same version follows the same transactional replacement path and does not reset configuration.
+The remote bootstrap without `-Version` resolves GitHub's immutable latest stable release. Supplying an exact published stable version permits a repair or compatible rollback. Reinstalling the same version follows the same transactional replacement path and does not reset configuration.
 
 ```powershell
-& ([scriptblock]::Create((irm https://raw.githubusercontent.com/WSL043/QuotaPin-for-Codex/main/install.ps1))) -Version '1.2.1'
+& ([scriptblock]::Create((irm https://raw.githubusercontent.com/WSL043/QuotaPin-for-Codex/main/install.ps1))) -Version '1.3.0'
 ```
 
 On macOS, the equivalent exact-version boundary is:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/WSL043/QuotaPin-for-Codex/main/install-macos.sh | bash -s -- --version 1.2.1
+curl -fsSL https://raw.githubusercontent.com/WSL043/QuotaPin-for-Codex/main/install-macos.sh | bash -s -- --version 1.3.0
 ```
 
 The in-product picker exposes only releases at or above the maintained support floor, currently 1.2.0. Older GitHub Releases remain immutable history, not supported rollback targets. An explicit bootstrap pin can still reproduce a published historical package for audit or recovery, but compatibility with current Codex and current configuration is not promised. If an older Agent encounters a configuration from a newer schema, it opens that configuration read-only instead of overwriting it. Published update behavior is counted as supported only after the corresponding path appears in [observed compatibility](compatibility.md).

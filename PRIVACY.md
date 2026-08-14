@@ -2,9 +2,9 @@
 
 QuotaPin processes usage data locally and has no product telemetry.
 
-It reads rate-limit windows returned by the locally launched Codex App Server. When the optional pace or runway module is enabled, it keeps a small local history of official remaining-percentage observations in `%LOCALAPPDATA%\QuotaPin\quota-pace.json`; this history contains timestamps, percentages, reset identity, and quota-window identity only. For the optional token modules and the detailed hover, it reads settled profile statistics through Codex's own signed-in desktop client and scans local Codex session files for numeric token-count and timestamp fields. The scanner does not read or retain prompt text, task content, thread titles, messages, cookies, authentication tokens, or account identifiers.
+It reads rate-limit windows returned by the locally launched Codex App Server. For the optional pace and runway modules, it stores a bounded local history containing only observation time, remaining percentage, reset boundary, and an opaque quota-window key. For the optional token modules and the detailed hover, it reads settled profile statistics through Codex's own signed-in desktop client and scans local Codex session files for numeric token-count and timestamp fields. The scanner does not read or retain prompt text, task content, thread titles, messages, cookies, authentication tokens, or account identifiers.
 
-These values stay between the local Agent and the local Codex renderer. QuotaPin does not send them to the project author or to a QuotaPin service. Pace and runway are derived from the account-wide percentage returned by Codex; QuotaPin does not estimate a local token-to-quota or monetary equivalent.
+These values stay between the local Agent and the local Codex renderer. QuotaPin does not send them to the project author or to a QuotaPin service.
 
 Lifecycle logs are stored under `%LOCALAPPDATA%\QuotaPin\logs` and are designed to contain only timestamps, process identifiers, ports, versions, and compatibility outcomes. Removing the QuotaPin installation directory removes those logs.
 

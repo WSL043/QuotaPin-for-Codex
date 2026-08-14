@@ -31,10 +31,6 @@ QuotaPin is divided by change boundary. The quota model, saved configuration, re
 
 The model contains only observed sources and windows. `rateLimitsByLimitId` becomes keyed `buckets`; the flattened `windows` list keeps formatting and layout source-agnostic. The legacy single `rateLimits` shape remains a fallback. `primary` and `secondary` are transport details, not product assumptions, and sparse updates merge into their matching bucket without deleting the others.
 
-### `QuotaPace`
-
-Quota pace is derived independently from the sequence of official `remainingPercent` observations for one `sourceId + windowDurationMins` key. The Agent persists only timestamp, remaining percentage, reset identity, and window identity in `quota-pace.json`; it does not use prompt content, token counts, model choice, cache pricing, or API prices. A reset-time change or a percentage increase starts a new epoch. At least three samples, 30 minutes, and one consumed percentage point are required before Forecast v2 runs. It compares a three-hour responsive rate, the six-hour exponentially weighted baseline, and a 12-hour slow rate. The baseline remains the compact inline point estimate; material disagreement produces a bounded runway range and regime label for the hover rather than widening the account row or pretending the point is certain. The current epoch is retained for up to seven days, but each estimate uses at most the latest 24 hours. Because the input is the account limit returned by Codex, use on another device is reflected at the next observation on this device.
-
 ### `DisplayPreferences`
 
 Configuration selects the global account-row mode, active saved view, returned-window selection, module or template display, hover content, layout, avatar mask, colors, thresholds, attention behavior, and UI locale.
@@ -55,7 +51,7 @@ Visibility is separate from order and normalized horizontal anchors, so hiding a
   parts: {
     value: "42%",
     pace: "2.4%/h",
-    runway: "≈1d 4h–2d 13h",
+    runway: "≈2d 4h",
     label: "cycle",
     countdown: "4d 8h",
     relative: "4 days 8 hours",
@@ -89,6 +85,8 @@ Visibility is separate from order and normalized horizontal anchors, so hiding a
   showReset: false,
   showTodayTokens: false,
   showLifetimeTokens: false,
+  showPace: false,
+  showRunway: false,
   valueColor: "#6ee7b7",
   dotColor: "#6ee7b7",
   identityColor: "inherit",
@@ -96,12 +94,12 @@ Visibility is separate from order and normalized horizontal anchors, so hiding a
   effectTarget: "dot",
   effectAt: "critical",
   layout: {
-    moduleOrder: ["avatar", "name", "value", "label", "dot", "countdown", "relative", "seconds", "date", "reset", "todayTokens", "lifetimeTokens"],
+    moduleOrder: ["avatar", "name", "value", "pace", "runway", "label", "dot", "countdown", "relative", "seconds", "date", "reset", "todayTokens", "lifetimeTokens"],
     layoutMode: "auto",
     snapThreshold: 16,
     snapTargets: ["edges", "center", "modules"],
     moduleAnchors: {
-      avatar: .04, name: .04, dot: .96, value: .96, todayTokens: .96, lifetimeTokens: .96, label: .96,
+      avatar: .04, name: .04, dot: .96, value: .96, pace: .96, runway: .96, todayTokens: .96, lifetimeTokens: .96, label: .96,
       countdown: .96, relative: .96, seconds: .96, date: .96, reset: .96
     },
     identity: "show",
@@ -115,11 +113,13 @@ The Agent sends reset timestamps rather than streaming formatted seconds. A visi
 
 App Server quota reads are single-flight. A refresh requested while one is active is coalesced, and each read records the notification revision that existed when it was sent. If a newer `account/rateLimits/updated` notification arrives first, the late full response is discarded and one clean read follows. Reads have a bounded timeout: one timeout receives a clean retry, while a second consecutive timeout retires the unresponsive App Server child, clears the stale ready state, and enters the bounded process-restart path. The initialization handshake is bounded by the same liveness rule, so a spawned PID is never treated as a healthy service merely because it still exists. This causal boundary prevents both out-of-order rollback and indefinitely frozen quota data.
 
+The optional quota forecast is a separate bounded state machine. It stores only timestamp, remaining percentage, reset boundary, and opaque window identity in `quota-pace.json`; it never uses token counts, model pricing, prompts, or page content. Reset detection starts a new epoch. A longer stable rate and a shorter recent rate are combined only after minimum duration and movement gates pass, and an idle regime may widen the high estimate without erasing the baseline. The formatter emits one compact pace/runway value plus a localized hover explanation and uncertainty range. If evidence is insufficient or inconsistent, both modules remain unavailable rather than extrapolating.
+
 Every complete Agent-to-renderer state carries the owning renderer instance id and one process-local monotonic delivery sequence. CDP checks the owner before calling the global controller, and the controller checks it again before comparing sequences. A retired Agent therefore cannot feed its high sequence into a replacement renderer; late or unsequenced states from the current Agent are rejected after live delivery has begun. A CDP session is removed as soon as its WebSocket closes or a command times out. The next target poll may therefore reconnect even when Electron reuses the same target id; endpoint identity and live transport state, rather than Map membership alone, define attachment. Target discovery sends state only when a renderer is newly attached or an external configuration reload is observed; it does not resend the full document on each healthy two-second endpoint poll. The local token scanner likewise publishes only when its user-visible total or health changes. A bounded renderer delivery trace contains owner, sequence, source reason, and visible module ids without page or account content.
 
 Renderer installation has a separate per-Agent instance id in addition to the public semantic version. Repeating installation from the same process is idempotent, while a replacement Agent with the same version cleans up and replaces the previous controller. Disposal is a lifecycle boundary rather than a global-reference swap: the retired controller rejects updates, rendering, timers, focus callbacks, profile refreshes, and late asynchronous callbacks, and cleanup continues even if one restoration step fails. A badge-scoped integrity observer remains defense-in-depth for external DOM drift; it is not used as a substitute for owner-scoped delivery. This keeps repair and development hot-resume honest without restarting Codex.
 
-The account row has one canonical state renderer plus two bounded hot paths. Quota, settings, and profile changes use the complete renderer. Sidebar resize events are coalesced to at most one animation-frame commit and run only the horizontal solver; clock boundaries update only time-derived copy and invoke the same solver only when a unit transition changes text width. Compact and localized countdowns, plus forecast runway, use minute boundaries above one hour and second boundaries below it. Both hot paths refresh the canonical binding, layout signature, and committed plan, so the integrity observer still validates one result rather than competing with an alternate renderer. Unrelated Codex content mutations are ignored unless they touch the verified account host or replace the optional effect signal. This keeps streaming task output, sidebar dragging, and second-by-second countdowns from waking the full renderer.
+The account row has one canonical state renderer plus two bounded hot paths. Quota, settings, and profile changes use the complete renderer. Sidebar resize events are coalesced to at most one animation-frame commit and run only the horizontal solver; clock boundaries update only time-derived copy and invoke the same solver only when that copy changes width. Both hot paths refresh the canonical binding, layout signature, and committed plan, so the integrity observer still validates one result rather than competing with an alternate renderer. Unrelated Codex content mutations are ignored unless they touch the verified account host or replace the optional effect signal. This keeps streaming task output, sidebar dragging, and second-by-second countdowns from waking the full renderer.
 
 The quota bar is an auxiliary surface outside the fourteen-module horizontal collision solver, so enabling it cannot push or resize account identity and quota text. Its default `quota` scope derives its left and right edges from the first and last visible quota module after each committed layout. Quick can instead choose `barScope: "row"`: Legacy spans the account button and stops before Codex Help, while Beta spans the expanded footer after Help is hidden. Both scopes use measured production rectangles, remain frame-bounded during resize and drag, and stay available in Code.
 
@@ -129,13 +129,11 @@ The token counters deliberately use two sources with different freshness. `today
 
 ## Gesture boundary
 
-The renderer owns gesture isolation at the Codex account boundary. Legacy scopes that boundary to the native account button. Beta first proves one bounded footer and one adjacent Help control, hides that control reversibly, expands the account button into the freed width, and scopes the same classifier to the complete footer. Pointer-down is captured before the host sees it. A short release is replayed to the native account trigger; a hold opens QuotaPin; movement cancels the hold. Pressing the row again closes the open panel. The invisible target remains available even when all QuotaPin modules are hidden. Ambiguous host chrome always falls back to Legacy. When quota uses a remote semantic placement, its complete painted slot—including empty padding—becomes the sole hold and panel-anchor surface; the old account row no longer retains a hidden QuotaPin hold target. A remote short release is intentionally local and is never replayed into the distant account button. The viewport-bounded panel selects the free side of that surface and never covers it.
+The renderer owns gesture isolation at the Codex account boundary. Legacy scopes that boundary to the native account button. Beta first proves one bounded footer and one adjacent Help control, hides that control reversibly, expands the account button into the freed width, and scopes the same classifier to the complete footer. Pointer-down is captured before the host sees it. A short release is replayed to the native account trigger; a hold opens QuotaPin; movement cancels the hold. Pressing the row again closes the open panel. The invisible target remains available even when all QuotaPin modules are hidden. Ambiguous host chrome always falls back to Legacy.
 
 ## Layout boundary
 
-Quick exposes one smart horizontal drag model and always calculates vertical centering from the active semantic surface. In `auto`, a completed placement becomes stable left, intentional center, right, or neighbour gravity rather than an arbitrary percentage exposed by a later resize. Text width is re-measured from current glyph bounds rather than a previously painted solver width, and background refreshes never animate geometry. Code may set `layoutMode` to `free` for literal normalized coordinates, change `snapThreshold`, or choose any subset of `snapTargets`; these expert controls stay out of the direct-manipulation surface. No module type is assigned a mandatory side. Remote placements keep the account row as the canonical data host but render keyed derived nodes into one bounded placement layer. Account and remote surfaces run the same anchor model, collision solver, pointer-following pinned item, neighbour spring, and commit transaction. Fixed slot geometry never blocks the surrounding Codex surface outside the visible slot.
-
-Composer discovery distinguishes the painted rounded shell from transparent editable and scrolling wrappers. Semantic slots may use inner controls to find safe gaps, but `composer-bottom` is derived only from the visual shell's outside edge. If that shell is ambiguous or has no viewport space below it, the rail fails closed to the account-row surface.
+Quick exposes one smart horizontal drag model and always calculates vertical centering from the host row. In `auto`, a completed placement becomes stable left, intentional center, right, or neighbour gravity rather than an arbitrary percentage exposed by a later resize. Text width is re-measured from current glyph bounds rather than a previously painted solver width, and background refreshes never animate row geometry. Code may set `layoutMode` to `free` for literal normalized coordinates, change `snapThreshold`, or choose any subset of `snapTargets`; these expert controls stay out of the direct-manipulation surface. No module type is assigned a mandatory side.
 
 During a gesture, the dragged module follows the exact pointer and a weighted projection moves only the smallest necessary neighbourhood. The grabbed module has no interpolation; displaced neighbours receive a short position-only spring, while width and every background refresh remain deterministic. On commit, smart layout resolves that gesture to its semantic dock and preserves the new order; free layout retains every exact settled center. The account name starts at its measured glyph width and shrinks before fixed-value modules. Hidden zero-sized rectangles are ignored when anchors are measured.
 
@@ -151,7 +149,7 @@ An acknowledgement advances `committed` and replays any newer pending actions. A
 
 The versioned Windows executable owns both supported installation experiences. PowerShell Quick Start runs it in quiet command mode, which installs a self-contained `QuotaPin.Agent.exe` plus Windows PowerShell 5.1 lifecycle scripts under `%LOCALAPPDATA%\QuotaPin` and starts only the per-user attachment watcher. Double-clicking the same file installs the tray companion instead. The tray owns lifecycle status, startup, updates, project access, uninstall, and exit; it does not open or control the settings renderer. Settings have one entry point: hold the account row inside Codex. Both install modes register the same native Apps uninstall entry; neither needs a service, administrator token, system-wide registry entry, or modified Codex package.
 
-Panel and tray updates converge on `scripts/update.ps1`; the tray no longer carries a second downloader. The transaction resolves the current install owner before invoking Setup, resumes partial GitHub assets, verifies the release digest and embedded Windows identity, and uses phase-tagged atomic receipts. The wrapper owns runtime resume during an in-app update, while a directly launched installer owns one equivalent handoff. Setup ignores stale command-mode flags when an existing native Setup registration proves tray ownership, so an update cannot silently change the installation flavor. A fresh installer handoff also permits the replacement Agent to retire a renderer that became temporarily unreachable during old-Agent cleanup, while preserving the existing startup entry until Setup commits; uninstall remains strict and still fails if renderer cleanup cannot be confirmed. A successful command-mode hot resume atomically republishes the exact Codex PID, start time, generation, port, and replacement Agent PID to its watcher; setup mode remains tray-owned. A terminal completion receipt survives replacement long enough for the new Agent and tray to report the actual outcome.
+Panel and tray updates converge on `scripts/update.ps1`; the tray no longer carries a second downloader. The transaction resolves the current install owner before invoking Setup, resumes partial GitHub assets, verifies the release digest and embedded Windows identity, and uses phase-tagged atomic receipts. The wrapper owns runtime resume during an in-app update, while a directly launched installer owns one equivalent handoff. Setup ignores stale command-mode flags when an existing native Setup registration proves tray ownership, so an update cannot silently change the installation flavor. A successful command-mode hot resume atomically republishes the exact Codex PID, start time, generation, port, and replacement Agent PID to its watcher; setup mode remains tray-owned. A terminal completion receipt survives replacement long enough for the new Agent and tray to report the actual outcome.
 
 The helper accepts only a fresh official root `ChatGPT.exe` launch. The launcher validates the app-managed Codex executable, binds CDP to loopback on a fresh ephemeral port, and starts the Agent. An already instrumented, stale, child, or ambiguous process is ignored. After one successful handoff, setup and command supervisors may restart only the Agent, with bounded backoff, while the exact Codex PID, start time, CDP target, and attachment generation remain valid. They never spend another Codex-relaunch budget. The Agent sends a lightweight renderer heartbeat; after three missed intervals the UI masks the old value instead of presenting stale quota as current. The App Server child also uses bounded, non-exhausting recovery, so a long-lived Agent cannot remain permanently attached to a dead inner service. The command installation has no tray UI.
 
@@ -159,7 +157,7 @@ The helper accepts only a fresh official root `ChatGPT.exe` launch. The launcher
 
 - `src/core/model.mjs` normalizes returned rate-limit windows and merges sparse updates.
 - `src/core/config.mjs` migrates, sanitizes, and atomically saves configuration.
-- `src/core/format.mjs` formats percentage, tiered compact time, locale-aware worded time, precise seconds, date, reset time, forecast runway, and hover text.
+- `src/core/format.mjs` formats percentage, universal compact time, locale-aware worded time, precise seconds, date, reset time, and hover text.
 - `src/agent/` owns App Server stdio, CDP transport, local numeric token-event aggregation, configuration acknowledgements, lifecycle state, and the user-initiated release picker.
 - `src/renderer/` owns pure settings, layout, gesture, effect, localization, time-boundary, and interaction state machines.
 - `src/injector.mjs` composes those modules and contains the version-sensitive Codex DOM adapter.

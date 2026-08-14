@@ -50,7 +50,7 @@ test("semantic versions compare stable and prerelease identifiers", () => {
   assert.equal(updateDirection("0.3.0-alpha.25", "0.3.0-alpha.26"), "rollback");
 });
 
-test("release normalization requires trusted assets and keeps every update feed stable-only", () => {
+test("release normalization requires trusted assets and keeps the default update feed stable-only", () => {
   const incomplete = release("0.4.0");
   incomplete.assets.pop();
   const mislabeledPrerelease = { ...release("0.4.0-beta.1"), prerelease: false };
@@ -66,7 +66,7 @@ test("release normalization requires trusted assets and keeps every update feed 
   assert.deepEqual(normalizeReleases([release("1.2.0"), release("1.1.2")], "1.2.0", MINIMUM_SAFE_VERSION, "win32").map((item) => item.version), ["1.2.0"]);
 });
 
-test("a preview Agent never discovers another preview through the update feed", () => {
+test("a preview Agent never discovers another preview through the stable update feed", () => {
   const payload = [release("2.0.0-beta.2"), release("2.0.0-beta.1"), release("1.2.1")];
   assert.deepEqual(normalizeReleases(payload, "2.0.0-beta.1", MINIMUM_SAFE_VERSION, "darwin").map((item) => item.version), ["1.2.1"]);
 });

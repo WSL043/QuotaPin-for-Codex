@@ -3,14 +3,12 @@ import { createEffectStateToolkit } from "../src/renderer/effect-state.mjs";
 import { createGestureStateToolkit } from "../src/renderer/gesture-state.mjs";
 import { createLayoutStateToolkit } from "../src/renderer/layout-state.mjs";
 import { createSettingsStateToolkit } from "../src/renderer/settings-state.mjs";
-import { createPlacementToolkit } from "../src/core/placement.mjs";
 
 const toolkits = {
   createEffectStateToolkit,
   createGestureStateToolkit,
   createLayoutStateToolkit,
   createSettingsStateToolkit,
-  createPlacementToolkit,
 };
 
 export function loadRendererSource() {

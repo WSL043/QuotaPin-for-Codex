@@ -205,6 +205,10 @@ test("release identity checks normalize padded Windows version resources", () =>
   const trayUpdater = fs.readFileSync(new URL("../src/tray/Updater.cs", import.meta.url), "utf8");
   assert.match(bootstrap, /ConvertTo-QuotaPinWindowsFileVersion \$SelectedVersion/);
   assert.match(commandUpdater, /ConvertTo-QuotaPinWindowsFileVersion \$Version/);
+  assert.match(bootstrap, /Get-QuotaPinSha256 \$PackagePath/);
+  assert.match(commandUpdater, /Get-QuotaPinSha256 \$PackagePath/);
+  assert.doesNotMatch(bootstrap, /Get-FileHash/);
+  assert.doesNotMatch(commandUpdater, /Get-FileHash/);
   assert.match(bootstrap, /PackageVersionInfo\.OriginalFilename\)\.Trim\(\)/);
   assert.match(commandUpdater, /VersionInfo\.OriginalFilename\)\.Trim\(\)/);
   assert.match(tray, /Path\.Combine\(installRoot, "update\.ps1"\)/);

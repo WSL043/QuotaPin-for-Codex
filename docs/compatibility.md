@@ -2,7 +2,8 @@
 
 | QuotaPin | Codex Desktop | Platform | Status |
 |---|---|---|---|
-| 1.3.0 | 26.803.10989.0 x64; production DOM fixture and package gates | Windows 11 x64; Windows 11 ARM64 x64 emulation; macOS 15/26 native arm64 and x86_64 runners | ✅ Current stable; real-Mac acceptance pending |
+| 1.3.1 | 26.803.10989.0 x64; production DOM fixture and package gates | Windows 11 x64; Windows 11 ARM64 x64 emulation; macOS 15/26 native arm64 and x86_64 runners | ✅ Current stable; real-Mac acceptance pending |
+| 1.3.0 | 26.803.10989.0 x64; production DOM fixture and package gates | Windows 11 x64; Windows 11 ARM64 x64 emulation; macOS 15/26 native arm64 and x86_64 runners | Previous stable; affected Windows PowerShell hosts should use Quick Start once to move to 1.3.1 |
 | 1.2.1 | 26.803.10989.0 x64; production DOM fixture and package gates | Windows 11; macOS 15/26 native arm64 and x86_64 runners | Previous stable |
 | 1.2.0 | 26.803.5235.0 x64; production DOM fixture and package gates | Windows 11; macOS 15/26 native arm64 and x86_64 runners | Previous stable; guided tray attach is fixed in 1.2.1 |
 | 1.1.2 | 26.803.5235.0 x64; production DOM fixture and package gates | Windows 11; macOS 15/26 native arm64 and x86_64 runners | Superseded; Windows panel update needs a one-time external repair before 1.2.0 |
@@ -16,6 +17,7 @@ The one-line command accepts x64 Windows 10 version 2004 (build 19041) and later
 
 ## Published artifact evidence
 
+- **1.3.1:** removes the Windows updater and bootstrap dependency on module auto-loading for installer SHA-256 verification. A Windows PowerShell 5.1 regression fixture disables module auto-loading while retaining only the management primitives needed to read the fixture, then verifies the same .NET SHA-256 helper used by the release trust boundary. A local setup-owned `2.0.0-beta.2` to `1.3.0` rollback reproduced the original detached-updater environment; replacing only the faulty hash call completed with the same Codex PID, one matching Agent, one tray, `quota-ready`, and zero Agent stderr.
 - **1.3.0:** adds opt-in account-wide burn pace and estimated runway modules derived only from official remaining-percentage history. Forecast v2 combines bounded recent and baseline rates, resets calibration at renewal, waits for sufficient evidence, and keeps uncertainty in hover rather than widening the inline module. Stable update discovery excludes every prerelease. Windows release publication now also requires native Windows 11 ARM64 x64-emulation install, execution, and uninstall acceptance. The setup handoff preserves the previous launch preference until the replacement installation commits.
 - **1.2.1:** the guided tray now passes the generation-bound source PID, creation time, and atomic handoff ticket required by `launch.ps1`; failed handoffs clear only their own pending ticket, while successful handoffs publish a verified successor receipt. This closes the 1.2.0 tray/launcher contract gap without changing the running Codex process during installation or update.
 - **1.2.0:** Windows update launch uses an attached PowerShell launcher and a bounded on-disk start receipt, so the Agent reports success only after the updater has actually crossed the process boundary. Setup-started handoff waits for that receipt before supervising the replacement Agent, preventing duplicate ownership. Equivalent renderer deliveries are suppressed, quota-line geometry remains stable during sidebar resize, and macOS runtime rediscovery backs off instead of spinning. The macOS package replaces the embedded runtime with a thin integrity-verifying native host that uses the signed runtime inside official Codex. Tagged package evidence is added only after the public release gate passes.
@@ -61,4 +63,4 @@ Host UI changes can invalidate an otherwise compatible release. QuotaPin fails c
 
 Development evidence is marked as development. A tagged release is added only after the same checks are repeated against its published artifacts. Windows 10 x64 remains a supported baseline with real-device reports still welcome.
 
-The macOS package is CI-validated and included in 1.3.0. Real signed-in Codex and Gatekeeper acceptance remains provisional; see [the macOS implementation and acceptance boundary](macos.md).
+The macOS package is CI-validated and included in 1.3.1. Real signed-in Codex and Gatekeeper acceptance remains provisional; see [the macOS implementation and acceptance boundary](macos.md).

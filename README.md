@@ -47,7 +47,7 @@ QuotaPin keeps the useful part visible in the account row, so checking quota bec
 
 ## Platform status
 
-Latest stable: **v1.3.0**.
+Latest stable: **v1.3.1**.
 
 | Platform | Status |
 |---|---|

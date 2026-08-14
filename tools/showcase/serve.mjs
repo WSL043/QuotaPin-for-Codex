@@ -372,14 +372,14 @@ html,body{margin:0;width:100%;height:100%;overflow:hidden;background:${page.bg};
   const fixtureUpdate=${serializeForInlineScript({
     status: updateState,
     currentVersion: "1.1.0",
-    latestVersion: updateState === "available" || updateState === "installing" ? "1.3.0" : "1.2.1",
+    latestVersion: updateState === "available" || updateState === "installing" ? "1.3.1" : "1.3.0",
     releases: updateState === "available" || updateState === "installing"
-      ? [{ version: "1.3.0", direction: "update" }, { version: "1.2.1", direction: "repair" }]
+      ? [{ version: "1.3.1", direction: "update" }, { version: "1.3.0", direction: "repair" }]
       : [{ version: "1.1.0", direction: "repair" }],
     message: updateState === "error" ? "QuotaPin could not check for updates." : "",
     checkError: updateState === "error",
     lastCheckedAt: updateState === "error" || updateState === "available" || updateState === "current" ? now - 5 * 60_000 : 0,
-    selectedVersion: updateState === "installing" ? "1.3.0" : null,
+    selectedVersion: updateState === "installing" ? "1.3.1" : null,
     phase: updateState === "installing" ? updatePhase : null,
   })};
   const publishFixture=(settingsAck=null)=>window.__quotaPinController.update({status:"ready",view:fixtureView,preferences:fixtureConfig,update:fixtureUpdate,settingsAck});

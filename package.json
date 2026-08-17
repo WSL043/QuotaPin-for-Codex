@@ -16,6 +16,7 @@
     "preview:lab": "node tools/showcase/serve.mjs 4188",
     "render:fixture": "node tools/showcase/render.mjs",
     "render:docs": "node tools/showcase/render-docs.mjs",
+    "render:forecast": "node tools/showcase/render-forecast.mjs",
     "render:drag": "node tools/showcase/render-drag.mjs",
     "verify:live-time": "node tools/showcase/verify-live-time.mjs",
     "check": "node --check src/injector.mjs && node --check src/macos/auto-attach-policy.mjs && node --check src/macos/launcher-runtime.mjs && node --check src/macos/launcher.mjs && node --check scripts/stamp-build-origin.mjs && node --check scripts/check-public-baseline.mjs && node --check scripts/capture-account-ui.mjs && node --check scripts/capture-showcase-metrics.mjs && node --check scripts/verify-cdp.mjs && node --check scripts/verify-gestures.mjs && node --check scripts/verify-layout.mjs && node --check scripts/verify-panel.mjs && node --check scripts/verify-overdrive.mjs && node scripts/check-injected-ui.mjs && node scripts/check-install-flavors.mjs && node scripts/check-public-baseline.mjs && node --test test/*.test.mjs"

@@ -115,6 +115,11 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\install.ps1
   <img src="assets/screenshots/examples-zh-CN.png" width="900" alt="QuotaPin 的六种显示组合，包括倒计时、仅状态和身份位置调整">
 </p>
 
+<p align="center">
+  <img src="assets/screenshots/forecast-zh-CN.png" width="900" alt="QuotaPin 账户栏中的消耗速度和预计可用时间模块">
+  <br><sub>可选的预测模块，使用与实际账户栏相同的生产渲染器生成。</sub>
+</p>
+
 下面这些模块都可以单独显示、隐藏和排序：
 
 - 剩余百分比；

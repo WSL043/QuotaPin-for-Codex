@@ -115,6 +115,11 @@ The default keeps the original Codex avatar and account name and adds only the r
   <img src="assets/screenshots/examples-en.png" width="900" alt="Six QuotaPin arrangements including countdowns, status-only, and reordered identity">
 </p>
 
+<p align="center">
+  <img src="assets/screenshots/forecast-en.png" width="640" alt="QuotaPin account row with remaining percentage, reset countdown, burn pace, and estimated runway">
+  <br><sub>Optional pace and runway modules, kept in the same account row.</sub>
+</p>
+
 You can independently show, hide, and reorder:
 
 - remaining percentage;

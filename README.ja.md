@@ -117,6 +117,11 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\install.ps1
   <img src="assets/screenshots/examples-ja.png" width="900" alt="カウントダウン、状態のみ、並び替えを含む QuotaPin の6つの表示例">
 </p>
 
+<p align="center">
+  <img src="assets/screenshots/forecast-ja.png" width="900" alt="QuotaPin のアカウント欄に表示した消費ペースと使用可能見込み">
+  <br><sub>任意で追加できる予測モジュール。本番と同じレンダラーで描画しています。</sub>
+</p>
+
 次の項目は、それぞれ個別に表示・非表示・並べ替えできます。
 
 - 残りパーセント

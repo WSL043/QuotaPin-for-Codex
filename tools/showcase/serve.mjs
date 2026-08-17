@@ -46,8 +46,8 @@ const previewFrames = new Set(["wide", "compact"]);
 const previewContexts = new Set(["focus", "full"]);
 const previewAppearances = new Set(["dark", "light"]);
 const previewRowModes = new Set(["legacy", "beta"]);
-const previewPresets = new Set(["default", "countdown", "signal", "date", "critical"]);
-const previewModules = ["value", "dot", "bar", "countdown", "relative", "seconds", "date", "reset"];
+const previewPresets = new Set(["default", "countdown", "signal", "date", "critical", "forecast"]);
+const previewModules = ["value", "dot", "bar", "countdown", "relative", "seconds", "date", "reset", "pace", "runway"];
 const previewOrders = new Set(["native", "quota-first", "identity-last"]);
 
 const readOption = (source, name) => source instanceof URLSearchParams
@@ -154,6 +154,16 @@ export function buildPreviewScenario(source = {}, now = Date.now()) {
   if (options.preset === "signal") Object.assign(profile, { showValue: false, showDot: true });
   if (options.preset === "date") profile.showDate = true;
   if (options.preset === "critical") profile.showSeconds = true;
+  if (options.preset === "forecast") {
+    Object.assign(profile, {
+      showValue: true,
+      showCountdown: true,
+      showPace: true,
+      showRunway: true,
+      identity: "hideName",
+      moduleOrder: ["avatar", "name", "value", "countdown", "pace", "runway", "dot", "label", "relative", "seconds", "date", "reset", "todayTokens", "lifetimeTokens"],
+    });
+  }
   if (options.modules) {
     for (const module of previewModules) profile[`show${module[0].toUpperCase()}${module.slice(1)}`] = options.modules.includes(module);
   }
@@ -166,10 +176,38 @@ export function buildPreviewScenario(source = {}, now = Date.now()) {
   }
   const resetsAt = options.preset === "critical"
     ? now / 1000 + 299
-    : now / 1000 + 4 * 86_400;
+    : options.preset === "forecast"
+      ? now / 1000 + 2 * 86_400 + 20 * 3_600
+      : now / 1000 + 4 * 86_400;
   const usage = normalizeRateLimits({
     primary: { usedPercent: 100 - options.remaining, windowDurationMins: 10080, resetsAt },
   });
+  if (options.preset === "forecast" || options.modules?.includes("pace") || options.modules?.includes("runway")) {
+    const windowState = usage.windows[0];
+    const pacePerHour = 2.5;
+    const runwaySeconds = options.remaining / pacePerHour * 3600;
+    usage.quotaPace = {
+      windows: [{
+        id: windowState.id,
+        sourceId: windowState.sourceId,
+        windowDurationMins: windowState.windowDurationMins,
+        resetsAt: windowState.resetsAt,
+        status: "ready",
+        pacePerHour,
+        currentPacePerHour: pacePerHour,
+        slowPacePerHour: pacePerHour,
+        runwaySeconds,
+        runwayLowSeconds: runwaySeconds,
+        runwayHighSeconds: runwaySeconds,
+        survivesReset: false,
+        rangeSurvivesReset: false,
+        confidence: "medium",
+        evidenceConfidence: "medium",
+        forecastVersion: 2,
+        regime: "steady",
+      }],
+    };
+  }
   const view = formatQuota(usage, config, now, localeTag(options.locale));
   if (options.frozen && options.preset === "critical") {
     view.parts.seconds = "00:04:59";
@@ -312,6 +350,32 @@ html,body{margin:0;width:1080px;height:420px;overflow:hidden;background:#070809;
   </style></head><body><main class="wrap"><h1 class="title">${title}</h1><section class="grid">${cases.map((item, index) => { const options = normalizePreviewOptions({ ...item, locale, appearance: "dark" }); return `<article class="card"><div class="label">${labels[index]}</div><div class="dock"><iframe src="/case.html?${previewQuery(options)}" title="${labels[index]}"></iframe></div></article>`; }).join("")}</section></main></body></html>`;
 }
 
+function forecastSheetPage(source) {
+  const locale = previewLocales.has(String(source.get("locale"))) ? String(source.get("locale")) : "en";
+  const title = locale === "zh-CN" ? "速度和余量，一起看" : locale === "ja" ? "ペースと残量を、同じ行に" : "Pace and runway, in one row.";
+  const labels = locale === "zh-CN"
+    ? ["余量充足 · 68%", "正在消耗 · 24%", "余量偏低 · 8%"]
+    : locale === "ja"
+      ? ["余裕あり · 68%", "使用中 · 24%", "残量少なめ · 8%"]
+      : ["Comfortable · 68%", "Working · 24%", "Low quota · 8%"];
+  const cases = [68, 24, 8].map((remaining) => ({
+    preset: "forecast",
+    remaining,
+    locale,
+    appearance: "dark",
+    rowMode: "beta",
+    order: "native",
+  }));
+  const caption = locale === "zh-CN"
+    ? "可选模块：消耗速度 + 预计可用时间；示例由生产渲染器生成。"
+    : locale === "ja"
+      ? "任意で追加できる消費ペースと使用可能見込み。実際の本番レンダラーで生成。"
+      : "Optional burn pace + estimated runway, rendered by the production formatter.";
+  return `<!doctype html><html lang="${locale}"><head><meta charset="utf-8"><meta name="viewport" content="width=1080,initial-scale=1"><style>
+html,body{margin:0;width:1080px;height:330px;overflow:hidden;background:#070809;color:#eef0f2;font-family:${tokens.account.fontFamily}}*{box-sizing:border-box}.wrap{padding:34px 40px}.title{margin:0 0 24px;font-size:28px;font-weight:620;letter-spacing:-.035em}.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}.card{height:124px;padding:17px;border:1px solid #25282c;border-radius:15px;background:#0d0f11}.label{margin-bottom:14px;color:#a5a9ae;font-size:12px;font-weight:580}.dock{position:relative;width:${tokens.sidebar.width}px;height:${tokens.sidebar.footerHeight}px;overflow:hidden}.dock iframe{position:absolute;inset:0;width:${tokens.sidebar.width}px;height:${tokens.sidebar.footerHeight}px;border:0}.caption{margin-top:15px;color:#737980;font-size:11px;letter-spacing:.01em}
+  </style></head><body><main class="wrap"><h1 class="title">${title}</h1><section class="grid">${cases.map((item, index) => { const options = normalizePreviewOptions(item); return `<article class="card"><div class="label">${labels[index]}</div><div class="dock"><iframe src="/case.html?${previewQuery(options)}" title="${labels[index]}"></iframe></div></article>`; }).join("")}</section><div class="caption">${caption}</div></main></body></html>`;
+}
+
 function themePairPage(source) {
   const locale = previewLocales.has(String(source.get("locale"))) ? String(source.get("locale")) : "en";
   const copy = labCopy[locale];
@@ -336,15 +400,15 @@ function previewLabPage() {
 <section class="group"><div class="label">Language</div><div class="segmented" data-control="locale"><button data-value="en" aria-pressed="true">EN</button><button data-value="zh-CN" aria-pressed="false">中文</button><button data-value="ja" aria-pressed="false">日本語</button></div></section>
 <section class="group"><div class="label">Appearance</div><div class="segmented" data-control="appearance"><button data-value="dark" aria-pressed="true">Dark</button><button data-value="light" aria-pressed="false">Light</button></div></section>
 <section class="group"><div class="row"><span class="label">Quota remaining</span><output class="value" id="remainingOutput">42%</output></div><input class="range" id="remaining" type="range" min="0" max="100" value="42" aria-label="Quota remaining"></section>
-<section class="group"><div class="label">Starting points</div><div class="preset-grid" data-control="preset"><button class="preset" data-value="default" aria-pressed="true">Glance</button><button class="preset" data-value="countdown" aria-pressed="false">Countdown</button><button class="preset" data-value="signal" aria-pressed="false">Signal</button><button class="preset" data-value="critical" aria-pressed="false">Critical</button></div></section>
-<section class="group"><div class="label">Modules</div><div class="module-grid" id="modules"><button class="module" data-value="value" aria-pressed="true">42%</button><button class="module" data-value="dot" aria-pressed="false">Dot</button><button class="module" data-value="countdown" aria-pressed="false">4d</button><button class="module" data-value="seconds" aria-pressed="false">00:04</button><button class="module" data-value="date" aria-pressed="false">Aug 9</button><button class="module" data-value="reset" aria-pressed="false">11:00 AM</button></div></section>
+<section class="group"><div class="label">Starting points</div><div class="preset-grid" data-control="preset"><button class="preset" data-value="default" aria-pressed="true">Glance</button><button class="preset" data-value="countdown" aria-pressed="false">Countdown</button><button class="preset" data-value="signal" aria-pressed="false">Signal</button><button class="preset" data-value="critical" aria-pressed="false">Critical</button><button class="preset" data-value="forecast" aria-pressed="false">Forecast</button></div></section>
+<section class="group"><div class="label">Modules</div><div class="module-grid" id="modules"><button class="module" data-value="value" aria-pressed="true">42%</button><button class="module" data-value="dot" aria-pressed="false">Dot</button><button class="module" data-value="countdown" aria-pressed="false">4d</button><button class="module" data-value="pace" aria-pressed="false">%/h</button><button class="module" data-value="runway" aria-pressed="false">Runway</button><button class="module" data-value="seconds" aria-pressed="false">00:04</button><button class="module" data-value="date" aria-pressed="false">Aug 9</button><button class="module" data-value="reset" aria-pressed="false">11:00 AM</button></div></section>
 </aside><main class="stage"><section class="stage-card"><div class="stage-head"><strong>Live preview</strong><span>Simulated Codex shell · production QuotaPin row</span></div><iframe class="preview" id="preview" title="QuotaPin Preview Lab"></iframe></section></main></div></div><script>
 const state={context:"focus",frame:"wide",locale:"en",appearance:"dark",remaining:42,preset:"default",modules:new Set(["value"])};
 const preview=document.getElementById("preview"),remaining=document.getElementById("remaining"),remainingOutput=document.getElementById("remainingOutput");
 const syncPressed=(control,value)=>document.querySelectorAll('[data-control="'+control+'"] [data-value]').forEach(button=>button.setAttribute("aria-pressed",String(button.dataset.value===value)));
 const syncModules=()=>document.querySelectorAll('#modules [data-value]').forEach(button=>button.setAttribute("aria-pressed",String(state.modules.has(button.dataset.value))));
 let timer=0; const render=()=>{clearTimeout(timer);timer=setTimeout(()=>{const query=new URLSearchParams({context:state.context,frame:state.frame,locale:state.locale,appearance:state.appearance,remaining:String(state.remaining),preset:state.preset,modules:[...state.modules].join(",")});preview.src="/lab-window.html?"+query;remainingOutput.value=state.remaining+"%";},45)};
-document.querySelectorAll('[data-control] [data-value]').forEach(button=>button.addEventListener("click",()=>{const control=button.closest('[data-control]').dataset.control;state[control]=button.dataset.value;syncPressed(control,state[control]);if(control==="preset"){const modules={default:["value"],countdown:["value","countdown"],signal:["dot"],critical:["value","seconds"]};state.modules=new Set(modules[state.preset]??["value"]);if(state.preset==="critical"){state.remaining=8;remaining.value="8";}syncModules();}render();}));
+document.querySelectorAll('[data-control] [data-value]').forEach(button=>button.addEventListener("click",()=>{const control=button.closest('[data-control]').dataset.control;state[control]=button.dataset.value;syncPressed(control,state[control]);if(control==="preset"){const modules={default:["value"],countdown:["value","countdown"],signal:["dot"],critical:["value","seconds"],forecast:["value","countdown","pace","runway"]};state.modules=new Set(modules[state.preset]??["value"]);if(state.preset==="critical"){state.remaining=8;remaining.value="8";}syncModules();}render();}));
 document.querySelectorAll('#modules [data-value]').forEach(button=>button.addEventListener("click",()=>{const module=button.dataset.value;if(state.modules.has(module))state.modules.delete(module);else state.modules.add(module);syncModules();render();}));
 remaining.addEventListener("input",()=>{state.remaining=Number(remaining.value);render();});render();
 </script></body></html>`;
@@ -531,6 +595,9 @@ export function createShowcaseServer() {
     }
     if (url.pathname === "/examples.html") {
       response.writeHead(200, { "Content-Type": "text/html; charset=utf-8" }).end(exampleSheetPage(url.searchParams)); return;
+    }
+    if (url.pathname === "/forecast.html") {
+      response.writeHead(200, { "Content-Type": "text/html; charset=utf-8" }).end(forecastSheetPage(url.searchParams)); return;
     }
     if (url.pathname === "/themes.html") {
       response.writeHead(200, { "Content-Type": "text/html; charset=utf-8" }).end(themePairPage(url.searchParams)); return;

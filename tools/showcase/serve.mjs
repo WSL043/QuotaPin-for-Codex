@@ -20,6 +20,8 @@ import { normalizeRateLimits } from "../../src/core/model.mjs";
 
 const tokens = JSON.parse(fs.readFileSync(new URL("./codex-tokens.json", import.meta.url), "utf8"));
 const avatar = fs.readFileSync(new URL("../../assets/demo-avatar.png", import.meta.url));
+const productVersion = fs.readFileSync(new URL("../../VERSION", import.meta.url), "utf8").trim();
+const stableVersion = fs.readFileSync(new URL("../../STABLE_VERSION", import.meta.url), "utf8").trim();
 const renderer = `globalThis.__quotaPinRendererToolkits = {
   settings: ${createSettingsStateToolkit.toString()},
   layout: ${createLayoutStateToolkit.toString()},
@@ -439,15 +441,15 @@ html,body{margin:0;width:100%;height:100%;overflow:hidden;background:${page.bg};
   let fixtureConfig=${serializeForInlineScript(config)};let fixtureView=${serializeForInlineScript(view)};let fixtureQueue=Promise.resolve();const fixtureResetAt=${serializeForInlineScript(fixtureResetAt)};
   const fixtureUpdate=${serializeForInlineScript({
     status: updateState,
-    currentVersion: "1.1.0",
-    latestVersion: updateState === "available" || updateState === "installing" ? "1.3.1" : "1.3.0",
+    currentVersion: productVersion,
+    latestVersion: stableVersion,
     releases: updateState === "available" || updateState === "installing"
-      ? [{ version: "1.3.1", direction: "update" }, { version: "1.3.0", direction: "repair" }]
-      : [{ version: "1.1.0", direction: "repair" }],
+      ? [{ version: stableVersion, direction: "rollback" }, { version: productVersion, direction: "repair" }]
+      : [{ version: productVersion, direction: "repair" }],
     message: updateState === "error" ? "QuotaPin could not check for updates." : "",
     checkError: updateState === "error",
     lastCheckedAt: updateState === "error" || updateState === "available" || updateState === "current" ? now - 5 * 60_000 : 0,
-    selectedVersion: updateState === "installing" ? "1.3.1" : null,
+    selectedVersion: updateState === "installing" ? stableVersion : null,
     phase: updateState === "installing" ? updatePhase : null,
   })};
   const publishFixture=(settingsAck=null)=>window.__quotaPinController.update({status:"ready",view:fixtureView,preferences:fixtureConfig,update:fixtureUpdate,settingsAck});

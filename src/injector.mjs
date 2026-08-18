@@ -3054,6 +3054,22 @@ const installScript = String.raw`(() => {
           controls.append(moduleChips[module]);
         }
         if (id === "status") controls.append(quotaBarChip, rowBarChip);
+        if (id === "time") {
+          // Live clocks must not decide panel geometry. Content-sized flex
+          // wrapping could add an entire row when one second changed to a
+          // slightly wider glyph. A semantic two-row grid keeps localized
+          // countdown text readable while every clock stays in place.
+          Object.assign(controls.style, {
+            display: "grid",
+            gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
+            alignItems: "center",
+          });
+          moduleChips.relative.style.gridColumn = "span 2";
+          for (const module of modules) {
+            moduleChips[module].style.width = "100%";
+            moduleChips[module].style.maxWidth = "none";
+          }
+        }
         if (controls.childElementCount) {
           group.append(label, controls);
           elementRows.append(group);

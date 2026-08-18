@@ -202,6 +202,7 @@ test("panel fixture uses the production renderer with independent panel and host
     assert.match(body, /<script src="\/renderer\.js"><\/script>/);
     assert.match(body, /"locale":"zh-CN"/);
     assert.match(body, /"panelTheme":"light"/);
+    assert.match(body, new RegExp(`"currentVersion":"${fs.readFileSync(new URL("../VERSION", import.meta.url), "utf8").trim().replaceAll(".", "\\.")}"`));
     assert.match(body, /background:#050505/);
     assert.match(body, /window\.__quotaPinController\.openEditor\(\)/);
     assert.ok(!/https?:\/\//.test(body), "panel fixture must not load remote assets");

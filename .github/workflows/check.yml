@@ -42,14 +42,16 @@ jobs:
           tests=()
           for file in test/*.test.mjs; do
             case "$(basename "$file")" in
-              auto-attach-policy.test.mjs|bootstrap-contract.test.mjs|bootstrap-download.test.mjs|install-lifecycle-transaction.test.mjs|lifecycle-rollback.test.mjs|release-gates.test.mjs|release-trust.test.mjs|update-transaction.test.mjs|windows-powershell-contract.test.mjs) ;;
+              auto-attach-policy.test.mjs|bootstrap-contract.test.mjs|bootstrap-download.test.mjs|install-lifecycle-transaction.test.mjs|lifecycle-rollback.test.mjs|panel-ui.test.mjs|release-gates.test.mjs|release-trust.test.mjs|update-transaction.test.mjs|windows-powershell-contract.test.mjs) ;;
               *) tests+=("$file") ;;
             esac
           done
-          # Intel runners can starve the shared Chromium fixture when Node runs
-          # every test file in parallel.  Serialize files so a real 15-second
-          # CDP timeout remains meaningful instead of cascading from host load.
+          # Serialize files on the lower-throughput Intel runner. Run the
+          # intentionally high-frequency panel stress case in a fresh Chromium
+          # process so its queued layout work cannot starve later UI assertions.
           node --test --test-concurrency=1 "${tests[@]}"
+          node --test --test-name-pattern='^(?!high-frequency stale client states cannot flash disabled modules$).*' test/panel-ui.test.mjs
+          node --test --test-name-pattern='^high-frequency stale client states cannot flash disabled modules$' test/panel-ui.test.mjs
       - name: Check macOS lifecycle scripts
         run: |
           bash -n install-macos.sh

@@ -61,13 +61,16 @@ jobs:
           tests=()
           for file in test/*.test.mjs; do
             case "$(basename "$file")" in
-              auto-attach-policy.test.mjs|bootstrap-contract.test.mjs|bootstrap-download.test.mjs|install-lifecycle-transaction.test.mjs|lifecycle-rollback.test.mjs|release-gates.test.mjs|release-trust.test.mjs|update-transaction.test.mjs|windows-powershell-contract.test.mjs) ;;
+              auto-attach-policy.test.mjs|bootstrap-contract.test.mjs|bootstrap-download.test.mjs|install-lifecycle-transaction.test.mjs|lifecycle-rollback.test.mjs|panel-ui.test.mjs|release-gates.test.mjs|release-trust.test.mjs|update-transaction.test.mjs|windows-powershell-contract.test.mjs) ;;
               *) tests+=("$file") ;;
             esac
           done
           # Keep the release gate deterministic on the lower-throughput Intel
-          # runner without weakening any fixture command timeout or assertion.
+          # runner. Isolate the high-frequency panel stress case in a fresh
+          # Chromium process without weakening its workload or assertions.
           node --test --test-concurrency=1 "${tests[@]}"
+          node --test --test-name-pattern='^(?!high-frequency stale client states cannot flash disabled modules$).*' test/panel-ui.test.mjs
+          node --test --test-name-pattern='^high-frequency stale client states cannot flash disabled modules$' test/panel-ui.test.mjs
           bash -n install-macos.sh
           for file in scripts/macos/*.sh; do bash -n "$file"; done
 

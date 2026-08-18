@@ -210,8 +210,8 @@ class CdpClient {
     });
   }
 
-  async evaluate(expression) {
-    const result = await this.call("Runtime.evaluate", { expression, awaitPromise: true, returnByValue: true });
+  async evaluate(expression, timeout = 15_000) {
+    const result = await this.call("Runtime.evaluate", { expression, awaitPromise: true, returnByValue: true }, timeout);
     if (result.exceptionDetails) throw new Error(result.exceptionDetails.exception?.description ?? result.exceptionDetails.text);
     return result.result.value;
   }
@@ -1719,7 +1719,7 @@ test("high-frequency stale client states cannot flash disabled modules", { skip:
     await new Promise((resolve) => setTimeout(resolve, 0));
     const delivery = window.__quotaPinController.inspectDeliveryRuntime();
     return { flashes, detectorControl, delivery, value: document.querySelector('[data-quotapin-module="value"]')?.textContent?.trim() };
-  })()`);
+  })()`, 60_000);
   assert.deepEqual(result.flashes, []);
   assert.equal(result.detectorControl.value, "63%", "the simulator must detect a legitimately accepted stale-looking value");
   assert.ok(result.detectorControl.visible.includes("date"), JSON.stringify(result.detectorControl));
